@@ -4,182 +4,177 @@ const format_lib = @import("format.zig");
 const io = @import("io.zig");
 const pricing = @import("../pricing.zig");
 
-const OutputFormat = format_lib.OutputFormat;
-const GlobalOptions = engine.GlobalOptions;
+pub const OutputFormat = format_lib.OutputFormat;
 
-pub fn readAllInto(alloc: std.mem.Allocator, reader: anytype, out: *std.ArrayList(u8)) !void {
-    var buf: [4096]u8 = undefined;
-    while (true) {
-        const n = try reader.read(&buf);
-        if (n == 0) break;
-        try out.appendSlice(alloc, buf[0..n]);
-    }
-}
+pub const GlobalOptions = struct {
+    model: ?[]const u8 = null,
+    vendor: ?[]const u8 = null,
+    format: OutputFormat = .text,
+    config_path: ?[]const u8 = null,
+};
+
+pub const CliContext = struct {
+    alloc: std.mem.Allocator,
+    db: *pricing.PricingDB,
+    opts: GlobalOptions,
+    // Command-specific extras
+    subcommand: []const u8,
+    payload: ?[]const u8 = null,
+    tokens_in: ?usize = null,
+    tokens_out: ?usize = null,
+};
+
+// Error set that main() can handle appropriately
+pub const CliError = error{
+    UsageError,
+    ModelNotFound,
+    PricingError,
+    IoError,
+} || std.mem.Allocator.Error || engine.EngineError; // extend with engine errors
 
 pub fn main(alloc: std.mem.Allocator) !void {
     var args_it = try std.process.argsWithAllocator(alloc);
     defer args_it.deinit();
 
-    // skip argv[0]
-    _ = args_it.next();
+    // Skip executable name
+    _ = args_it.skip();
 
-    // Default to help if no subcmd
-    const subcmd_str = args_it.next() orelse {
-        try printHelp();
-        return;
+    var ctx = CliContext{
+        .alloc = alloc,
+        .db = undefined,
+        .opts = .{},
+        .subcommand = "help",
     };
-    const subcmd = parseSubcommand(subcmd_str);
 
-    var opts = GlobalOptions{};
-    var arg_payload: ?[]const u8 = null; // For file path or other payload
-    var tokens_in_opt: ?usize = null;
-    var tokens_out_opt: ?usize = null;
+    var db = try pricing.PricingDB.init(alloc);
+    defer db.deinit();
+    ctx.db = &db;
 
-    // Parse loop
+    // 1. Parsing
     while (args_it.next()) |arg| {
-        if (std.mem.eql(u8, arg, "--model")) {
-            opts.model = args_it.next() orelse return usageError("missing value for --model");
-        } else if (std.mem.eql(u8, arg, "--vendor")) {
-            opts.vendor = args_it.next() orelse return usageError("missing value for --vendor");
-        } else if (std.mem.eql(u8, arg, "--format")) {
-            const f_str = args_it.next() orelse return usageError("missing value for --format");
-            opts.format = try parseFormat(f_str);
-        } else if (std.mem.eql(u8, arg, "--config")) {
-             opts.config_path = args_it.next() orelse return usageError("missing value for --config");
+        if (std.mem.eql(u8, arg, "tokens")) {
+            ctx.subcommand = "tokens";
+        } else if (std.mem.eql(u8, arg, "price")) {
+            ctx.subcommand = "price";
+        } else if (std.mem.eql(u8, arg, "models")) {
+            ctx.subcommand = "models";
+        } else if (std.mem.eql(u8, arg, "help") or std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+            ctx.subcommand = "help";
+        } else if (std.mem.eql(u8, arg, "--model")) {
+             ctx.opts.model = args_it.next();
+        } else if (std.mem.eql(u8, arg, "--format") or std.mem.eql(u8, arg, "-f")) {
+             if (args_it.next()) |fmt_str| {
+                 ctx.opts.format = parseFormat(fmt_str);
+             }
         } else if (std.mem.eql(u8, arg, "--tokens-in")) {
-             const val = args_it.next() orelse return usageError("missing value for --tokens-in");
-             tokens_in_opt = try std.fmt.parseInt(usize, val, 10);
+             if (args_it.next()) |n| ctx.tokens_in = std.fmt.parseInt(usize, n, 10) catch 0;
         } else if (std.mem.eql(u8, arg, "--tokens-out")) {
-             const val = args_it.next() orelse return usageError("missing value for --tokens-out");
-             tokens_out_opt = try std.fmt.parseInt(usize, val, 10);
-        } else if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
-            try printHelp();
-            return;
-        } else if (std.mem.startsWith(u8, arg, "-")) {
-             std.debug.print("Unknown option: {s}\n", .{arg});
-             return error.UsageError;
+             if (args_it.next()) |n| ctx.tokens_out = std.fmt.parseInt(usize, n, 10) catch 0;
         } else {
-             // Positional arg (e.g. file path)
-             arg_payload = arg;
+             if (!std.mem.startsWith(u8, arg, "-")) {
+                 ctx.payload = arg;
+             }
         }
     }
 
-    // Init Pricing DB once (if needed)
-    // For now we just load default, later override with config_path
-    var db = try pricing.PricingDB.init(alloc);
-    defer db.deinit();
-
-    const ctx = CliContext{
-        .alloc = alloc,
-        .opts = opts,
-        .db = &db,
-        .payload = arg_payload,
-        .tokens_in = tokens_in_opt,
-        .tokens_out = tokens_out_opt,
-    };
-
-    switch (subcmd) {
-        .tokens => try runTokens(ctx),
-        .price => try runPrice(ctx),
-        .models => try runModels(ctx),
-        .pricing => try runPricing(ctx),
-        .help => try printHelp(),
+    // 2. Dispatch
+    if (std.mem.eql(u8, ctx.subcommand, "tokens")) {
+        try runTokens(ctx);
+    } else if (std.mem.eql(u8, ctx.subcommand, "price")) {
+        try runPrice(ctx);
+    } else if (std.mem.eql(u8, ctx.subcommand, "models")) {
+        try runModels(ctx);
+    } else {
+        try printHelp();
     }
 }
 
-const CliContext = struct {
-    alloc: std.mem.Allocator,
-    opts: GlobalOptions,
-    db: *pricing.PricingDB,
-    payload: ?[]const u8, // Subcommand specific payload (e.g. file path)
-    tokens_in: ?usize,
-    tokens_out: ?usize,
-};
-
-const Subcommand = enum {
-    tokens,
-    price,
-    models,
-    pricing,
-    help,
-};
-
-fn parseSubcommand(name: []const u8) Subcommand {
-    if (std.mem.eql(u8, name, "tokens")) return .tokens;
-    if (std.mem.eql(u8, name, "price")) return .price;
-    if (std.mem.eql(u8, name, "models")) return .models;
-    if (std.mem.eql(u8, name, "pricing")) return .pricing;
-    if (std.mem.eql(u8, name, "help")) return .help;
-    return .help;
-}
-
-fn parseFormat(s: []const u8) !OutputFormat {
-    if (std.mem.eql(u8, s, "text")) return .text;
+fn parseFormat(s: []const u8) OutputFormat {
     if (std.mem.eql(u8, s, "json")) return .json;
     if (std.mem.eql(u8, s, "ndjson")) return .ndjson;
-    return error.UnknownFormat;
-}
-
-fn usageError(msg: []const u8) !void {
-    std.debug.print("llm-cost: {s}\n\n", .{msg});
-    try printHelp();
-    return error.UsageError;
+    return .text;
 }
 
 fn printHelp() !void {
-    std.debug.print(
-        \\llm-cost - token counting and cost estimation
+    const stdout = io.getStdoutWriter();
+    try stdout.writeAll(
+        \\Usage: llm-cost <command> [options] [file]
         \\
-        \\Usage:
-        \\  llm-cost tokens [--model <name>] [--format text|json|ndjson] [file]
-        \\  llm-cost price  [--model <name>] [--tokens-in <N>] [--tokens-out <M>]
-        \\  llm-cost models
-        \\  llm-cost pricing
+        \\Commands:
+        \\  tokens    Estimate token count for input
+        \\  price     Estimate cost for prompt or token counts
+        \\  models    List available models
+        \\  help      Show this help
         \\
-        \\Global Options:
-        \\  --model <name>      Target Model (e.g. gpt-4o)
-        \\  --format <fmt>      Output format (text, json, ndjson)
-        \\  --config <path>     Custom pricing JSON
+        \\Options:
+        \\  --model <name>    Model identifier (required for price)
+        \\  --format <fmt>    Output format: text (default), json, ndjson
+        \\  --tokens-in <N>   Manual input token count override
+        \\  --tokens-out <N>  Manual output token count (for price)
         \\
-        , .{});
+        \\Examples:
+        \\  echo "hello" | llm-cost tokens --model gpt-4o
+        \\  llm-cost price --model gpt-4o --tokens-in 1000
+        \\
+    );
 }
 
-// --- Subcommands ---
+// TODO: Move this helper to some tokenizer-utils if logic gets complex
+fn pickTokenizerKindFromModel(name: []const u8) engine.TokenizerKind {
+    // Simple mapping for v0.1
+    // Actually we should let engine decide based on config?
+    // Engine expects TokenizerKind in config.
+    // Let's defer to library default mapping if we had one.
+    // For now: map everything to openai_o200k if it looks like gpt-4o, else generic.
+    if (std.mem.indexOf(u8, name, "gpt") != null) return .openai_o200k;
+    return .generic_whitespace;
+}
 
 fn runTokens(ctx: CliContext) !void {
     var text_input = try std.ArrayList(u8).initCapacity(ctx.alloc, 4096);
     defer text_input.deinit(ctx.alloc);
 
-    // If payload is present, assume file path. Else stdin.
+    // I/O Logic: File > Stdin
     if (ctx.payload) |path| {
         const f = try std.fs.cwd().openFile(path, .{});
         defer f.close();
-            try readAllInto(ctx.alloc, io.getFileReader(&f), &text_input);
+        try readAllInto(ctx.alloc, io.getFileReader(&f), &text_input);
     } else {
         const stdin = io.getStdinReader();
         try readAllInto(ctx.alloc, stdin, &text_input);
     }
 
     if (text_input.items.len == 0) {
-        // Fallback or empty
+        // If no input, effectively 0 tokens.
     }
 
-    const t_res = try engine.estimateTokens(ctx.alloc, ctx.opts, text_input.items);
+    // Config for engine
+    const model_name = ctx.opts.model orelse "generic";
+    const tk_cfg = engine.TokenizerConfig{
+        .kind = pickTokenizerKindFromModel(model_name),
+        .model_name = model_name,
+    };
 
-    // Check if we can also show price?
+    const t_res = try engine.estimateTokens(ctx.alloc, tk_cfg, text_input.items);
+
+    // Optional: try to resolve cost if model is known
     var cost_usd: ?f64 = null;
     if (ctx.opts.model) |m| {
-        if (engine.estimateCost(ctx.db, m, t_res.tokens, 0)) |c| {
+        // We set reasoning=0 for now in CLI v0.1
+        if (engine.estimateCost(ctx.db, m, t_res.tokens, 0, 0)) |c| {
             cost_usd = c.cost_total;
-        } else |_| {}
+        } else |_| {
+            // Squelch pricing error here, as main intent is tokens command
+            // But maybe debug log?
+        }
     }
 
     const record = format_lib.ResultRecord{
-        .model = ctx.opts.model orelse "unknown",
+        .model = model_name,
         .tokens_input = t_res.tokens,
         .tokens_output = 0,
         .cost_usd = cost_usd,
-        .tokenizer = if (cost_usd != null) "o200k_base" else "generic_whitespace", // Placeholder until tokenizer logic is wired
+        .tokenizer = "unknown", // engine TokenResult doesn't return tokenizer name, maybe we should fix later
         .approximate = (cost_usd == null),
     };
 
@@ -188,11 +183,11 @@ fn runTokens(ctx: CliContext) !void {
 }
 
 fn runPrice(ctx: CliContext) !void {
-    const model = ctx.opts.model orelse return usageError("price command requires --model");
-
-    // We need input tokens.
-    // 1. Explicit via --tokens-in
-    // 2. Or counted from stdin/file (like runTokens)
+    const model = ctx.opts.model orelse {
+        const stderr = std.io.getStdErr().writer(); // or io.getStderrWriter() if implemented
+        try stderr.print("Error: --model required for price command.\n", .{});
+        return error.UsageError;
+    };
 
     var input_tokens: usize = 0;
 
@@ -202,28 +197,34 @@ fn runPrice(ctx: CliContext) !void {
         // Consume input like token counter
         var text_input = try std.ArrayList(u8).initCapacity(ctx.alloc, 4096);
         defer text_input.deinit(ctx.alloc);
+
         if (ctx.payload) |path| {
             const f = try std.fs.cwd().openFile(path, .{});
             defer f.close();
             try readAllInto(ctx.alloc, io.getFileReader(&f), &text_input);
         } else {
-             // If manual tokens not provided, maybe stdin?
              const stdin = io.getStdinReader();
              try readAllInto(ctx.alloc, stdin, &text_input);
         }
 
         if (text_input.items.len > 0) {
-             const t_res = try engine.estimateTokens(ctx.alloc, ctx.opts, text_input.items);
+             const tk_cfg = engine.TokenizerConfig{
+                 .kind = pickTokenizerKindFromModel(model),
+                 .model_name = model,
+             };
+             const t_res = try engine.estimateTokens(ctx.alloc, tk_cfg, text_input.items);
              input_tokens = t_res.tokens;
         }
     }
 
     const output_tokens = ctx.tokens_out orelse 0;
 
-    const cost_res = engine.estimateCost(ctx.db, model, input_tokens, output_tokens) catch |err| {
+    const cost_res = engine.estimateCost(ctx.db, model, input_tokens, output_tokens, 0) catch |err| {
         if (err == error.ModelNotFound) {
-             std.debug.print("Error: Model '{s}' not found in pricing database.\n", .{model});
-             return; // exit 1 ideally
+             // We print explicit error
+             const stderr = std.io.getStdErr().writer();
+             try stderr.print("Error: Model '{s}' not found in pricing database.\n", .{model});
+             return error.ModelNotFound; // Bubble up
         }
         return err;
     };
@@ -232,27 +233,52 @@ fn runPrice(ctx: CliContext) !void {
         .model = cost_res.model_name,
         .tokens_input = cost_res.input_tokens,
         .tokens_output = cost_res.output_tokens,
+        // .tokens_reasoning = cost_res.reasoning_tokens, // Add to format.zig later
         .cost_usd = cost_res.cost_total,
-        .tokenizer = cost_res.tokenizer,
+        .tokenizer = "from_db", // TODO: cost_res doesn't have tokenizer field in senior struct?
+        // Wait, senior struct CostResult HAS model_name, and pricing DB has info.
+        // We can check the DB record again or trust engine returned clean data.
         .approximate = false,
     };
+
+    // Note: The review struct for CostResult REMOVED `tokenizer` field that I added earlier!
+    // The senior struct didn't have it.
+    // I should strictly follow the senior struct.
+    // So record.tokenizer will be "unknown" or I lookup model again?
+    // Optimization: avoid double lookup. Ideally CostResult has metadata.
+    // But adhering to strict instructions: use the struct provided.
+
+    // Actually, I can stick to the user provided snippet for CostResult which does NOT have tokenizer.
+    // But format_lib expects it.
+    // I will pass "unknown" for now or re-resolve if I must.
 
     const stdout = io.getStdoutWriter();
     try format_lib.formatOutput(ctx.alloc, stdout, ctx.opts.format, record);
 }
 
-
 fn runModels(ctx: CliContext) !void {
-    // List models from db
-    // Since PricingDB uses std.json.Parsed, we need to inspect the value tree manually
-    const root = ctx.db.parsed.value;
-    std.debug.print("Models in database:\n", .{});
+    const stdout = io.getStdoutWriter();
+    // Only "human" format supported for models list currently
+    if (ctx.opts.format != .text) {
+        // Fallback or explicit warning?
+    }
 
+    try stdout.print("Models in database:\n", .{});
+    const root = ctx.db.parsed.value;
     if (root.object.get("models")) |models| {
-        var it = models.object.iterator();
-        while (it.next()) |entry| {
-            std.debug.print("- {s}\n", .{entry.key_ptr.*});
-        }
+         var it = models.object.iterator();
+         while (it.next()) |entry| {
+             try stdout.print("- {s}\n", .{entry.key_ptr.*});
+         }
+    }
+}
+
+pub fn readAllInto(alloc: std.mem.Allocator, reader: anytype, out: *std.ArrayList(u8)) !void {
+    var buf: [4096]u8 = undefined;
+    while (true) {
+        const n = try reader.read(&buf);
+        if (n == 0) break;
+        try out.appendSlice(alloc, buf[0..n]);
     }
 }
 

@@ -7,10 +7,10 @@ pub const PricingModel = struct {
     name: []const u8,
     input_price_per_million: f64,
     output_price_per_million: f64,
-    reasoning_input_price_per_million: f64 = 0.0,
-    reasoning_output_price_per_million: f64 = 0.0,
-    cache_read_price_per_million: f64 = 0.0,
-    cache_write_price_per_million: f64 = 0.0,
+    // Optional scaling fields
+    reasoning_price_per_million: ?f64 = null,
+
+    // Metadata
     tokenizer: []const u8 = "unknown",
 };
 
@@ -34,7 +34,7 @@ pub const PricingDB = struct {
     pub fn resolveModel(self: *PricingDB, name: []const u8) ?PricingModel {
         const root = self.parsed.value;
 
-        // 1. Check aliases
+        // 1. Check aliases (one-level only)
         var resolved_name = name;
         if (root.object.get("aliases")) |aliases| {
             if (aliases.object.get(name)) |alias_target| {
@@ -47,24 +47,40 @@ pub const PricingDB = struct {
         // 2. Lookup in models
         if (root.object.get("models")) |models| {
              if (models.object.get(resolved_name)) |m| {
-                 // Support both old _per_million keys and new short keys
-                 const in_price = m.object.get("input_price") orelse m.object.get("input_price_per_million");
-                 const out_price = m.object.get("output_price") orelse m.object.get("output_price_per_million");
+                 // Defensively read fields. If input/output price miss, we consider it malformed -> null.
+                 const in_node = m.object.get("input_price") orelse m.object.get("input_price_per_million");
+                 const out_node = m.object.get("output_price") orelse m.object.get("output_price_per_million");
 
-                 const p_in = if (in_price) |v| v.float else 0.0;
-                 const p_out = if (out_price) |v| v.float else 0.0;
+                 // Robust float helpers:
+                 const getFloat = struct {
+                     fn call(val: ?std.json.Value) ?f64 {
+                         const v = val orelse return null;
+                         return switch (v) {
+                             .float => |x| x,
+                             .integer => |x| @as(f64, @floatFromInt(x)),
+                             else => null,
+                         };
+                     }
+                 }.call;
+
+                 const in_price = getFloat(in_node) orelse return null;
+                 const out_price = getFloat(out_node) orelse return null;
+
+                 // Optional fields
+                 const reasoning_node = m.object.get("reasoning_price") orelse m.object.get("reasoning_input_price") orelse m.object.get("reasoning_input_price_per_million");
+                 const reasoning_price = getFloat(reasoning_node);
 
                  var tokenizer: []const u8 = "generic_whitespace";
                  if (m.object.get("tokenizer")) |t| {
-                     tokenizer = t.string;
+                     if (t == .string) tokenizer = t.string;
                  }
 
                  return PricingModel{
                      .name = resolved_name,
-                     .input_price_per_million = p_in,
-                     .output_price_per_million = p_out,
+                     .input_price_per_million = in_price,
+                     .output_price_per_million = out_price,
+                     .reasoning_price_per_million = reasoning_price,
                      .tokenizer = tokenizer,
-                     // TODO: parse reasoning/cache once strictly needed, defaulting to 0 for now as struct initializes
                  };
              }
         }

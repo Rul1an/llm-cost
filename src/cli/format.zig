@@ -1,7 +1,9 @@
 const std = @import("std");
-const engine = @import("../core/engine.zig");
-
-pub const OutputFormat = engine.OutputFormat;
+pub const OutputFormat = enum {
+    text,
+    json,
+    ndjson,
+};
 
 pub const ResultRecord = struct {
     model: []const u8,

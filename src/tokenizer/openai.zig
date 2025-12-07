@@ -1,50 +1,44 @@
 const std = @import("std");
 
-/// Basis tokenizer ID voor OpenAI-achtige modellen.
-/// Eén base-tokenizer kan door meerdere "modelnamen" gebruikt worden.
-pub const BaseTokenizer = enum {
-    cl100k_base,
-    o200k_base,
+pub const TokenizerError = error{
+    UnsupportedModel,
 };
 
-/// Publieke API voor de OpenAI-tokenizerlaag.
-/// De bedoeling is dat hogere lagen een BaseTokenizer kiezen op basis van modelnaam.
-pub const OpenAITokenizer = struct {
-    base: BaseTokenizer,
-
-    /// In v1 gebruiken we geen heap tijdens tokenization.
-    /// In init kun je later embedded tabellen initialiseren.
-    pub fn init(base: BaseTokenizer) OpenAITokenizer {
-        return .{ .base = base };
-    }
-
-    /// Count tokens for a single text segment.
-    /// Voor nu: placeholder implementatie, zodat je flow kunt testen.
-    pub fn countTokens(self: OpenAITokenizer, text: []const u8) usize {
-        _ = self;
-
-        // TODO: vervang dit door echte BPE tokenization met embedded rank tables.
-        // Voor nu: gebruik een simpele word-count als "dummy".
-        return simpleWordLikeCount(text);
-    }
-
-    /// Straks kun je hier een helper maken die ook systeem-/user-/assistant-messages
-    /// meeneemt zoals OpenAI's chat-format dat doet.
-    pub fn countChatTokens(
-        self: OpenAITokenizer,
-        messages_json: []const u8,
-    ) !usize {
-        _ = self;
-        _ = messages_json;
-
-        // TODO: parse JSON, itereren over messages, per content token count.
-        return error.NotImplemented;
-    }
+/// Minimal metadata for v0.1.
+pub const OpenAITokenizerKind = enum {
+    cl100k,
+    o200k,
 };
 
-/// Dummy-implementatie: tel woorden zoals in cli/commands.zig.
-/// Later vervang je dit volledige bestand door een BPE-implementatie.
-fn simpleWordLikeCount(text: []const u8) usize {
+/// Map logical model name to tokenizer kind.
+pub fn resolveTokenizerKind(model_name: []const u8) ?OpenAITokenizerKind {
+    if (std.mem.startsWith(u8, model_name, "gpt-4o")) return .o200k;
+    if (std.mem.startsWith(u8, model_name, "gpt-4.1")) return .o200k;
+    if (std.mem.startsWith(u8, model_name, "gpt-3.5")) return .cl100k;
+    // Fallback for v1 is usually handling unknown models gracefully or default
+    return null;
+}
+
+/// Core API for engine:
+/// - Selects tokenizer based on kind.
+/// - Counts tokens (approximate or exact).
+pub fn estimateTokens(
+    alloc: std.mem.Allocator,
+    model_name: []const u8,
+    text: []const u8,
+) TokenizerError!usize {
+    _ = alloc; // Future: BPE rank tables
+
+    const kind = resolveTokenizerKind(model_name) orelse
+        return TokenizerError.UnsupportedModel;
+
+    return switch (kind) {
+        .cl100k, .o200k => simpleApproximateCount(text),
+    };
+}
+
+/// Placeholder until real BPE implementation.
+fn simpleApproximateCount(text: []const u8) usize {
     var in_word = false;
     var count: usize = 0;
 

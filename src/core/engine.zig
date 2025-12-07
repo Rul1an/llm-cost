@@ -1,39 +1,80 @@
 const std = @import("std");
-const import_pricing = @import("../pricing.zig");
+const pricing = @import("../pricing.zig");
+const openai_tok = @import("../tokenizer/openai.zig");
 
-pub const OutputFormat = enum {
-    text,
-    json,
-    ndjson,
+pub const EngineError = error{
+    ModelNotFound,
+    InvalidPricing,
+    TokenizerNotSupported,
+    TokenizerInternalError,
 };
 
-pub const GlobalOptions = struct {
-    model: ?[]const u8 = null,
-    vendor: ?[]const u8 = null,
-    format: OutputFormat = .text,
-    config_path: ?[]const u8 = null,
+pub const TokenizerKind = enum {
+    generic_whitespace,
+    openai_cl100k,
+    openai_o200k,
+    // future: llama, mistral, etc.
+};
+
+pub const TokenizerConfig = struct {
+    kind: TokenizerKind,
+    /// Logical model name (e.g. "gpt-4o").
+    /// Tokenizer impl maps this to internal details.
+    model_name: []const u8,
 };
 
 pub const TokenResult = struct {
     tokens: usize,
 };
 
-/// Kern-API: bereken tokens voor een stuk tekst.
-/// Later komt hier de echte tokenizer (OpenAI BPE, etc.) in.
+pub const CostResult = struct {
+    model_name: []const u8,
+
+    input_tokens: usize,
+    output_tokens: usize,
+    reasoning_tokens: usize = 0,
+
+    cost_input: f64,
+    cost_output: f64,
+    cost_reasoning: f64 = 0.0,
+
+    cost_total: f64,
+    currency: []const u8 = "USD",
+
+    /// Round to nearest cent (useful for logging/CI).
+    pub fn roundedCents(self: CostResult) i64 {
+        return @intFromFloat(@round(self.cost_total * 100.0));
+    }
+};
+
+/// Core API: calculate token count for text using specified tokenizer.
 pub fn estimateTokens(
     alloc: std.mem.Allocator,
-    opts: GlobalOptions,
+    cfg: TokenizerConfig,
     text: []const u8,
-) !TokenResult {
-    _ = alloc;
-    _ = opts;
+) EngineError!TokenResult {
+    switch (cfg.kind) {
+        .generic_whitespace => {
+            const count = simpleWordLikeCount(text);
+            return .{ .tokens = count };
+        },
+        .openai_cl100k, .openai_o200k => {
+            // Stub call; openai_tok.estimateTokens becomes real BPE later.
+            const token_count = openai_tok.estimateTokens(
+                alloc,
+                cfg.model_name,
+                text,
+            ) catch |err| switch (err) {
+                error.UnsupportedModel => return EngineError.TokenizerNotSupported,
+                else => return EngineError.TokenizerInternalError,
+            };
 
-    // TODO: vervang door echte BPE/tokenizer logica.
-    const count = simpleWordLikeCount(text);
-    return TokenResult{ .tokens = count };
+            return .{ .tokens = token_count };
+        },
+    }
 }
 
-/// Placeholder: whitespace-gescheiden "woorden" tellen.
+/// Simple whitespace-word counter as fallback.
 fn simpleWordLikeCount(text: []const u8) usize {
     var in_word = false;
     var count: usize = 0;
@@ -50,33 +91,53 @@ fn simpleWordLikeCount(text: []const u8) usize {
     return count;
 }
 
-pub const CostResult = struct {
-    model_name: []const u8,
-    input_tokens: usize,
-    output_tokens: usize,
-    cost_total: f64,
-    tokenizer: []const u8 = "unknown",
-    currency: []const u8 = "USD",
-};
-
+/// Cost calculation based on pricing database.
+/// Price fields interpreted as "per million tokens".
 pub fn estimateCost(
-    db: *import_pricing.PricingDB,
+    db: *pricing.PricingDB,
     model_name: []const u8,
     input_tokens: usize,
     output_tokens: usize,
-) !CostResult {
-    if (db.resolveModel(model_name)) |model| {
-        // Price is per million tokens
-        const input_cost = @as(f64, @floatFromInt(input_tokens)) * (model.input_price_per_million / 1_000_000.0);
-        const output_cost = @as(f64, @floatFromInt(output_tokens)) * (model.output_price_per_million / 1_000_000.0);
-
-        return CostResult{
-            .model_name = model.name, // Use resolved name
-            .input_tokens = input_tokens,
-            .output_tokens = output_tokens,
-            .cost_total = input_cost + output_cost,
-            .tokenizer = model.tokenizer,
-        };
+    reasoning_tokens: usize,
+) EngineError!CostResult {
+    const maybe_model = db.resolveModel(model_name);
+    if (maybe_model == null) {
+        return EngineError.ModelNotFound;
     }
-    return error.ModelNotFound;
+
+    const model = maybe_model.?;
+
+    // Basic sanity: prices cannot be negative.
+    if (model.input_price_per_million < 0.0 or model.output_price_per_million < 0.0) {
+        return EngineError.InvalidPricing;
+    }
+
+    const cost_in =
+        @as(f64, @floatFromInt(input_tokens)) * (model.input_price_per_million / 1_000_000.0);
+    const cost_out =
+        @as(f64, @floatFromInt(output_tokens)) * (model.output_price_per_million / 1_000_000.0);
+
+    var cost_reasoning: f64 = 0.0;
+    if (model.reasoning_price_per_million) |p| {
+        if (p < 0.0) {
+            return EngineError.InvalidPricing;
+        }
+        cost_reasoning = @as(f64, @floatFromInt(reasoning_tokens)) * (p / 1_000_000.0);
+    }
+
+    // Explicitly use tokenizer from model metadata inside cost result if available,
+    // or keep it generic. Actually engine doesn't decide tokenizer kind here,
+    // but we return cost result. The user asked for clean engine.
+
+    return CostResult{
+        .model_name = model.name, // normalized name
+        .input_tokens = input_tokens,
+        .output_tokens = output_tokens,
+        .reasoning_tokens = reasoning_tokens,
+
+        .cost_input = cost_in,
+        .cost_output = cost_out,
+        .cost_reasoning = cost_reasoning,
+        .cost_total = cost_in + cost_out + cost_reasoning,
+    };
 }
