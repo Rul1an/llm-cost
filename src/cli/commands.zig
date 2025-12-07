@@ -96,8 +96,7 @@ fn parseFormat(s: []const u8) OutputFormat {
 }
 
 fn printHelp() !void {
-    const stdout = io.getStdoutWriter();
-    try stdout.writeAll(
+    const help_text =
         \\Usage: llm-cost <command> [options] [file]
         \\
         \\Commands:
@@ -116,7 +115,8 @@ fn printHelp() !void {
         \\  echo "hello" | llm-cost tokens --model gpt-4o
         \\  llm-cost price --model gpt-4o --tokens-in 1000
         \\
-    );
+    ;
+    try io.writeStdout(help_text);
 }
 
 // TODO: Move this helper to some tokenizer-utils if logic gets complex
@@ -128,20 +128,15 @@ fn pickTokenizerKindFromModel(model_name: []const u8) engine.TokenizerKind {
 }
 
 fn runTokens(ctx: CliContext) !void {
-    var text_input = try std.ArrayList(u8).initCapacity(ctx.alloc, 4096);
-    defer text_input.deinit(ctx.alloc);
+    // I/O Logic: Read entire input
+    const input_data = if (ctx.payload) |path|
+        try io.readFileAll(ctx.alloc, path)
+    else
+        try io.readStdinAll(ctx.alloc);
 
-    // I/O Logic: File > Stdin
-    if (ctx.payload) |path| {
-        const f = try std.fs.cwd().openFile(path, .{});
-        defer f.close();
-        try readAllInto(ctx.alloc, io.getFileReader(&f), &text_input);
-    } else {
-        const stdin = io.getStdinReader();
-        try readAllInto(ctx.alloc, stdin, &text_input);
-    }
+    defer ctx.alloc.free(input_data);
 
-    if (text_input.items.len == 0) {
+    if (input_data.len == 0) {
         // If no input, effectively 0 tokens.
     }
 
@@ -152,7 +147,7 @@ fn runTokens(ctx: CliContext) !void {
         .model_name = model_name,
     };
 
-    const t_res = try engine.estimateTokens(ctx.alloc, tk_cfg, text_input.items);
+    const t_res = try engine.estimateTokens(ctx.alloc, tk_cfg, input_data);
 
     // Optional: try to resolve cost if model is known
     var cost_usd: ?f64 = null;
@@ -161,8 +156,7 @@ fn runTokens(ctx: CliContext) !void {
         if (engine.estimateCost(ctx.db, m, t_res.tokens, 0, 0)) |c| {
             cost_usd = c.cost_total;
         } else |_| {
-            // Squelch pricing error here, as main intent is tokens command
-            // But maybe debug log?
+            // Squelch pricing error here
         }
     }
 
@@ -171,18 +165,20 @@ fn runTokens(ctx: CliContext) !void {
         .tokens_input = t_res.tokens,
         .tokens_output = 0,
         .cost_usd = cost_usd,
-        .tokenizer = "unknown", // engine TokenResult doesn't return tokenizer name, maybe we should fix later
+        .tokenizer = "unknown",
         .approximate = (cost_usd == null),
     };
 
-    const stdout = io.getStdoutWriter();
-    try format_lib.formatOutput(ctx.alloc, stdout, ctx.opts.format, record);
+    var buf = std.ArrayList(u8).init(ctx.alloc);
+    defer buf.deinit();
+
+    try format_lib.formatOutput(ctx.alloc, buf.writer(), ctx.opts.format, record);
+    try io.writeStdout(buf.items);
 }
 
 fn runPrice(ctx: CliContext) !void {
     const model = ctx.opts.model orelse {
-        const stderr = io.getStderrWriter();
-        try stderr.print("Error: --model required for price command.\n", .{});
+        try io.writeStderr("Error: --model required for price command.\n");
         return error.UsageError;
     };
 
@@ -192,24 +188,18 @@ fn runPrice(ctx: CliContext) !void {
         input_tokens = n;
     } else {
         // Consume input like token counter
-        var text_input = try std.ArrayList(u8).initCapacity(ctx.alloc, 4096);
-        defer text_input.deinit(ctx.alloc);
+        const input_data = if (ctx.payload) |path|
+            try io.readFileAll(ctx.alloc, path)
+        else
+            try io.readStdinAll(ctx.alloc);
+        defer ctx.alloc.free(input_data);
 
-        if (ctx.payload) |path| {
-            const f = try std.fs.cwd().openFile(path, .{});
-            defer f.close();
-            try readAllInto(ctx.alloc, io.getFileReader(&f), &text_input);
-        } else {
-             const stdin = io.getStdinReader();
-             try readAllInto(ctx.alloc, stdin, &text_input);
-        }
-
-        if (text_input.items.len > 0) {
+        if (input_data.len > 0) {
              const tk_cfg = engine.TokenizerConfig{
                  .kind = pickTokenizerKindFromModel(model),
                  .model_name = model,
              };
-             const t_res = try engine.estimateTokens(ctx.alloc, tk_cfg, text_input.items);
+             const t_res = try engine.estimateTokens(ctx.alloc, tk_cfg, input_data);
              input_tokens = t_res.tokens;
         }
     }
@@ -219,9 +209,8 @@ fn runPrice(ctx: CliContext) !void {
     const cost_res = engine.estimateCost(ctx.db, model, input_tokens, output_tokens, 0) catch |err| {
         if (err == error.ModelNotFound) {
              // We print explicit error
-             const stderr = std.io.getStdErr().writer();
-             try stderr.print("Error: Model '{s}' not found in pricing database.\n", .{model});
-             return error.ModelNotFound; // Bubble up
+             try io.writeStderr("Error: Model not found in pricing database.\n");
+             return error.ModelNotFound;
         }
         return err;
     };
@@ -230,69 +219,35 @@ fn runPrice(ctx: CliContext) !void {
         .model = cost_res.model_name,
         .tokens_input = cost_res.input_tokens,
         .tokens_output = cost_res.output_tokens,
-        // .tokens_reasoning = cost_res.reasoning_tokens, // Add to format.zig later
         .cost_usd = cost_res.cost_total,
-        .tokenizer = "from_db", // TODO: cost_res doesn't have tokenizer field in senior struct?
-        // Wait, senior struct CostResult HAS model_name, and pricing DB has info.
-        // We can check the DB record again or trust engine returned clean data.
+        .tokenizer = "from_db",
         .approximate = false,
     };
 
-    // Note: The review struct for CostResult REMOVED `tokenizer` field that I added earlier!
-    // The senior struct didn't have it.
-    // I should strictly follow the senior struct.
-    // So record.tokenizer will be "unknown" or I lookup model again?
-    // Optimization: avoid double lookup. Ideally CostResult has metadata.
-    // But adhering to strict instructions: use the struct provided.
+    var buf = std.ArrayList(u8).init(ctx.alloc);
+    defer buf.deinit();
 
-    // Actually, I can stick to the user provided snippet for CostResult which does NOT have tokenizer.
-    // But format_lib expects it.
-    // I will pass "unknown" for now or re-resolve if I must.
-
-    const stdout = io.getStdoutWriter();
-    try format_lib.formatOutput(ctx.alloc, stdout, ctx.opts.format, record);
+    try format_lib.formatOutput(ctx.alloc, buf.writer(), ctx.opts.format, record);
+    try io.writeStdout(buf.items);
 }
 
 fn runModels(ctx: CliContext) !void {
-    const stdout = io.getStdoutWriter();
+    var buf = std.ArrayList(u8).init(ctx.alloc);
+    defer buf.deinit();
+
     // Only "human" format supported for models list currently
     if (ctx.opts.format != .text) {
-        // Fallback or explicit warning?
+        // Fallback
     }
 
-    try stdout.print("Models in database:\n", .{});
+    try buf.writer().print("Models in database:\n", .{});
     const root = ctx.db.parsed.value;
     if (root.object.get("models")) |models| {
          var it = models.object.iterator();
          while (it.next()) |entry| {
-             try stdout.print("- {s}\n", .{entry.key_ptr.*});
+             try buf.writer().print("- {s}\n", .{entry.key_ptr.*});
          }
     }
-}
 
-pub fn readAllInto(alloc: std.mem.Allocator, reader: anytype, out: *std.ArrayList(u8)) !void {
-    var buf: [4096]u8 = undefined;
-    while (true) {
-        const n = try reader.read(&buf);
-        if (n == 0) break;
-        try out.appendSlice(alloc, buf[0..n]);
-    }
-}
-
-fn runPricing(ctx: CliContext) !void {
-     const root = ctx.db.parsed.value;
-     var version: []const u8 = "unknown";
-     if (root.object.get("version")) |v| {
-         version = v.string;
-     }
-
-     std.debug.print("Pricing Database Meta:\n", .{});
-     std.debug.print("  Version: {s}\n", .{version});
-
-     if (root.object.get("models")) |models| {
-         var it = models.object.iterator();
-         while (it.next()) |entry| {
-             std.debug.print("- {s}\n", .{entry.key_ptr.*});
-         }
-    }
+    try io.writeStdout(buf.items);
 }

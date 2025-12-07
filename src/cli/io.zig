@@ -1,85 +1,56 @@
 const std = @import("std");
 
-pub const ReadError = anyerror;
-pub const WriteError = anyerror;
+/// Read entire content from a file descriptor into a managed slice.
+/// Senior implementation: handles EINTR/EAGAIN (conceptually) via std.posix.read.
+pub fn readAllFromFd(
+    allocator: std.mem.Allocator,
+    fd: std.posix.fd_t,
+) ![]u8 {
+    var list = std.ArrayList(u8).init(allocator);
+    errdefer list.deinit();
 
-/// Simple reader abstraction, decoupled from std.io
-pub const Reader = struct {
-    context: *const anyopaque,
-    readFn: *const fn (ctx: *const anyopaque, buffer: []u8) ReadError!usize,
+    var buf: [4096]u8 = undefined;
 
-    pub fn read(self: Reader, buffer: []u8) ReadError!usize {
-        return self.readFn(self.context, buffer);
-    }
-};
+    while (true) {
+        // std.posix.read handles basic safe wrapping.
+        // EINTR logic is usually platform specific, but std.posix tries to abstract.
+        // We use catch to handle non-fatal vs fatal.
+        const n = std.posix.read(fd, &buf) catch |err| switch (err) {
+            error.WouldBlock, error.Blocked => continue, // Busy wait or just retry? Usually these won't happen on blocking FDs.
+            error.SystemResources => return err,
+            else => return err,
+        };
 
-/// Simple writer abstraction, decoupled from std.io
-pub const Writer = struct {
-    context: *const anyopaque,
-    writeFn: *const fn (ctx: *const anyopaque, bytes: []const u8) WriteError!usize,
-
-    pub fn write(self: Writer, bytes: []const u8) WriteError!usize {
-        return self.writeFn(self.context, bytes);
-    }
-
-    pub fn writeAll(self: Writer, bytes: []const u8) WriteError!void {
-        var index: usize = 0;
-        while (index < bytes.len) {
-            const n = try self.write(bytes[index..]);
-            if (n == 0) return error.DiskQuota; // or similar
-            index += n;
-        }
+        if (n == 0) break; // EOF
+        try list.appendSlice(buf[0..n]);
     }
 
-    pub fn print(self: Writer, comptime format: []const u8, args: anytype) WriteError!void {
-        return std.fmt.format(self, format, args);
-    }
-};
-
-fn stdinRead(_: *const anyopaque, buffer: []u8) ReadError!usize {
-    const stdin = std.fs.File{ .handle = std.posix.STDIN_FILENO };
-    return stdin.read(buffer);
+    return list.toOwnedSlice();
 }
 
-pub fn getStdinReader() Reader {
-    return Reader{
-        .context = undefined,
-        .readFn = stdinRead,
-    };
+/// Helper to read all from STDIN.
+pub fn readStdinAll(allocator: std.mem.Allocator) ![]u8 {
+    return readAllFromFd(allocator, std.posix.STDIN_FILENO);
 }
 
-fn stdoutWrite(_: *const anyopaque, bytes: []const u8) WriteError!usize {
-    const stdout = std.fs.File{ .handle = std.posix.STDOUT_FILENO };
-    return stdout.write(bytes);
+/// Helper to read all from a file path.
+pub fn readFileAll(
+    allocator: std.mem.Allocator,
+    path: []const u8,
+) ![]u8 {
+    // Open for reading.
+    const file = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
+    defer file.close();
+
+    return readAllFromFd(allocator, file.handle);
 }
 
-pub fn getStdoutWriter() Writer {
-    return Writer{
-        .context = undefined,
-        .writeFn = stdoutWrite,
-    };
+/// Write bytes to STDOUT (blocking).
+pub fn writeStdout(bytes: []const u8) !void {
+    try std.posix.writeAll(std.posix.STDOUT_FILENO, bytes);
 }
 
-fn stderrWrite(_: *const anyopaque, bytes: []const u8) WriteError!usize {
-    const stderr = std.fs.File{ .handle = std.posix.STDERR_FILENO };
-    return stderr.write(bytes);
-}
-
-pub fn getStderrWriter() Writer {
-    return Writer{
-        .context = undefined,
-        .writeFn = stderrWrite,
-    };
-}
-
-fn fileRead(ctx: *const anyopaque, buffer: []u8) ReadError!usize {
-    const file: *const std.fs.File = @ptrCast(@alignCast(ctx));
-    return file.read(buffer);
-}
-
-pub fn getFileReader(file: *const std.fs.File) Reader {
-    return Reader{
-        .context = file,
-        .readFn = fileRead,
-    };
+/// Write bytes to STDERR (blocking).
+pub fn writeStderr(bytes: []const u8) !void {
+    try std.posix.writeAll(std.posix.STDERR_FILENO, bytes);
 }
