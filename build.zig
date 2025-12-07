@@ -1,15 +1,11 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
+    // Cross-target from `-Dtarget=…`
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const single_threaded =
-        b.option(bool, "single-threaded", "Build in single-threaded mode") orelse false;
-    const strip =
-        b.option(bool, "strip", "Strip debug info from binary") orelse false;
-
-    // Executable
+    // Main executable
     const exe = b.addExecutable(.{
         .name = "llm-cost",
         .root_source_file = b.path("src/main.zig"),
@@ -17,25 +13,21 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // Extra flags via fields (0.13 style)
-    exe.single_threaded = single_threaded;
-    exe.strip = strip;
-
+    // Install binary to zig-out/bin + standard install prefix
     b.installArtifact(exe);
 
-    // `zig build run`
+    // zig build run [-- args…]
     const run_cmd = b.addRunArtifact(exe);
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
-
     const run_step = b.step("run", "Run llm-cost");
     run_step.dependOn(&run_cmd.step);
 
-    // Unit tests
+    // Unit tests: always native host, not cross-target
     const unit_tests = b.addTest(.{
         .root_source_file = b.path("src/main.zig"),
-        .target = target,
+        .target = b.host, // prevents cross-compilation of tests
         .optimize = optimize,
     });
 
