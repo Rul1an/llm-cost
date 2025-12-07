@@ -1,0 +1,71 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-linux-gnu
+            suffix: linux-x86_64
+          - os: ubuntu-latest
+            target: x86_64-linux-musl
+            suffix: linux-x86_64-musl
+          - os: ubuntu-latest
+            target: aarch64-linux-gnu
+            suffix: linux-arm64
+          - os: ubuntu-latest
+            target: x86_64-windows-gnu
+            suffix: windows-x86_64.exe
+          - os: macos-latest
+            target: aarch64-macos
+            suffix: macos-arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Core Showcase: Using zig-cross-compile-action
+      - name: Setup Zig Cross-Compiler
+        uses: Rul1an/zig-cross-compile-action@v2
+        with:
+          target: ${{ matrix.target }}
+          project-type: custom   # We use 'custom' because we invoke 'zig build' directly, but rely on target setup
+          verify-level: basic
+
+      - name: Build
+        run: |
+          zig build -Doptimize=ReleaseFast -Dtarget=${{ matrix.target }}
+          mkdir -p dist
+          # Zig 0.11+ puts artifacts in zig-out/bin
+          cp zig-out/bin/llm-cost* dist/llm-cost-${{ matrix.suffix }}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-cost-${{ matrix.suffix }}
+          path: dist/llm-cost-${{ matrix.suffix }}
+
+  release:
+    needs: build-matrix
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

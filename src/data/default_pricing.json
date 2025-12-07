@@ -1,0 +1,21 @@
+{
+    "version": "2025-12-07",
+    "aliases": {
+        "gpt-4o": "gpt-4o-2024-08-06",
+        "gpt-4o-mini": "gpt-4o-mini-2024-07-18"
+    },
+    "models": {
+        "gpt-4o-2024-08-06": {
+            "input_price_per_million": 2.50,
+            "output_price_per_million": 10.00
+        },
+        "gpt-4o-mini-2024-07-18": {
+            "input_price_per_million": 0.150,
+            "output_price_per_million": 0.600
+        },
+        "o1-preview": {
+            "input_price_per_million": 15.00,
+            "output_price_per_million": 60.00
+        }
+    }
+}
