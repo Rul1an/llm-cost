@@ -1,55 +1,96 @@
 const std = @import("std");
+const bpe = @import("bpe.zig");
 
-pub const TokenizerError = error{
-    UnsupportedModel,
+pub const Kind = enum {
+    cl100k_base,
+    o200k_base,
+
+    pub fn name(self: Kind) []const u8 {
+        return switch (self) {
+            .cl100k_base => "cl100k_base",
+            .o200k_base => "o200k_base",
+        };
+    }
 };
 
-/// Minimal metadata for v0.1.
-pub const OpenAITokenizerKind = enum {
-    cl100k,
-    o200k,
+pub const Result = struct {
+    tokens: usize,
+    approximate: bool,
 };
 
-/// Map logical model name to tokenizer kind.
-pub fn resolveTokenizerKind(model_name: []const u8) ?OpenAITokenizerKind {
-    if (std.mem.startsWith(u8, model_name, "gpt-4o")) return .o200k;
-    if (std.mem.startsWith(u8, model_name, "gpt-4.1")) return .o200k;
-    if (std.mem.startsWith(u8, model_name, "gpt-3.5")) return .cl100k;
-    // Fallback for v1 is usually handling unknown models gracefully or default
-    return null;
-}
+pub const Config = struct {
+    kind: Kind,
+    approximate_ok: bool = false,
+};
 
-/// Core API for engine:
-/// - Selects tokenizer based on kind.
-/// - Counts tokens (approximate or exact).
-pub fn estimateTokens(
-    alloc: std.mem.Allocator,
-    model_name: []const u8,
-    text: []const u8,
-) TokenizerError!usize {
-    _ = alloc; // Future: BPE rank tables
+/// The OpenAI Tokenizer instance.
+/// Wraps the low-level BPE engine (if available).
+pub const OpenAITokenizer = struct {
+    kind: Kind,
+    engine: ?bpe.BpeEngine = null,
 
-    const kind = resolveTokenizerKind(model_name) orelse
-        return TokenizerError.UnsupportedModel;
+    // Static data embedding
+    const o200k_data = @embedFile("../../src/data/o200k_base.bin");
 
-    return switch (kind) {
-        .cl100k, .o200k => simpleApproximateCount(text),
-    };
-}
+    pub fn init(cfg: Config) !OpenAITokenizer {
+        // Initialize BPE engine based on kind
+        var eng: ?bpe.BpeEngine = null;
 
-/// Placeholder until real BPE implementation.
+        if (cfg.kind == .o200k_base) {
+            // Lazy-init logic or just direct init since it's zero-copy?
+            // Zero-copy init is cheap. We can do it every time or store it.
+            // BpeEngine is small (2 slices).
+            eng = bpe.BpeEngine.init(o200k_data) catch |err| {
+                if (cfg.approximate_ok) return OpenAITokenizer{ .kind = cfg.kind, .engine = null };
+                return err;
+            };
+        } else if (cfg.kind == .cl100k_base) {
+            // No data yet
+            if (cfg.approximate_ok) {
+                eng = null;
+            } else {
+                return error.UnsupportedModel;
+            }
+        }
+
+        return OpenAITokenizer{
+            .kind = cfg.kind,
+            .engine = eng,
+        };
+    }
+
+    pub fn count(self: OpenAITokenizer, alloc: std.mem.Allocator, text: []const u8) !Result {
+        if (self.engine) |eng| {
+            const tokens = try eng.encode(alloc, text);
+            defer alloc.free(tokens);
+            return Result{ .tokens = tokens.len, .approximate = false };
+        } else {
+            // Fallback
+            return Result{ .tokens = simpleApproximateCount(text), .approximate = true };
+        }
+    }
+};
+
 fn simpleApproximateCount(text: []const u8) usize {
     var in_word = false;
     var count: usize = 0;
-
     for (text) |c| {
-        const is_space = std.ascii.isWhitespace(c);
-        if (!is_space and !in_word) {
-            in_word = true;
+        const is_ws = std.ascii.isWhitespace(c);
+        if (!is_ws and !in_word) {
             count += 1;
-        } else if (is_space) {
+            in_word = true;
+        } else if (is_ws) {
             in_word = false;
         }
     }
+    if (count == 0 and text.len > 0) return 1;
     return count;
+}
+
+pub fn resolveTokenizerKind(model: []const u8) ?Kind {
+    if (std.mem.startsWith(u8, model, "gpt-4o")) return .o200k_base;
+    if (std.mem.startsWith(u8, model, "gpt-4.1")) return .o200k_base;
+    if (std.mem.startsWith(u8, model, "gpt-4")) return .cl100k_base;
+    if (std.mem.startsWith(u8, model, "gpt-3.5")) return .cl100k_base;
+    return null;
 }

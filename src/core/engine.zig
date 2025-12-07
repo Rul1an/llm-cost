@@ -13,7 +13,6 @@ pub const TokenizerKind = enum {
     generic_whitespace,
     openai_cl100k,
     openai_o200k,
-    // future: llama, mistral, etc.
 };
 
 pub const TokenizerConfig = struct {
@@ -58,18 +57,23 @@ pub fn estimateTokens(
             const count = simpleWordLikeCount(text);
             return .{ .tokens = count };
         },
-        .openai_cl100k, .openai_o200k => {
-            // Stub call; openai_tok.estimateTokens becomes real BPE later.
-            const token_count = openai_tok.estimateTokens(
-                alloc,
-                cfg.model_name,
-                text,
-            ) catch |err| switch (err) {
-                error.UnsupportedModel => return EngineError.TokenizerNotSupported,
-                else => return EngineError.TokenizerInternalError,
-            };
+        .openai_cl100k => {
+            var tok = openai_tok.OpenAITokenizer.init(.{
+                .kind = .cl100k_base,
+                .approximate_ok = true, // For v0.x always allowed to approx if needed
+            }) catch return EngineError.TokenizerInternalError;
 
-            return .{ .tokens = token_count };
+            const res = tok.count(alloc, text) catch return EngineError.TokenizerInternalError;
+            return .{ .tokens = res.tokens };
+        },
+        .openai_o200k => {
+            var tok = openai_tok.OpenAITokenizer.init(.{
+                .kind = .o200k_base,
+                .approximate_ok = true,
+            }) catch return EngineError.TokenizerInternalError;
+
+            const res = tok.count(alloc, text) catch return EngineError.TokenizerInternalError;
+            return .{ .tokens = res.tokens };
         },
     }
 }

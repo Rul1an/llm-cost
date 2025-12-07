@@ -1,6 +1,7 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
+    // Global options
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
@@ -9,6 +10,7 @@ pub fn build(b: *std.Build) void {
     const strip =
         b.option(bool, "strip", "Strip debug info from binary") orelse false;
 
+    // --- Main executable ----------------------------------------------------
     const root_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
@@ -21,27 +23,33 @@ pub fn build(b: *std.Build) void {
         .name = "llm-cost",
         .root_module = root_mod,
     });
+
     b.installArtifact(exe);
 
-    // `zig build run -- …`
     const run_cmd = b.addRunArtifact(exe);
-    if (b.args) |args| run_cmd.addArgs(args);
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
 
     const run_step = b.step("run", "Run llm-cost");
     run_step.dependOn(&run_cmd.step);
 
-    // Tests – voor nu native houden, maar met dezelfde optimize settings
-    const native_target = b.resolveTargetQuery(.{});
+    // --- Tests: always on host target --------------------------------------
+    const host_target = b.resolveTargetQuery(.{});
+
     const test_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
-        .target = native_target,
+        .target = host_target,
         .optimize = optimize,
         .single_threaded = single_threaded,
         .strip = strip,
     });
 
-    const tests = b.addTest(.{ .root_module = test_mod });
+    const unit_tests = b.addTest(.{
+        .root_module = test_mod,
+    });
 
+    const run_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&tests.step);
+    test_step.dependOn(&run_tests.step);
 }

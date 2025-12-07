@@ -120,13 +120,10 @@ fn printHelp() !void {
 }
 
 // TODO: Move this helper to some tokenizer-utils if logic gets complex
-fn pickTokenizerKindFromModel(name: []const u8) engine.TokenizerKind {
-    // Simple mapping for v0.1
-    // Actually we should let engine decide based on config?
-    // Engine expects TokenizerKind in config.
-    // Let's defer to library default mapping if we had one.
-    // For now: map everything to openai_o200k if it looks like gpt-4o, else generic.
-    if (std.mem.indexOf(u8, name, "gpt") != null) return .openai_o200k;
+fn pickTokenizerKindFromModel(model_name: []const u8) engine.TokenizerKind {
+    if (std.mem.startsWith(u8, model_name, "gpt-4o")) return .openai_o200k;
+    if (std.mem.startsWith(u8, model_name, "gpt-4")) return .openai_cl100k;
+    if (std.mem.startsWith(u8, model_name, "gpt-3.5")) return .openai_cl100k;
     return .generic_whitespace;
 }
 
