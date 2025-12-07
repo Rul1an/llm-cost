@@ -129,15 +129,16 @@ fn pickTokenizerKindFromModel(model_name: []const u8) engine.TokenizerKind {
 
 fn readAllInto(reader: anytype, buffer: *std.ArrayList(u8)) !void {
     var read_buf: [4096]u8 = undefined;
-    while (try reader.read(read_buf[0..])) |bytes_read| {
-        try buffer.appendSlice(read_buf[0..bytes_read]);
+    while (true) {
+        const n = try reader.read(read_buf[0..]);
+        if (n == 0) break;
+        try buffer.appendSlice(read_buf[0..n]);
     }
 }
 
 fn runTokens(ctx: CliContext) !void {
     var text_input = try std.ArrayList(u8).initCapacity(ctx.alloc, 4096);
-    defer text_input.deinit(); // Note: fix deinit call too if needed? ArrayList.deinit() usually suffices if it stores allocator?
-    // Wait, ArrayList(T).deinit() DOES use stored allocator. The previous code had `defer text_input.deinit(ctx.alloc);` ?
+    defer text_input.deinit();
     // Let's check initCapacity. `initCapacity` stores the allocator.
     // If previous code was `text_input.deinit(ctx.alloc)`, that suggests ArrayListUnmanaged usage pattern or misunderstanding.
     // Standard `std.ArrayList` `deinit` takes no args.
