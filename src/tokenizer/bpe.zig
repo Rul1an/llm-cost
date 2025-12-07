@@ -7,7 +7,7 @@ const Header = extern struct {
     strings_len: u32,
 };
 
-const IndexEntry = extern struct {
+const IndexEntry = packed struct {
     offset: u32,
     rank: u32,
     len: u32,
