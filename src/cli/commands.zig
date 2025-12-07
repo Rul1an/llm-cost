@@ -181,7 +181,7 @@ fn runTokens(ctx: CliContext) !void {
 
 fn runPrice(ctx: CliContext) !void {
     const model = ctx.opts.model orelse {
-        const stderr = std.io.getStdErr().writer(); // or io.getStderrWriter() if implemented
+        const stderr = io.getStderrWriter();
         try stderr.print("Error: --model required for price command.\n", .{});
         return error.UsageError;
     };
