@@ -96,7 +96,8 @@ fn parseFormat(s: []const u8) OutputFormat {
 }
 
 fn printHelp() !void {
-    const help_text =
+    const stdout = io.getStdoutWriter();
+    try stdout.writeAll(
         \\Usage: llm-cost <command> [options] [file]
         \\
         \\Commands:
@@ -115,8 +116,7 @@ fn printHelp() !void {
         \\  echo "hello" | llm-cost tokens --model gpt-4o
         \\  llm-cost price --model gpt-4o --tokens-in 1000
         \\
-    ;
-    try io.writeStdout(help_text);
+    );
 }
 
 // TODO: Move this helper to some tokenizer-utils if logic gets complex
@@ -127,16 +127,28 @@ fn pickTokenizerKindFromModel(model_name: []const u8) engine.TokenizerKind {
     return .generic_whitespace;
 }
 
+fn readAllInto(alloc: std.mem.Allocator, reader: anytype, buffer: *std.ArrayList(u8)) !void {
+    var read_buf: [4096]u8 = undefined;
+    while (try reader.read(read_buf[0..])) |bytes_read| {
+        try buffer.appendSlice(read_buf[0..bytes_read]);
+    }
+}
+
 fn runTokens(ctx: CliContext) !void {
-    // I/O Logic: Read entire input
-    const input_data = if (ctx.payload) |path|
-        try io.readFileAll(ctx.alloc, path)
-    else
-        try io.readStdinAll(ctx.alloc);
+    var text_input = try std.ArrayList(u8).initCapacity(ctx.alloc, 4096);
+    defer text_input.deinit(ctx.alloc);
 
-    defer ctx.alloc.free(input_data);
+    // I/O Logic: File > Stdin
+    if (ctx.payload) |path| {
+        const f = try std.fs.cwd().openFile(path, .{});
+        defer f.close();
+        try readAllInto(ctx.alloc, io.getFileReader(&f), &text_input);
+    } else {
+        const stdin = io.getStdinReader();
+        try readAllInto(ctx.alloc, stdin, &text_input);
+    }
 
-    if (input_data.len == 0) {
+    if (text_input.items.len == 0) {
         // If no input, effectively 0 tokens.
     }
 
@@ -147,7 +159,7 @@ fn runTokens(ctx: CliContext) !void {
         .model_name = model_name,
     };
 
-    const t_res = try engine.estimateTokens(ctx.alloc, tk_cfg, input_data);
+    const t_res = try engine.estimateTokens(ctx.alloc, tk_cfg, text_input.items);
 
     // Optional: try to resolve cost if model is known
     var cost_usd: ?f64 = null;
@@ -169,16 +181,14 @@ fn runTokens(ctx: CliContext) !void {
         .approximate = (cost_usd == null),
     };
 
-    var buf = std.ArrayList(u8).init(ctx.alloc);
-    defer buf.deinit();
-
-    try format_lib.formatOutput(ctx.alloc, buf.writer(), ctx.opts.format, record);
-    try io.writeStdout(buf.items);
+    const stdout = io.getStdoutWriter();
+    try format_lib.formatOutput(ctx.alloc, stdout, ctx.opts.format, record);
 }
 
 fn runPrice(ctx: CliContext) !void {
     const model = ctx.opts.model orelse {
-        try io.writeStderr("Error: --model required for price command.\n");
+        const stderr = io.getStderrWriter();
+        try stderr.print("Error: --model required for price command.\n", .{});
         return error.UsageError;
     };
 
@@ -188,18 +198,24 @@ fn runPrice(ctx: CliContext) !void {
         input_tokens = n;
     } else {
         // Consume input like token counter
-        const input_data = if (ctx.payload) |path|
-            try io.readFileAll(ctx.alloc, path)
-        else
-            try io.readStdinAll(ctx.alloc);
-        defer ctx.alloc.free(input_data);
+        var text_input = try std.ArrayList(u8).initCapacity(ctx.alloc, 4096);
+        defer text_input.deinit(ctx.alloc);
 
-        if (input_data.len > 0) {
+        if (ctx.payload) |path| {
+            const f = try std.fs.cwd().openFile(path, .{});
+            defer f.close();
+            try readAllInto(ctx.alloc, io.getFileReader(&f), &text_input);
+        } else {
+             const stdin = io.getStdinReader();
+             try readAllInto(ctx.alloc, stdin, &text_input);
+        }
+
+        if (text_input.items.len > 0) {
              const tk_cfg = engine.TokenizerConfig{
                  .kind = pickTokenizerKindFromModel(model),
                  .model_name = model,
              };
-             const t_res = try engine.estimateTokens(ctx.alloc, tk_cfg, input_data);
+             const t_res = try engine.estimateTokens(ctx.alloc, tk_cfg, text_input.items);
              input_tokens = t_res.tokens;
         }
     }
@@ -209,7 +225,8 @@ fn runPrice(ctx: CliContext) !void {
     const cost_res = engine.estimateCost(ctx.db, model, input_tokens, output_tokens, 0) catch |err| {
         if (err == error.ModelNotFound) {
              // We print explicit error
-             try io.writeStderr("Error: Model not found in pricing database.\n");
+             const stderr = io.getStderrWriter();
+             try stderr.print("Error: Model '{s}' not found in pricing database.\n", .{model});
              return error.ModelNotFound;
         }
         return err;
@@ -224,30 +241,23 @@ fn runPrice(ctx: CliContext) !void {
         .approximate = false,
     };
 
-    var buf = std.ArrayList(u8).init(ctx.alloc);
-    defer buf.deinit();
-
-    try format_lib.formatOutput(ctx.alloc, buf.writer(), ctx.opts.format, record);
-    try io.writeStdout(buf.items);
+    const stdout = io.getStdoutWriter();
+    try format_lib.formatOutput(ctx.alloc, stdout, ctx.opts.format, record);
 }
 
 fn runModels(ctx: CliContext) !void {
-    var buf = std.ArrayList(u8).init(ctx.alloc);
-    defer buf.deinit();
-
+    const stdout = io.getStdoutWriter();
     // Only "human" format supported for models list currently
     if (ctx.opts.format != .text) {
         // Fallback
     }
 
-    try buf.writer().print("Models in database:\n", .{});
+    try stdout.print("Models in database:\n", .{});
     const root = ctx.db.parsed.value;
     if (root.object.get("models")) |models| {
          var it = models.object.iterator();
          while (it.next()) |entry| {
-             try buf.writer().print("- {s}\n", .{entry.key_ptr.*});
+             try stdout.print("- {s}\n", .{entry.key_ptr.*});
          }
     }
-
-    try io.writeStdout(buf.items);
 }
