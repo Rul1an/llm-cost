@@ -9,34 +9,40 @@ pub fn build(b: *std.Build) void {
     const strip =
         b.option(bool, "strip", "Strip debug info from binary") orelse false;
 
-    // We rely on simple relative imports in src/, so no complex module wiring mostly.
+    // Library / executable root
+    const root_mod = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .strip = strip,
+        .single_threaded = single_threaded,
+    });
+
     const exe = b.addExecutable(.{
         .name = "llm-cost",
-        .root_module = b.createModule(.{
-             .root_source_file = b.path("src/main.zig"),
-             .target = target,
-             .optimize = optimize,
-             .strip = strip,
-             .single_threaded = single_threaded,
-        }),
+        .root_module = root_mod,
     });
 
     b.installArtifact(exe);
 
+    // zig build run -- <args...>
     const run_cmd = b.addRunArtifact(exe);
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
-
     const run_step = b.step("run", "Run llm-cost");
     run_step.dependOn(&run_cmd.step);
 
+    // Tests: always run on host (no target), utilize single_threaded if requested
+    const test_mod = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = b.resolveTargetQuery(.{}),
+        .optimize = optimize,
+        .single_threaded = single_threaded,
+    });
+
     const unit_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = test_mod,
     });
 
     const run_tests = b.addRunArtifact(unit_tests);

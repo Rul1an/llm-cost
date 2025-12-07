@@ -834,9 +834,9 @@
 24293 208689169 1760154801000000000 0c7d3ee9ea8e698a843ee6039fd161c4 1 std/os/linux/bpf/helpers.zig
 3221 208688916 1760154801000000000 fda67b74062c7f535bb0a6d0f1fe74fb 1 std/crypto/codecs/asn1/der/ArrayListReverse.zig
 450 209241622 1765105029418861575 fd9eb6d14d238d52227026d2a2815dd6 0 /Users/roelschuurkes/llm-cost/src/main.zig
-8950 209244023 1765115571879744776 44a3de1fef02820366ecaf6b51ba6d4b 0 /Users/roelschuurkes/llm-cost/src/cli/commands.zig
-2112 209248147 1765108631512446612 5f9faf48f6d3f48e184a40a80ef2c626 0 /Users/roelschuurkes/llm-cost/src/core/engine.zig
-1558 209244033 1765109661219033936 fb390044305a38a692c7b456621a02be 0 /Users/roelschuurkes/llm-cost/src/cli/format.zig
+9193 209244023 1765126094057475753 c41992fafff973cca5ef5e0ff35b2f76 0 /Users/roelschuurkes/llm-cost/src/cli/commands.zig
+2193 209248147 1765126083312133543 e472a5d4ff0b44dcc15ec577fd4f772b 0 /Users/roelschuurkes/llm-cost/src/core/engine.zig
+1884 209244033 1765126053431994280 952345546302b3b417ea696eafb3e27a 0 /Users/roelschuurkes/llm-cost/src/cli/format.zig
 914 209277004 1765115547204779598 0be8e5b416d984974bd45aa5ace5267e 0 /Users/roelschuurkes/llm-cost/src/cli/io.zig
-2279 209241722 1765108118039907773 6de70df86b6862394a1b330f9c1a2fb6 0 /Users/roelschuurkes/llm-cost/src/pricing.zig
-564 209241636 1765108116072076212 2594d649c8effdb82a6a0d130f5bbd94 0 /Users/roelschuurkes/llm-cost/src/data/default_pricing.json
+3115 209241722 1765126030581927047 39fc2a51c88bbbd8beda638bad2d496b 0 /Users/roelschuurkes/llm-cost/src/pricing.zig
+1093 209241636 1765126021534628805 d12438a6023aa8ea58ab5c81a2f97832 0 /Users/roelschuurkes/llm-cost/src/data/default_pricing.json

@@ -7,6 +7,11 @@ pub const PricingModel = struct {
     name: []const u8,
     input_price_per_million: f64,
     output_price_per_million: f64,
+    reasoning_input_price_per_million: f64 = 0.0,
+    reasoning_output_price_per_million: f64 = 0.0,
+    cache_read_price_per_million: f64 = 0.0,
+    cache_write_price_per_million: f64 = 0.0,
+    tokenizer: []const u8 = "unknown",
 };
 
 pub const PricingDB = struct {
@@ -42,13 +47,24 @@ pub const PricingDB = struct {
         // 2. Lookup in models
         if (root.object.get("models")) |models| {
              if (models.object.get(resolved_name)) |m| {
-                 const in_price = m.object.get("input_price_per_million").?.float;
-                 const out_price = m.object.get("output_price_per_million").?.float;
+                 // Support both old _per_million keys and new short keys
+                 const in_price = m.object.get("input_price") orelse m.object.get("input_price_per_million");
+                 const out_price = m.object.get("output_price") orelse m.object.get("output_price_per_million");
+
+                 const p_in = if (in_price) |v| v.float else 0.0;
+                 const p_out = if (out_price) |v| v.float else 0.0;
+
+                 var tokenizer: []const u8 = "generic_whitespace";
+                 if (m.object.get("tokenizer")) |t| {
+                     tokenizer = t.string;
+                 }
 
                  return PricingModel{
                      .name = resolved_name,
-                     .input_price_per_million = in_price,
-                     .output_price_per_million = out_price,
+                     .input_price_per_million = p_in,
+                     .output_price_per_million = p_out,
+                     .tokenizer = tokenizer,
+                     // TODO: parse reasoning/cache once strictly needed, defaulting to 0 for now as struct initializes
                  };
              }
         }

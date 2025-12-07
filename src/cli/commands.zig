@@ -179,6 +179,8 @@ fn runTokens(ctx: CliContext) !void {
         .tokens_input = t_res.tokens,
         .tokens_output = 0,
         .cost_usd = cost_usd,
+        .tokenizer = if (cost_usd != null) "o200k_base" else "generic_whitespace", // Placeholder until tokenizer logic is wired
+        .approximate = (cost_usd == null),
     };
 
     const stdout = io.getStdoutWriter();
@@ -231,6 +233,8 @@ fn runPrice(ctx: CliContext) !void {
         .tokens_input = cost_res.input_tokens,
         .tokens_output = cost_res.output_tokens,
         .cost_usd = cost_res.cost_total,
+        .tokenizer = cost_res.tokenizer,
+        .approximate = false,
     };
 
     const stdout = io.getStdoutWriter();

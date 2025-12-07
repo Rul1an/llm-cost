@@ -55,6 +55,7 @@ pub const CostResult = struct {
     input_tokens: usize,
     output_tokens: usize,
     cost_total: f64,
+    tokenizer: []const u8 = "unknown",
     currency: []const u8 = "USD",
 };
 
@@ -74,6 +75,7 @@ pub fn estimateCost(
             .input_tokens = input_tokens,
             .output_tokens = output_tokens,
             .cost_total = input_cost + output_cost,
+            .tokenizer = model.tokenizer,
         };
     }
     return error.ModelNotFound;
