@@ -33,21 +33,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The Core Showcase: Using zig-cross-compile-action
+      # Laat de action alleen de toolchain+env doen
       - name: Setup Zig Cross-Compiler
         uses: Rul1an/zig-cross-compile-action@v2
         with:
+          version: 'master'        # Project uses 0.15 features, 'master' is safest for bleeding edge.
           target: ${{ matrix.target }}
-          project-type: custom   # We use 'custom' because we invoke 'zig build' directly, but rely on target setup
+          project-type: custom     # we bouwen zelf met `zig build`
           verify-level: basic
+          cmd: ":"                 # no-op; echte build staat hieronder
 
       - name: Build
         run: |
           zig build -Doptimize=ReleaseFast -Dtarget=${{ matrix.target }}
           mkdir -p dist
-          # Zig 0.11+ puts artifacts in zig-out/bin
-          # Zig 0.11+ puts artifacts in zig-out/bin
-          cp zig-out/bin/llm-cost* dist/llm-cost-${{ matrix.suffix }}
+          case "${{ matrix.target }}" in
+            x86_64-windows-gnu)
+              cp zig-out/bin/llm-cost.exe "dist/llm-cost-${{ matrix.suffix }}"
+              ;;
+            *)
+              cp zig-out/bin/llm-cost "dist/llm-cost-${{ matrix.suffix }}"
+              ;;
+          esac
 
       - name: Smoke Test
         if: (matrix.target == 'x86_64-linux-gnu' && matrix.os == 'ubuntu-latest') || (matrix.target == 'aarch64-macos' && matrix.os == 'macos-latest')
