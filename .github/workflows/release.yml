@@ -37,7 +37,7 @@ jobs:
       - name: Setup Zig Cross-Compiler
         uses: Rul1an/zig-cross-compile-action@v2
         with:
-          version: 'master'        # Project uses 0.15 features, 'master' is safest for bleeding edge.
+          version: '0.13.0'        # Explicitly pin to 0.13.0 for stability.
           target: ${{ matrix.target }}
           project-type: custom     # we bouwen zelf met `zig build`
           verify-level: basic
