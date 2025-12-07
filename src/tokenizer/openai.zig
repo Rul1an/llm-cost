@@ -30,7 +30,7 @@ pub const OpenAITokenizer = struct {
     engine: ?bpe.BpeEngine = null,
 
     // Static data embedding
-    const o200k_data = @embedFile("../../src/data/o200k_base.bin");
+    const o200k_data = @embedFile("../data/o200k_base.bin");
 
     pub fn init(cfg: Config) !OpenAITokenizer {
         // Initialize BPE engine based on kind

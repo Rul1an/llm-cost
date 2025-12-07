@@ -7,7 +7,7 @@ const Header = extern struct {
     strings_len: u32,
 };
 
-const IndexEntry = packed struct {
+const IndexEntry = extern struct {
     offset: u32,
     rank: u32,
     len: u32,
@@ -22,20 +22,25 @@ pub const BpeEngine = struct {
     pub fn init(embedded_data: []const u8) !BpeEngine {
         if (embedded_data.len < @sizeOf(Header)) return error.InvalidData;
 
-        // Use align(1) casting or std.mem.bytesAsSlice if packed.
-        // Our tool wrote aligned structs (IndexEntryAligned), but let's be safe.
-        // We read header from bytes.
+        // Read header
         const header = std.mem.bytesToValue(Header, embedded_data[0..@sizeOf(Header)]);
 
         if (header.magic != 0xAABBCCDD) return error.InvalidMagic;
 
         const index_start = @sizeOf(Header);
-        const index_size = header.count * @sizeOf(IndexEntry);
+        // Cast header.count to avoid overflow risk in calculation, though typically safe
+        const index_size = @as(usize, @intCast(header.count)) * @sizeOf(IndexEntry);
 
         if (embedded_data.len < index_start + index_size) return error.TruncatedData;
 
-        const index_bytes = embedded_data[index_start..index_start+index_size];
-        const index = std.mem.bytesAsSlice(IndexEntry, index_bytes);
+        const index_bytes = embedded_data[index_start .. index_start + index_size];
+
+        // Manual pointer cast to avoid []align(1) mismatch
+        // We assume the embedded data has sufficient alignment (usually 16 or 4).
+        // If embedded_data is only align(1), @alignCast might fail at runtime if not actually aligned!
+        // However, standard allocators/embeds are usually aligned.
+        const index_ptr: [*]const IndexEntry = @ptrCast(@alignCast(index_bytes.ptr));
+        const index = index_ptr[0 .. header.count];
 
         const strings_start = index_start + index_size;
         if (embedded_data.len < strings_start + header.strings_len) return error.TruncatedStrings;
