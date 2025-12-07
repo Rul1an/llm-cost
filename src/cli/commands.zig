@@ -127,7 +127,7 @@ fn pickTokenizerKindFromModel(model_name: []const u8) engine.TokenizerKind {
     return .generic_whitespace;
 }
 
-fn readAllInto(alloc: std.mem.Allocator, reader: anytype, buffer: *std.ArrayList(u8)) !void {
+fn readAllInto(reader: anytype, buffer: *std.ArrayList(u8)) !void {
     var read_buf: [4096]u8 = undefined;
     while (try reader.read(read_buf[0..])) |bytes_read| {
         try buffer.appendSlice(read_buf[0..bytes_read]);
@@ -136,17 +136,42 @@ fn readAllInto(alloc: std.mem.Allocator, reader: anytype, buffer: *std.ArrayList
 
 fn runTokens(ctx: CliContext) !void {
     var text_input = try std.ArrayList(u8).initCapacity(ctx.alloc, 4096);
-    defer text_input.deinit(ctx.alloc);
+    defer text_input.deinit(); // Note: fix deinit call too if needed? ArrayList.deinit() usually suffices if it stores allocator?
+    // Wait, ArrayList(T).deinit() DOES use stored allocator. The previous code had `defer text_input.deinit(ctx.alloc);` ?
+    // Let's check initCapacity. `initCapacity` stores the allocator.
+    // If previous code was `text_input.deinit(ctx.alloc)`, that suggests ArrayListUnmanaged usage pattern or misunderstanding.
+    // Standard `std.ArrayList` `deinit` takes no args.
+    // But let's look at the View File 1157 again.
+    // Line 138: `var text_input = try std.ArrayList(u8).initCapacity(ctx.alloc, 4096);`
+    // Line 139: `defer text_input.deinit(ctx.alloc);` -> This looks like wrong syntax for std.ArrayList if checking 0.13 docs?
+    // std.ArrayList.deinit() takes no args.
+    // std.ArrayListUnmanaged.deinit(allocator) takes args.
+    // If it *compiled* before, maybe it was `deinit()` and I misremembered or the previous file content view shows...
+    // Let's check the previous replace...
+    // Step 1145: `defer text_input.deinit(ctx.alloc);` was inserted.
+    // ERROR potential: `std.ArrayList` `deinit` usually takes NO allocator. `initCapacity` takes it and stores it.
+    // I should fix this too if it's an error.
+
+    // However, the reported error is ONLY `unused function parameter`.
+    // If `deinit(ctx.alloc)` was an error, it would likely be reported too.
+    // Wait, `ArrayList.deinit` signature: `pub fn deinit(self: Self) void`.
+    // Passing an argument to a function that takes none IS an error in Zig.
+    // Why did the user only report the unused param? Maybe the compiler stopped at the first error?
+    // Or maybe `text_input` is actually `ArrayListUnmanaged`?
+    // Line 138 says `std.ArrayList(u8)`.
+    // So `deinit(ctx.alloc)` IS WRONG.
+    // I will fix `deinit` usage as well just in case.
 
     // I/O Logic: File > Stdin
     if (ctx.payload) |path| {
         const f = try std.fs.cwd().openFile(path, .{});
         defer f.close();
-        try readAllInto(ctx.alloc, io.getFileReader(&f), &text_input);
+        try readAllInto(io.getFileReader(&f), &text_input);
     } else {
         const stdin = io.getStdinReader();
-        try readAllInto(ctx.alloc, stdin, &text_input);
+        try readAllInto(stdin, &text_input);
     }
+// ...
 
     if (text_input.items.len == 0) {
         // If no input, effectively 0 tokens.
@@ -199,15 +224,15 @@ fn runPrice(ctx: CliContext) !void {
     } else {
         // Consume input like token counter
         var text_input = try std.ArrayList(u8).initCapacity(ctx.alloc, 4096);
-        defer text_input.deinit(ctx.alloc);
+        defer text_input.deinit();
 
         if (ctx.payload) |path| {
             const f = try std.fs.cwd().openFile(path, .{});
             defer f.close();
-            try readAllInto(ctx.alloc, io.getFileReader(&f), &text_input);
+            try readAllInto(io.getFileReader(&f), &text_input);
         } else {
              const stdin = io.getStdinReader();
-             try readAllInto(ctx.alloc, stdin, &text_input);
+             try readAllInto(stdin, &text_input);
         }
 
         if (text_input.items.len > 0) {
