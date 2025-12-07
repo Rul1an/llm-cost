@@ -139,10 +139,8 @@ fn readAllInto(reader: anytype, buffer: *std.ArrayList(u8)) !void {
 fn runTokens(ctx: CliContext) !void {
     var text_input = try std.ArrayList(u8).initCapacity(ctx.alloc, 4096);
     defer text_input.deinit();
-    // Let's check initCapacity. `initCapacity` stores the allocator.
-    // If previous code was `text_input.deinit(ctx.alloc)`, that suggests ArrayListUnmanaged usage pattern or misunderstanding.
-    // Standard `std.ArrayList` `deinit` takes no args.
-    // But let's look at the View File 1157 again.
+
+    // I/O Logic: File > Stdin
     // Line 138: `var text_input = try std.ArrayList(u8).initCapacity(ctx.alloc, 4096);`
     // Line 139: `defer text_input.deinit(ctx.alloc);` -> This looks like wrong syntax for std.ArrayList if checking 0.13 docs?
     // std.ArrayList.deinit() takes no args.
