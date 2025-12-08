@@ -50,9 +50,12 @@ pub const LegacyPreTokenizer = struct {
         return tokens.toOwnedSlice();
     }
 
+    const DummyContext = struct {};
+    var dummy_ctx: DummyContext = .{};
+
     pub fn interface() PreTokenizer {
         return .{
-            .ptr = undefined, // Stateless
+            .ptr = @ptrCast(&dummy_ctx),
             .vtable = &.{ .tokenize = tokenize },
         };
     }

@@ -24,7 +24,7 @@ pub const EncodingSpec = struct {
     };
 };
 
-/// known encodings registry
+/// Known encodings registry
 pub const Registry = struct {
     pub const cl100k_specials = [_]EncodingSpec.SpecialToken{
          .{ .token = "<|endoftext|>", .rank = 100257 },

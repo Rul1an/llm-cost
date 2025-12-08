@@ -351,9 +351,12 @@ pub const O200kScanner = struct {
         return ws_len;
     }
 
+    const DummyContext = struct {};
+    var dummy_ctx: DummyContext = .{};
+
     pub fn interface() pre_tokenizer.PreTokenizer {
         return .{
-            .ptr = undefined,
+            .ptr = @ptrCast(&dummy_ctx),
             .vtable = &.{ .tokenize = tokenize },
         };
     }
