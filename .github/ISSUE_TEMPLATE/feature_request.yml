@@ -1,0 +1,41 @@
+name: Feature Request
+description: Suggest an idea for this project
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your interest in improving llm-cost!
+  - type: textarea
+    id: problem
+    attributes:
+      label: Is your feature request related to a problem?
+      description: A clear and concise description of what the problem is.
+      placeholder: "I'm always frustrated when..."
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Describe the solution you'd like
+      description: A clear and concise description of what you want to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Describe alternatives you've considered
+      description: A clear and concise description of any alternative solutions or features you've considered.
+  - type: input
+    id: model-provider
+    attributes:
+      label: Specific Provider/Model?
+      description: If this is about a new model, please specify.
+      placeholder: "e.g., Anthropic Claude, Google Gemini"
+  - type: input
+    id: volume
+    attributes:
+      label: Estimated Usage / Impact
+      description: How often would you use this feature? (e.g., "10k calls/day")
+      placeholder: "Daily batch job processing 5GB of logs"

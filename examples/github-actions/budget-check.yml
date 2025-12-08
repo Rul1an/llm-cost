@@ -1,0 +1,26 @@
+name: LLM Budget Check
+
+on:
+  pull_request:
+    paths:
+      - 'prompts/**'
+
+jobs:
+  budget-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install llm-cost
+        run: |
+          # Downloads standalone binary (no zip in default release workflow)
+          curl -LO https://github.com/Rul1an/llm-cost/releases/latest/download/llm-cost-linux-x86_64
+          chmod +x llm-cost-linux-x86_64
+          sudo mv llm-cost-linux-x86_64 /usr/local/bin/llm-cost
+
+      - name: Calculate Cost of New Prompts
+        run: |
+          # Finds all .txt files in prompts/ and pipes them to llm-cost
+          # Fails if total cost exceeds $0.50
+          find prompts/ -name "*.txt" -print0 | xargs -0 cat | \
+            llm-cost pipe --model openai/gpt-4o --mode price --summary --max-cost 0.50

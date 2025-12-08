@@ -1,4 +1,16 @@
-# Performance Baseline (v0.3 post-merge)
+# Performance
+
+## Methodology
+
+Benchmarks are run on **Apple M2 Max (macOS)** and **Linux x86_64 (GitHub Actions Runners)**.
+We measure the time to encode standard datasets (e.g., 4KB of English text, random bytes).
+
+### What does "~1ms" mean?
+For reference, 1 millisecond per 4KB chunks means `llm-cost` can process approximately **4MB/s** of text per single thread. In parallel mode (`pipe --workers 8`), throughput scales linearly, easily saturating disk I/O before CPU limits on most systems.
+
+## Benchmarks
+
+### BPE Microbenchmark (v0.3 baseline)
 
 ## BPE Microbenchmark
 **Scenario**: o200k_base encoding.

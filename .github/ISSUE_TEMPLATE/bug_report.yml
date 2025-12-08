@@ -1,0 +1,57 @@
+name: Bug Report
+description: Create a report to help us improve llm-cost
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: input
+    id: version
+    attributes:
+      label: llm-cost version
+      description: Output of `llm-cost --version` or commit hash
+      placeholder: v0.4.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - macOS (ARM64)
+        - macOS (Intel)
+        - Linux (x86_64)
+        - Linux (ARM64)
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Also tell us, what did you expect to happen?
+      placeholder: "I ran `echo 'hello' | llm-cost tokens` but got a panic..."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction Steps / Input
+      description: |
+        Please provide a minimal example or the input that caused the issue.
+        If using `pipe`, a small JSONL snippet is very helpful.
+      placeholder: |
+        1. Run `llm-cost tokens --model gpt-4o`
+        2. Input: `...`
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Paste any stack traces or error messages here.
+      render: shell
