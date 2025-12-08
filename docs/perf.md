@@ -9,7 +9,8 @@ We measure the time to encode standard datasets (e.g., 4KB of English text, rand
 For reference, 1 millisecond per 4KB chunks means `llm-cost` can process approximately **4MB/s** of text per single thread. In parallel mode (`pipe --workers 8`), throughput scales linearly, easily saturating disk I/O before CPU limits on most systems.
 
 ## Benchmarks
-Baseline (v0.3 post-merge)
+
+### BPE Microbenchmark (v0.3 baseline)
 
 ## BPE Microbenchmark
 **Scenario**: o200k_base encoding.
