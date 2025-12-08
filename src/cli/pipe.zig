@@ -221,13 +221,8 @@ fn runSingleThreaded(opts: PipeOptions) PipeError!void {
                 summary.total_cost_usd += res.cost;
             },
             .skip => {
-                // Struct def had lines_failed.
-                // Let's count skips as processed but 0 usage?
-                // Wait, logic above: lines_processed ++.
-                // If skip, maybe we want to track it.
-                // I'll update struct later or just ignore for now to match struct def.
-                // Assuming lines_failed handles validation errors.
-                // processLine returns .skip for soft errors usually.
+                // Skipped lines tellen we mee als failed, zodat summary aangeeft hoeveel
+                // records niet succesvol verrijkt zijn (bijv. invalid JSON).
                 summary.lines_failed += 1;
             },
             .fatal => return error.PipeFatal,
@@ -410,17 +405,19 @@ fn workerMain(ctx: *WorkerContext) void {
 
         // Update summary
         ctx.summary_mutex.lock();
+        defer ctx.summary_mutex.unlock();
+
         ctx.summary.lines_processed += 1;
 
         switch (res.rc) {
             .ok => {
-                // Update stats before IO lock to minimize hold time? Or after?
-                // Mutex logic:
+                // Stats bijwerken voordat we de IO-lock pakken, zodat we de stdout-mutex
+                // zo kort mogelijk vasthouden. Minder kans dat writers elkaar blokkeren.
                 ctx.summary.total_tokens_in += res.tokens_in;
                 ctx.summary.total_tokens_out += res.tokens_out;
                 ctx.summary.total_tokens += res.tokens_in + res.tokens_out;
                 ctx.summary.total_cost_usd += res.cost;
-                ctx.summary_mutex.unlock();
+                // unlocked via defer
 
                 ctx.io.stdout_mutex.lock();
                 defer ctx.io.stdout_mutex.unlock();
@@ -431,11 +428,9 @@ fn workerMain(ctx: *WorkerContext) void {
             },
             .skip => {
                 ctx.summary.lines_failed += 1;
-                ctx.summary_mutex.unlock();
             },
             .fatal => {
                 ctx.summary.lines_failed += 1;
-                ctx.summary_mutex.unlock();
                 // In parallel mode, we treat fatal errors as "hard failure for this line",
                 // but we do not abort the entire stream to keep the batch processing active.
                 // --fail-on-error only guarantees abort in single-threaded mode.

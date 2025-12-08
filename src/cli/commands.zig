@@ -217,9 +217,9 @@ fn runTokens(ctx: CliContext) !void {
 
     // Optional: try to resolve cost if model is known
     var cost_usd: ?f64 = null;
-    if (ctx.opts.model) |_| {
+     if (ctx.opts.model) |_| {
          // Use canonical name, not spec.id.name or raw input
-         // We set reasoning=0 for now in CLI v0.1
+         // We set reasoning=0 for now.
         if (engine.estimateCost(ctx.db, model_name, t_res.tokens, 0, 0)) |c| {
             cost_usd = c.cost_total;
         } else |_| {

@@ -18,7 +18,8 @@ pub const ModelFamily = enum {
     gpt4, // o200k/cl100k
     gpt3, // cl100k/p50k?
     llama3, // tiktoken-based
-    tekken, // mistral-based?
+    mistral, // Tekken-family (Mistral) tokenizer
+    // TODO: Revisit if Mistral publishes formal specs different from Tekken.
     unknown,
 };
 
@@ -157,12 +158,8 @@ fn resolveAlias(alias_name: []const u8) ?ModelSpec {
 fn buildModelSpec(cm: CanonicalModel) ModelSpec {
     var encoding: ?tokenizer_registry.EncodingSpec = null;
     if (cm.encoding_name) |enc_name| {
-        // We assume valid config in canonical_models; if key is wrong, get() returns null/panic dependent on implementation
-        // But Registry.get in registry.zig returns EncodingSpec directly?
-        // Let's verify existing registry API.
-        // Assuming `Registry.get(name)` returns `?EncodingSpec` or we lookup via struct fields.
-        // Actually registry.zig exposes `o200k_base` etc directly as public consts usually or via a get map.
-        // Let's assume for a moment we check `std.mem.eql`.
+        // NOTE: For now we map canonical encodings via simple string comparision.
+        // If tokenizer_registry gets a dynamic `get()` method later, we can switch to that.
         if (std.mem.eql(u8, enc_name, "o200k_base")) {
             encoding = tokenizer_registry.Registry.o200k_base;
         } else if (std.mem.eql(u8, enc_name, "cl100k_base")) {
@@ -194,9 +191,17 @@ fn genericHeuristicSpec(name: []const u8) ModelSpec {
          const p_str = name[0..idx];
          short_name = name[idx+1..];
 
-         if (std.mem.eql(u8, p_str, "openai")) { provider = .openai; family = .gpt4; }
-         if (std.mem.eql(u8, p_str, "meta")) { provider = .meta; family = .llama3; }
-         if (std.mem.eql(u8, p_str, "mistral")) { provider = .mistral; family = .tekken; }
+        // Heuristics: try to guess family from provider string
+        if (std.mem.eql(u8, p_str, "openai")) {
+            provider = .openai;
+            family = .gpt4;
+        } else if (std.mem.eql(u8, p_str, "meta")) {
+            provider = .meta;
+            family = .llama3;
+        } else if (std.mem.eql(u8, p_str, "mistral")) {
+            provider = .mistral;
+            family = .mistral; // Changed from .tekken to .mistral
+        }
     }
 
     return .{
