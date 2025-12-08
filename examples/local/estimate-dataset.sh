@@ -1,7 +1,13 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # Usage: ./estimate-dataset.sh <input.jsonl> <output.jsonl>
+
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo "Usage: $0 <input.jsonl> <output.jsonl>"
+    echo "Example: $0 input.jsonl enriched.jsonl"
+    exit 0
+fi
 
 INPUT_FILE=$1
 OUTPUT_FILE=$2
