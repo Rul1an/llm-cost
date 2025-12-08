@@ -175,7 +175,7 @@ fn runSingleThreaded(opts: PipeOptions) PipeError!void {
                 line_number += 1;
                 continue;
             } else {
-                return err;
+                return @errorCast(err);
             }
         }
 
@@ -261,7 +261,7 @@ fn runParallel(opts: PipeOptions) PipeError!void {
                 line_number += 1;
                 continue :producer_loop;
             } else {
-                return err;
+                return @errorCast(err);
             }
         }
 
@@ -351,7 +351,7 @@ fn processLine(
     line_number: usize,
     out_stream: anytype,
     io_ctx: anytype,
-    is_parallel: bool,
+    comptime is_parallel: bool,
 ) LineResult {
     // 1. Parse JSON
     var parsed = std.json.parseFromSlice(std.json.Value, line_alloc, line, .{}) catch |err| {
