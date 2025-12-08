@@ -154,7 +154,7 @@ Local verification (`Zig 0.13.0`):
 - `zig build bench-bpe`
   - Confirmed that v0.4 registry/CLI changes did not regress BPE performance:
     - `a * 4096` still ≈1.1ms on local dev machine.
-    - Emoji runs scale lineair/log-lineair.
+    - Emoji runs scale linear/log-linear.
 
 Manual smoke tests:
 - `llm-cost help`: Verified that new flags and examples show correctly.
