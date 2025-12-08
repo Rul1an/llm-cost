@@ -46,18 +46,8 @@ pub const OpenAITokenizer = struct {
     pub fn count(self: OpenAITokenizer, alloc: std.mem.Allocator, text: []const u8) !Result {
         if (self.engine) |eng| {
             // v0.2: Always use PreTokenizer first.
+            // v0.2: Always use PreTokenizer first.
             // For now, hardcode LegacyPreTokenizer until we map Spec -> PreTokenizer
-            var legacy = pre_tokenizer.LegacyPreTokenizer.interface(); // wait, implementation is struct. Interface is returned method.
-            // tokenize method is static or method?
-            // In definition: `pub fn tokenize(_: *anyopaque...`
-            // Better to use the struct directly if possible or interface?
-            // `legacy.tokenize(...)` implies `LegacyPreTokenizer` instance needed?
-            // It has no state.
-            // Let's use the struct function directly first for simplicity, or fix call.
-            // The method `tokenize` is `pub fn tokenize(_: *anyopaque...`
-            // So we need an instance or null ptr.
-            // Let's use `LegacyPreTokenizer.interface().tokenize(...)`.
-            // Wait, interface() returns `PreTokenizer`.
             const pt_interface = pre_tokenizer.LegacyPreTokenizer.interface();
             const pre_tokens = try pt_interface.tokenize(alloc, text);
             defer alloc.free(pre_tokens);

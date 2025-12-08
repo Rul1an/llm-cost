@@ -6,4 +6,5 @@ zig-out/
 *.swp
 *~
 tools/unicode_data/
+zig-0.13.0/
 

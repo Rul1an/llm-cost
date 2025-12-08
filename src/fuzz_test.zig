@@ -16,7 +16,7 @@ test "fuzz tokenizer with random bytes" {
 
     // 1. Init tokenizer
     var tok = try openai.OpenAITokenizer.init(.{
-        .kind = .o200k_base,
+        .spec = openai.resolveEncoding("gpt-4o").?,
         .approximate_ok = true
     });
 

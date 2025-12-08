@@ -295,7 +295,7 @@ fn workerMain(ctx: *WorkerContext) !void {
         const maybe_job = ctx.queue.pop();
         if (maybe_job == null) break;
 
-        var job = maybe_job.?;
+        const job = maybe_job.?;
         // Ensure line is freed (it was duped by producer)
         defer ctx.opts.allocator.free(job.line);
         const line = job.line;
@@ -311,7 +311,7 @@ fn workerMain(ctx: *WorkerContext) !void {
         // But explicit deinit doesn't hurt.
         defer out_buf.deinit();
 
-        var out_writer = out_buf.writer();
+        const out_writer = out_buf.writer();
 
         // Process
         const rc = processLine(

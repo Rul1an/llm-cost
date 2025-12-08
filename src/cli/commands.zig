@@ -318,4 +318,4 @@ fn runPipe(ctx: CliContext) !void {
 
     try pipe_cmd.run(pipe_opts);
 }
-```
+
