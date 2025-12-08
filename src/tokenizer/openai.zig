@@ -45,10 +45,16 @@ pub const OpenAITokenizer = struct {
 
     pub fn count(self: OpenAITokenizer, alloc: std.mem.Allocator, text: []const u8) !Result {
         if (self.engine) |eng| {
-            // v0.2: Always use PreTokenizer first.
-            // v0.2: Always use PreTokenizer first.
-            // For now, hardcode LegacyPreTokenizer until we map Spec -> PreTokenizer
-            const pt_interface = pre_tokenizer.LegacyPreTokenizer.interface();
+            // Determine PreTokenizer
+            var pt_interface: pre_tokenizer.PreTokenizer = undefined;
+            if (std.mem.eql(u8, self.spec.name, "o200k_base")) {
+                 pt_interface = @import("o200k_scanner.zig").O200kScanner.interface();
+            } else if (std.mem.eql(u8, self.spec.name, "cl100k_base")) {
+                 pt_interface = @import("cl100k_scanner.zig").Cl100kScanner.interface();
+            } else {
+                 pt_interface = pre_tokenizer.LegacyPreTokenizer.interface();
+            }
+
             const pre_tokens = try pt_interface.tokenize(alloc, text);
             defer alloc.free(pre_tokens);
 
@@ -58,6 +64,27 @@ pub const OpenAITokenizer = struct {
         } else {
             // Fallback
             return Result{ .tokens = simpleApproximateCount(text), .approximate = true };
+        }
+    }
+
+    /// Encode text to IDs (for testing/verification).
+    pub fn encode(self: OpenAITokenizer, alloc: std.mem.Allocator, text: []const u8) ![]u32 {
+        if (self.engine) |eng| {
+             var pt_interface: pre_tokenizer.PreTokenizer = undefined;
+            if (std.mem.eql(u8, self.spec.name, "o200k_base")) {
+                 pt_interface = @import("o200k_scanner.zig").O200kScanner.interface();
+            } else if (std.mem.eql(u8, self.spec.name, "cl100k_base")) {
+                 pt_interface = @import("cl100k_scanner.zig").Cl100kScanner.interface();
+            } else {
+                 pt_interface = pre_tokenizer.LegacyPreTokenizer.interface();
+            }
+
+            const pre_tokens = try pt_interface.tokenize(alloc, text);
+            defer alloc.free(pre_tokens);
+
+            return eng.encode(alloc, pre_tokens);
+        } else {
+            return error.NoEngine;
         }
     }
 };

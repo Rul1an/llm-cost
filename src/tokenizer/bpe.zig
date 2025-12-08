@@ -13,6 +13,10 @@ const IndexEntry = extern struct {
     len: u32,
 };
 
+const NodeIndex = u32;
+const InvalidIndex: NodeIndex = std.math.maxInt(NodeIndex);
+const HeapThreshold = 128; // Tuning based on bench_bpe (ReleaseFast)
+
 /// Zero-copy BPE Tokenizer Engine
 pub const BpeEngine = struct {
     index: []const IndexEntry,
@@ -35,10 +39,10 @@ pub const BpeEngine = struct {
 
         const index_bytes = embedded_data[index_start .. index_start + index_size];
 
-        // Manual pointer cast to avoid []align(1) mismatch
-        // We assume the embedded data has sufficient alignment (usually 16 or 4).
-        // If embedded_data is only align(1), @alignCast might fail at runtime if not actually aligned!
-        // However, standard allocators/embeds are usually aligned.
+        // Assumption: embedded_data is produced by tools/convert_vocab.zig
+        // and has at least align(4), so alignCast is safe here.
+        // NOTE: This relies on @embedFile providing aligned data or the allocator being well-behaved.
+        // If loading from unknown runtime buffer: use @alignCast but handle potential error or copy.
         const index_ptr: [*]const IndexEntry = @ptrCast(@alignCast(index_bytes.ptr));
         const index = index_ptr[0 .. header.count];
 
@@ -98,40 +102,7 @@ pub const BpeEngine = struct {
 
     // --- Encoding Logic ---
 
-    /// Simplified GPT-4o pre-tokenizer (split words).
-    /// Returns a slice of the text for the next "word".
-    /// Updates `start_idx`.
-    fn nextWord(_: BpeEngine, text: []const u8, start_idx: *usize) ?[]const u8 {
-        if (start_idx.* >= text.len) return null;
 
-        const start = start_idx.*;
-        var end = start;
-
-        // Simple approximate scanner:
-        // 1. Eat whitespace? GPT preserves whitespace attached to words often.
-        // Rule: Usually ` ?\p{L}+` (optional space + letters).
-
-        const c = text[end];
-
-        if (std.ascii.isWhitespace(c)) {
-            // Consume sequence of whitespace
-            while (end < text.len and std.ascii.isWhitespace(text[end])) : (end += 1) {}
-            // In GPT, pure whitespace sequences are often separate tokens or prefixes?
-            // Actually `\s+(?!\S)` is trailing space.
-            // Let's return the whitespace chunk.
-        } else if (std.ascii.isAlphabetic(c)) {
-            // Consume letters
-             while (end < text.len and std.ascii.isAlphabetic(text[end])) : (end += 1) {}
-        } else if (std.ascii.isDigit(c)) {
-             while (end < text.len and std.ascii.isDigit(text[end])) : (end += 1) {}
-        } else {
-            // Punctuation / other: 1 char
-            end += 1;
-        }
-
-        start_idx.* = end;
-        return text[start..end];
-    }
 
     /// Encode pre-tokenized text segments.
     /// Caller owns result slice.
@@ -140,8 +111,16 @@ pub const BpeEngine = struct {
         errdefer tokens.deinit();
 
         for (pre_tokens) |pt| {
-            // TODO: Special token handling
-            try self.encodeWord(pt.text, &tokens);
+            if (pt.is_special) {
+                // Special tokens bypass BPE split/merge.
+                // Depending on upstream logic, they might already have IDs assigned or need lookup.
+                // For `llm-cost` counting, we typically handle them before BPE or assume 1 token.
+                // Here we append 0 (UNK) or a specific ID if we had a special_map.
+                // TODO: Wire up real special token ID lookup if needed for full encoding parity.
+                try tokens.append(0);
+            } else {
+                try self.encodeWord(pt.text, &tokens);
+            }
         }
 
         return tokens.toOwnedSlice();
@@ -149,36 +128,18 @@ pub const BpeEngine = struct {
 
     /// Core BPE Merge for a single word
     fn encodeWord(self: BpeEngine, word: []const u8, output: *std.ArrayList(u32)) !void {
-        // 1. Initial breakdown: every byte is a token?
-        // Actually GPT-4o is byte-level BPE.
-        // We start by mapping each byte/char to a token rank if possible, or byte fallback.
-        // For simplicity v0.1: Treating bytes as u8.
-        // But `o200k_base` has tokens for common bytes.
-        // Strategy:
-        //  - Start with list of "parts" (each byte as a separate part).
-        //  - Loop:
-        //     Find pair (parts[i], parts[i+1]) with min Rank.
-        //     If no pair found in map, stop.
-        //     Merge -> parts[i] = merged key, remove parts[i+1].
+        // Optimization heuristic: for short words, simple O(N^2) is faster (lower constant overhead).
+        // For long words (e.g. repeated characters), O(N log N) is critical.
+        if (word.len < HeapThreshold) {
+            try self.encodeWordNaive(word, output);
+        } else {
+            try self.encodeWordHeap(word, output);
+        }
+    }
 
-        // Use a small scratch ArrayList for the parts.
-        // Each part is a slice of `word`.
-        // Optimisation: linked list or array list?
-        // Word length is usually small. ArrayList is fine.
-
-        // Parts: list of slices.
-        // Ranks: Cache rank for the part?
-        // Actually we need to find pairs.
-
-        // Optimization: For long words, this is slow. But "nextWord" keeps them naturally small.
-
-        // A part is just a range start/len in the word, OR a combined token?
-        // Actually, we are merging bytes.
-        // "parts" are indices into the word? No, BPE can merge disjoint things?
-        // No, BPE is strictly adjacent merges.
-        // So `parts` is a list of sub-slices of `word`.
-
-        // 1. Init parts = [ word[0..1], word[1..2], ... ]
+    /// O(N^2) Naive implementation (faster for small N)
+    /// Renamed from 'simple' to 'naive' as per plan.
+    fn encodeWordNaive(self: BpeEngine, word: []const u8, output: *std.ArrayList(u32)) !void {
         var parts = std.ArrayList([]const u8).init(output.allocator);
         defer parts.deinit();
 
@@ -190,78 +151,204 @@ pub const BpeEngine = struct {
         while (parts.items.len > 1) {
             var min_rank: u32 = std.math.maxInt(u32);
             var best_idx: ?usize = null;
-            var best_token: ?u32 = null; // The rank of the combined pair if merged
 
-            // Find best pair
             for (0..parts.items.len - 1) |i| {
                 const p1 = parts.items[i];
                 const p2 = parts.items[i+1];
 
-                // Construct merged key
-                // Note: This requires allocation or stack buffer.
-                // Max token length?
-                // We can use a small buffer. If pair > buffer, it's unlikely a token?
-                // Tokens can be long.
-                // We use an allocator for the check?
-                // Or just `p1` and `p2` are slices of `word`... wait!
-                // If we merge 'a' and 'b' -> 'ab', 'ab' is slice of word[0..2].
-                // Yes! Because BPE merges adjacency, the result is ALWAYS a contiguous slice of the original word!
-                // Proof: (i..j) merged with (j..k) -> (i..k).
-                // So we never need to allocate strings, just merge slices!
-                // UNLESS `parts` are tokens that are NOT slices of original (e.g. byte fallbacks?).
-                // For GPT-2/3/4 byte-level BPE, this holds true for the UTF-8 bytes.
+                // Safety invariant: ps are adjacent slices of the original word.
+                std.debug.assert(@intFromPtr(p1.ptr) + p1.len == @intFromPtr(p2.ptr));
 
-                // So:
-                const merged_len = p1.len + p2.len;
-                // Since they are adjacent in the list, are they adjacent in memory?
-                // Initially yes. After merges?
-                // [a] [b] [c] -> merge a,b -> [ab] [c]. 'ab' is contiguous.
-                // [ab] [c] -> merge ab, c -> [abc]. 'abc' is contiguous.
-                // So yes, `merged` is always a slice of `word`.
-                // We can assume `p1.ptr` + `p1.len` == `p2.ptr`.
+                const merged = p1.ptr[0 .. p1.len + p2.len];
 
-                // Safely recreate the slice
-                const merged_slice = p1.ptr[0..merged_len];
-
-                if (self.getRank(merged_slice)) |r| {
+                if (self.getRank(merged)) |r| {
                     if (r < min_rank) {
                         min_rank = r;
                         best_idx = i;
-                        best_token = r;
                     }
                 }
             }
 
             if (best_idx) |idx| {
-                // Merge parts[idx] and parts[idx+1]
                 const p1 = parts.items[idx];
                 const p2 = parts.items[idx+1];
-                const merged = p1.ptr[0 .. p1.len + p2.len];
-
-                parts.items[idx] = merged;
+                parts.items[idx] = p1.ptr[0 .. p1.len + p2.len];
                 _ = parts.orderedRemove(idx + 1);
             } else {
-                break; // No mergeable pairs found
+                break;
             }
         }
 
-        // Output tokens
+        // Output
         for (parts.items) |part| {
             if (self.getRank(part)) |r| {
                 try output.append(r);
             } else {
-                // Unknown token? Fallback?
-                // In GPT-4o everything should be covered by byte tokens at least?
-                // Or we emit UNK?
-                // For estimation, we count 1.
-                // But we should try to append *something*.
-                // "Byte fallback" means every byte has a rank.
-                // If getRank returns null for a single byte, something is wrong with our data or map.
-                // We will assume 0 or UNK for now.
-                // Actually `getRank` returning null for single byte is possible if not in vocab.
-                // But o200k usually covers all bytes.
-                try output.append(0); // Placeholder
+                try output.append(0);
             }
+        }
+    }
+
+    /// O(N log N) Heap-based implementation (Robust for large N)
+    /// Uses lazy invalidation with generation counters to ensure correctness.
+    fn encodeWordHeap(self: BpeEngine, word: []const u8, output: *std.ArrayList(u32)) !void {
+        const alloc = output.allocator;
+
+        // Doubly-Linked List Node
+        const Node = struct {
+            prev: NodeIndex,
+            next: NodeIndex,
+
+            // Slice info
+            offset: u32,
+            len: u32,
+
+            // State
+            alive: bool,
+            gen: u32,
+        };
+
+        // Edge candidate for merging
+        const Edge = struct {
+            rank: u32,
+            left: NodeIndex,
+            right: NodeIndex,
+            left_pos: NodeIndex, // Tie-breaker for determinism (left-most first)
+
+            // Validation
+            left_gen: u32,
+            right_gen: u32,
+
+            fn compare(_: void, a: @This(), b: @This()) std.math.Order {
+                // PriorityQueue pops the "smaller" item first.
+                // We want min rank.
+                if (a.rank < b.rank) return .lt;
+                if (a.rank > b.rank) return .gt;
+                // If ranks equal, we want left-most (smaller left_pos).
+                if (a.left_pos < b.left_pos) return .lt;
+                if (a.left_pos > b.left_pos) return .gt;
+                return .eq;
+            }
+        };
+
+        var nodes = try std.ArrayList(Node).initCapacity(alloc, word.len);
+        defer nodes.deinit();
+
+        // 1. Initialize nodes
+        for (0..word.len) |i| {
+            nodes.appendAssumeCapacity(.{
+                .prev = if (i > 0) @as(NodeIndex, @intCast(i - 1)) else InvalidIndex,
+                .next = if (i < word.len - 1) @as(NodeIndex, @intCast(i + 1)) else InvalidIndex,
+                .offset = @as(u32, @intCast(i)),
+                .len = 1,
+                .alive = true,
+                .gen = 0,
+            });
+        }
+
+        // 2. Priority Queue
+        var pq = std.PriorityQueue(Edge, void, Edge.compare).init(alloc, {});
+        defer pq.deinit();
+
+        // Fill initial edges
+        var i: usize = 0;
+        while (i < nodes.items.len - 1) : (i += 1) {
+            const l_idx = @as(NodeIndex, @intCast(i));
+            const r_idx = @as(NodeIndex, @intCast(i+1));
+            const n_left = &nodes.items[l_idx];
+            const n_right = &nodes.items[r_idx];
+            const merged_slice = word[n_left.offset .. n_left.offset + n_left.len + n_right.len];
+
+            if (self.getRank(merged_slice)) |rank| {
+                try pq.add(.{
+                    .rank = rank,
+                    .left = l_idx,
+                    .right = r_idx,
+                    .left_pos = l_idx,
+                    .left_gen = n_left.gen,
+                    .right_gen = n_right.gen
+                });
+            }
+        }
+
+        // 3. Merge Loop
+        while (pq.removeOrNull()) |edge| {
+            const l_idx = edge.left;
+            const r_idx = edge.right;
+
+            if (l_idx >= nodes.items.len or r_idx >= nodes.items.len) continue;
+
+            const l_node = &nodes.items[l_idx];
+            const r_node = &nodes.items[r_idx];
+
+            // Validation
+            if (!l_node.alive or !r_node.alive) continue;
+            if (l_node.gen != edge.left_gen or r_node.gen != edge.right_gen) continue;
+            if (l_node.next != r_idx or r_node.prev != l_idx) continue;
+
+            // Merge
+            l_node.len += r_node.len;
+            l_node.gen += 1;
+
+            r_node.alive = false;
+
+            const right_neighbor_idx = r_node.next;
+            l_node.next = right_neighbor_idx;
+
+            if (right_neighbor_idx != InvalidIndex) {
+                 nodes.items[right_neighbor_idx].prev = l_idx;
+            }
+
+            // New Edges
+            const left_neighbor_idx = l_node.prev;
+            if (left_neighbor_idx != InvalidIndex) {
+                const ln_node = &nodes.items[left_neighbor_idx];
+                if (ln_node.alive) {
+                     const slice = word[ln_node.offset .. ln_node.offset + ln_node.len + l_node.len];
+                     if (self.getRank(slice)) |r| {
+                         try pq.add(.{
+                             .rank = r,
+                             .left = left_neighbor_idx,
+                             .right = l_idx,
+                             .left_pos = left_neighbor_idx,
+                             .left_gen = ln_node.gen,
+                             .right_gen = l_node.gen
+                         });
+                     }
+                }
+            }
+
+            if (right_neighbor_idx != InvalidIndex) {
+                const rn_node = &nodes.items[right_neighbor_idx];
+                if (rn_node.alive) {
+                     const slice = word[l_node.offset .. l_node.offset + l_node.len + rn_node.len];
+                     if (self.getRank(slice)) |r| {
+                         try pq.add(.{
+                             .rank = r,
+                             .left = l_idx,
+                             .right = right_neighbor_idx,
+                             .left_pos = l_idx,
+                             .left_gen = l_node.gen,
+                             .right_gen = rn_node.gen
+                         });
+                     }
+                }
+            }
+        }
+
+        // 4. Extract
+        var curr: NodeIndex = 0;
+        while (curr != InvalidIndex) {
+            const n = nodes.items[curr];
+            if (n.alive) {
+                const part = word[n.offset .. n.offset + n.len];
+                if (self.getRank(part)) |r| {
+                    try output.append(r);
+                } else {
+                    try output.append(0);
+                }
+            }
+            curr = n.next;
         }
     }
 };

@@ -4,13 +4,22 @@ const builtin = @import("builtin");
 comptime {
     // Hard: 0.13.x only. Patch versions allowed, 0.14+ not.
     if (!(builtin.zig_version.major == 0 and builtin.zig_version.minor == 13)) {
-        @compileError("llm-cost v0.2 currently requires Zig 0.13.x; found " ++ builtin.zig_version_string);
+        @compileError("llm-cost v0.3 currently requires Zig 0.13.x; found " ++ builtin.zig_version_string);
     }
 }
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+
+
+    // Modules
+    const lib_mod = b.addModule("llm_cost", .{
+        .root_source_file = b.path("src/lib.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // Executable
     const exe = b.addExecutable(.{
@@ -38,6 +47,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+
     const fuzz_tests = b.addTest(.{
         .root_source_file = b.path("src/fuzz_test.zig"),
         .target = target,
@@ -49,18 +59,22 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_tests.step);
-    test_step.dependOn(&run_fuzz.step);
+
+    const fuzz_step = b.step("fuzz", "Run fuzz tests");
+    fuzz_step.dependOn(&run_fuzz.step);
 
     // Parity Test
-    const parity_test_exe = b.addExecutable(.{
-        .name = "parity_test",
+    const parity_test = b.addTest(.{
         .root_source_file = b.path("src/test/parity.zig"),
         .target = target,
         .optimize = optimize,
     });
-    const run_parity = b.addRunArtifact(parity_test_exe);
+    parity_test.root_module.addImport("llm_cost", lib_mod);
+    const run_parity = b.addRunArtifact(parity_test);
     const parity_step = b.step("test-parity", "Run parity check against corpus");
     parity_step.dependOn(&run_parity.step);
+
+
 
     // Benchmark Tool
     const bench_exe = b.addExecutable(.{
@@ -69,7 +83,22 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = .ReleaseFast, // Always benchmark in ReleaseFast
     });
+    bench_exe.root_module.addImport("llm_cost", lib_mod);
+
     const run_bench = b.addRunArtifact(bench_exe);
     const bench_step = b.step("benchmark", "Run performance benchmark");
     bench_step.dependOn(&run_bench.step);
+
+    // Microbenchmark BPE
+    const bench_bpe_exe = b.addExecutable(.{
+        .name = "bench_bpe",
+        .root_source_file = b.path("src/bench/bench_bpe.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    bench_bpe_exe.root_module.addImport("llm_cost", lib_mod);
+
+    const run_bench_bpe = b.addRunArtifact(bench_bpe_exe);
+    const bench_bpe_step = b.step("bench-bpe", "Run BPE microbenchmark");
+    bench_bpe_step.dependOn(&run_bench_bpe.step);
 }

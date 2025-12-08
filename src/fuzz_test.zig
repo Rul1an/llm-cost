@@ -1,43 +1,48 @@
 const std = @import("std");
 const openai = @import("tokenizer/openai.zig");
 
-// Fuzz entry point
-// Zig's fuzz testing infrastructure (AFL+/libFuzzer) typically hooks into `export fn LLVMFuzzerTestOneInput`
-// But in Zig 0.13, we can likely use `std.testing.fuzz` if available, or just a simple test runner.
-// For now, we'll write a simple property-based test that can be run repeatedly.
-
-test "fuzz tokenizer with random bytes" {
+/// Run deterministic chaos testing on a specific model
+fn runChaosForModel(model_name: []const u8, seed: u64) !void {
     const allocator = std.testing.allocator;
 
-    // We can't generate true random in a deterministic test without seed.
-    // But we can iterate over some chaotic patterns.
-    // Or we can just rely on `std.testing.fuzz` if available (std.testing.fuzz is not yet standard in 0.13 for test blocks).
-    // Let's stick to a robust "Chaos Input" test.
+    // Deterministic seed for reproducibility
+    var prng = std.rand.DefaultPrng.init(seed);
+    const rand = prng.random();
 
-    // 1. Init tokenizer
+    // 1. Init tokenizer in STRICT mode (no approximate fallback)
+    // We want to verify the actual scanner and BPE engine handle garbage gracefully.
     var tok = try openai.OpenAITokenizer.init(.{
-        .spec = openai.resolveEncoding("gpt-4o").?,
-        .approximate_ok = true
+        .spec = openai.resolveEncoding(model_name).?,
+        .approximate_ok = false
     });
 
-    // 2. Define edge case inputs
-    const inputs = [_][]const u8{
-        "",
-        " ",
-        "\n",
-        "\x00",
-        "\xff",
-        "\x00\xff",
-        "invalid utf8 \x80 \xff",
-        "long_word_without_spaces_goes_here_and_never_stops_unless_we_force_it",
-        "Mixed \t whitespace \n and \r\n control \x00 chars"
-    };
+    const ITERATIONS = 2_000;
+    var buf: [4096]u8 = undefined; // Larger buffer for more interesting patterns
 
-    for (inputs) |input| {
-        const res = tok.count(allocator, input) catch |err| {
-            std.debug.print("Failed on input '{any}': {s}\n", .{input, @errorName(err)});
-            return err;
+    for (0..ITERATIONS) |i| {
+        // Generate random length and content
+        const len = rand.intRangeAtMost(usize, 0, buf.len);
+        const input = buf[0..len];
+        rand.bytes(input);
+
+        // Test 1: No Panic / UB
+        const res1 = tok.count(allocator, input) catch |err| {
+             std.debug.print("Failed on iteration {d} (model {s}), len {d}. Error: {s}\n", .{i, model_name, len, @errorName(err)});
+             // Dump hex for repro
+             std.debug.print("Input hex: {x}\n", .{input});
+             return err;
         };
-        _ = res;
+
+        // Test 2: Determinism check (Result should be identical for same input)
+        const res2 = tok.count(allocator, input) catch unreachable;
+        try std.testing.expectEqual(res1.tokens, res2.tokens);
     }
+}
+
+test "chaos o200k (gpt-4o)" {
+    try runChaosForModel("gpt-4o", 0x12345678);
+}
+
+test "chaos cl100k (gpt-4)" {
+    try runChaosForModel("gpt-4", 0xDEADBEEF);
 }

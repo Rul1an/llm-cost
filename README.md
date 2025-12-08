@@ -4,15 +4,27 @@
 
 `llm-cost` is a high-performance, single-binary CLI written in [Zig](https://ziglang.org). It provides token counting (including GPT-4o `o200k_base` BPE) and pricing estimates from a local snapshot.
 
-> [!NOTE]
-> Tested with Zig 0.13.0. Newer versions may require build adjustments.
+> [!IMPORTANT]
+> **Requirement**: Zig 0.13.x (0.14+ is not currently supported).
+
+## Quick Start
+
+```bash
+# Count tokens for GPT-4o
+echo "Hello AI" | llm-cost tokens --model gpt-4o
+
+# Estimate cost for a prompt file
+llm-cost price --model gpt-4o prompt.txt
+```
 
 ## Features
 
 - **Production-Grade Tokenizer**:
-  - BPE support for `o200k_base` (GPT-4o / GPT-4o-mini) via embedded vocabulary.
-  - *Note: In v0.1, small deviations from standard `tiktoken` are possible as formal parity tests are ongoing.*
+  - Full BPE support for `o200k_base` (GPT-4o) and `cl100k_base` (GPT-4/Turbo).
+  - Parity-verified against OpenAI's `tiktoken` (using Evil Corpus v2).
+  - Fuzz-tested for robustness against chaotic input.
 - **Offline & Private**: Runs entirely locally. No data leaves your machine.
+  - *Same tokenization as OpenAI's `tiktoken` for `o200k_base` and `cl100k_base`.*
 - **Fast**: Native binary performance, nearly instant startup.
 - **Cross-Platform**: Single binaries (no runtime required) for macOS (ARM64), Linux (x86_64, ARM64, MUSL), and Windows.
 - **Pipe-Friendly**: Designed for shell scripting and CI integration.
@@ -41,6 +53,17 @@ We publish SHA256 checksums with every release.
 ```bash
 shasum -a 256 llm-cost-linux-x86_64
 # Compare hash with the GitHub release notes
+```
+
+### Signature Verification (Recommended)
+
+Every release includes Cosign signatures (keyless).
+
+```bash
+cosign verify-blob \
+  --certificate llm-cost-linux-x86_64.crt \
+  --signature llm-cost-linux-x86_64.sig \
+  llm-cost-linux-x86_64
 ```
 
 ## Usage
@@ -73,7 +96,6 @@ llm-cost price --model gpt-4o --tokens-in 5000 --tokens-out 200
 
 Ideal for integration with other tools (e.g., `jq`).
 
-```bash
 $ llm-cost price --model gpt-4o --tokens-in 1000 --format json
 {
   "model": "gpt-4o",
@@ -85,10 +107,28 @@ $ llm-cost price --model gpt-4o --tokens-in 1000 --format json
 }
 ```
 
+### Streaming JSONL (pipe mode)
+
+Efficiently process large datasets. Reads JSONL from stdin, enriches with token/cost fields, and writes to stdout.
+
+```bash
+cat data.jsonl \
+  | llm-cost pipe \
+      --model gpt-4o \
+      --field text \
+      --mode price \
+      --workers 4 \
+  > enriched.jsonl
+```
+
+- `--field text`: The input JSON key containing text to tokenize.
+- **Output Fields**: Adds `tokens_in`, `tokens_out`, and `cost_usd`.
+  - *Note: `pipe` uses slightly different keys (`tokens_in`) than `price` (`tokens_input`) for brevity in JSONL.*
+
 ## Supported Models
 
 - **GPT-4o** (`o200k_base`): BPE-based tokenizer with embedded vocab.
-- **GPT-4 / 3.5** (`cl100k_base`): Pricing-only. Token counting uses a simple [whitespace fallback](src/core/engine.zig).
+- **GPT-4 / 3.5** (`cl100k_base`): BPE-based tokenizer with embedded vocab.
 - **Generic**: Whitespace-based estimation for unknown models.
 
 *Note: For models without a native tokenizer implementation, `llm-cost` falls back to a heuristic. This is useful for cost estimation but is not exact.*

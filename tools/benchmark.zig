@@ -1,5 +1,5 @@
 const std = @import("std");
-const openai = @import("../src/tokenizer/openai.zig");
+const openai = @import("llm_cost").tokenizer.openai;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -12,7 +12,7 @@ pub fn main() !void {
 
     // Init tokenizer
     var tok = try openai.OpenAITokenizer.init(.{
-        .kind = .o200k_base,
+        .spec = openai.resolveEncoding("gpt-4o").?,
         .approximate_ok = false
     });
 

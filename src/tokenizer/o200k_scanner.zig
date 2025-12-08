@@ -1,6 +1,7 @@
 const std = @import("std");
 const pre_tokenizer = @import("pre_tokenizer.zig");
 const unicode = @import("unicode_tables.zig");
+const SafeUtf8Iterator = @import("utf8.zig").SafeUtf8Iterator;
 
 /// A specialized pre-tokenizer for 'o200k_base' that mimics the regex logic.
 /// See `docs/o200k_pre_tokenizer.md` for branch definitions.
@@ -13,6 +14,7 @@ pub const O200kScanner = struct {
 
         var i: usize = 0;
         while (i < text.len) {
+
             // Decode first codepoint (fallback to byte if invalid utf8, effectively Latin-1 replacement or error handling)
             // Tiktoken generally assumes valid UTF-8.
             // We use standard iterator-like decoding.
@@ -109,36 +111,70 @@ pub const O200kScanner = struct {
     /// Branch 1: Words (Lower Suffix)
     /// Regex: `[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?`
     fn tryScanWordBranch1(slice: []const u8) ?usize {
-        var it = std.unicode.Utf8Iterator{ .bytes = slice, .i = 0 };
-        var cp = it.nextCodepoint() orelse return null;
+        // Now `cp` is the first character after the optional prefix.
 
-        var prefix_len: usize = 0;
-        // 1. Optional Prefix
-        if (isPrefixChar(cp)) {
-            prefix_len = std.unicode.utf8CodepointSequenceLength(cp) catch 1;
-            // Consumed prefix.
-            // Need at least one more char for body (Lower+ requires at least 1)
-            cp = it.nextCodepoint() orelse return null;
+        // Use prev_i trick or re-peek?
+        // We need the index of `cp`.
+        // Simplest: we know we just consumed `cp`.
+        // But simply relying on `it.i` implies we need valid consumption logic.
+        // Better refactor: Get `cp` and its `start_index` directly?
+        // SafeUtf8Iterator doesn't return index.
+        // Let's manually backtrack to "before cp".
+        // BUT we don't know how much we advanced if it was invalid.
+        // Actually, we do: `it.i` is current. We need `it.i` before the last call.
+        // We can't know easily without tracking it.
+
+        // Let's rewrite loop to peek or track prev_i.
+
+        // Re-decoding:
+        var it2 = SafeUtf8Iterator{ .bytes = slice, .i = 0 };
+        var cp2 = it2.nextCodepoint() orelse return null;
+        if (isPrefixChar(cp2)) {
+             cp2 = it2.nextCodepoint() orelse return null;
+        }
+        // `it2.i` is now AFTER cp2. We want `it2.i` BEFORE cp2.
+        // No wait, we need `start_body_idx` which is the index of `cp` (the first body char).
+        // That is simply `it.i` from the line 114 (init) + prefix consumption.
+        // If there was a prefix, `start_body_idx` is `it.i` (after prefix).
+        // If no prefix, `start_body_idx` is 0.
+
+        // Let's fix lines 114-128:
+        var it = SafeUtf8Iterator{ .bytes = slice, .i = 0 };
+        var start_body_idx: usize = 0;
+
+        // Check first CP
+        var cp_peek = it.peek() orelse return null;
+        if (isPrefixChar(cp_peek)) {
+            _ = it.nextCodepoint();
+            start_body_idx = it.i;
+            cp_peek = it.peek() orelse return null;
         }
 
-        // Now `cp` is the first character after the optional prefix.
-        // `it.i` is the index *after* `cp`.
-        const start_body_idx = it.i - (std.unicode.utf8CodepointSequenceLength(cp) catch 1);
+        // Now `cp_peek` is the candidate first char of Body. `start_body_idx` is its position.
+        // We consume it to match original local `cp` variable.
+        _ = it.nextCodepoint();
+        // cp is not used subsequently as we re-init iterators from start_body_idx
 
         // Backtrack loop for `Upperish* Lowerish+`
         // `upper_end_candidate` represents the end of the `Upperish*` part.
         // We start by greedily consuming all `Upperish` characters.
-        var upper_it = std.unicode.Utf8Iterator{ .bytes = slice, .i = start_body_idx };
+        var upper_it = SafeUtf8Iterator{ .bytes = slice, .i = start_body_idx };
         var upper_end_candidate: usize = start_body_idx;
+        var last_upper_i: usize = start_body_idx;
+
         while (upper_it.nextCodepoint()) |c| {
             if (isWordUpperBody(c)) {
                 upper_end_candidate = upper_it.i;
             } else {
                 // Not an Upperish char, so this is the end of the greedy Upperish run.
                 // Backtrack the iterator to the start of this non-Upperish char.
-                upper_it.i -= std.unicode.utf8CodepointSequenceLength(c) catch 1;
+                // Not an Upperish char. Backtrack to before this char.
+                // We need to know previous `it.i`.
+                // SafeUtf8Iterator logic: we need to track `prev_i` inside loop.
+                upper_it.i = last_upper_i;
                 break;
             }
+            last_upper_i = upper_it.i;
         }
 
         // Now, `upper_end_candidate` is the end of the maximal `Upperish*` run.
@@ -151,25 +187,29 @@ pub const O200kScanner = struct {
 
         var current_upper_end = upper_end_candidate;
         while (true) {
-            var lower_it = std.unicode.Utf8Iterator{ .bytes = slice, .i = current_upper_end };
+            var lower_it = SafeUtf8Iterator{ .bytes = slice, .i = current_upper_end };
             var lower_matched_len: usize = 0;
             var has_lower = false;
 
+            var last_lower_i: usize = current_upper_end;
             while (lower_it.nextCodepoint()) |c_low| {
                 if (isWordLowerBody(c_low)) {
                     has_lower = true;
                     lower_matched_len = lower_it.i;
                 } else {
                     // Not a Lowerish char, end of Lowerish run.
-                    lower_it.i -= std.unicode.utf8CodepointSequenceLength(c_low) catch 1;
+                    // Not a Lowerish char. Backtrack.
+                    lower_it.i = last_lower_i;
                     break;
                 }
+                last_lower_i = lower_it.i;
             }
 
             if (has_lower) {
                 // Branch 1 Matched Body!
-                // TODO: Check Suffix (e.g. 's, 't)
-                return lower_matched_len;
+                // Check Suffix (e.g. 's, 't)
+                const suffix_len = checkContractionSuffix(slice, lower_matched_len);
+                return lower_matched_len + suffix_len;
             }
 
             // Failed to match Lowerish+. Need to backtrack the Upperish* part.
@@ -188,10 +228,10 @@ pub const O200kScanner = struct {
         }
     }
 
-    /// Branch 2: Words (Upper / Lookahead)
-    /// Regex: `[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+(?=[^\r\n\p{L}\p{N}]|$)`
+    /// Branch 2: Words (Upper)
+    /// Regex: `[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?`
     fn tryScanWordBranch2(slice: []const u8) ?usize {
-        var it = std.unicode.Utf8Iterator{ .bytes = slice, .i = 0 };
+        var it = SafeUtf8Iterator{ .bytes = slice, .i = 0 };
         var cp = it.nextCodepoint() orelse return null;
 
         var prefix_len: usize = 0;
@@ -201,57 +241,29 @@ pub const O200kScanner = struct {
             cp = it.nextCodepoint() orelse return null; // Advance past prefix
         }
 
-        // Now `cp` is the first character after the optional prefix.
-        // `it.i` is the index *after* `cp`.
-        // `it.i` is the index *after* `cp`.
-
         // 2. Body: Upperish+
-        // Must match at least one Upperish character.
         if (!isWordUpperBody(cp)) return null;
 
-        // Greedy scan Upperish
-        var body_end_idx = it.i; // `it.i` is already past the first Upperish char
+        var body_end_idx = it.i;
+        var prev_i = it.i;
         while (it.nextCodepoint()) |c| {
             if (isWordUpperBody(c)) {
                 body_end_idx = it.i;
             } else {
-                // Not an Upperish char, end of greedy run.
-                it.i -= std.unicode.utf8CodepointSequenceLength(c) catch 1;
+                it.i = prev_i;
                 break;
             }
+            prev_i = it.i;
         }
 
-        // If no Upperish characters were matched (e.g., only prefix and then non-Upperish),
-        // then `body_end_idx` would still be `body_start_idx`.
-        // But we already checked `isWordUpperBody(cp)` so at least one is guaranteed.
-
-        // 3. Lookahead Check
-        // Regex: `(?=[^\r\n\p{L}\p{N}]|$)`
-        // This means: if at EOF, it matches.
-        // OR if the next character is NOT a Letter, NOT a Number, NOT CR, NOT LF.
-
-        if (body_end_idx >= slice.len) {
-            // End of string, lookahead matches.
-            // TODO: Check Suffix
-            return body_end_idx;
-        }
-
-        const la_slice = slice[body_end_idx..];
-        const len_la = std.unicode.utf8ByteSequenceLength(la_slice[0]) catch 1;
-        const la_cp = std.unicode.utf8Decode(la_slice[0..len_la]) catch 0xFFFD;
-
-        if (isPrefixChar(la_cp)) { // `isPrefixChar` already checks `[^\r\n\p{L}\p{N}]`
-             // Lookahead matches.
-             // TODO: Check Suffix
-             return body_end_idx;
-        }
-
-        return null;
+        // 3. Optional Suffix
+        const suffix_len = checkContractionSuffix(slice, body_end_idx);
+        return body_end_idx + suffix_len;
     }
 
     /// Branch 4: Punctuation (Everything Else)
     fn tryScanPunctuation(slice: []const u8) ?usize {
-        var it = std.unicode.Utf8Iterator{ .bytes = slice, .i = 0 };
+        var it = SafeUtf8Iterator{ .bytes = slice, .i = 0 };
         var cp = it.nextCodepoint() orelse return null;
         var start_body: usize = 0;
 
@@ -292,7 +304,7 @@ pub const O200kScanner = struct {
 
         // Check Suffix: [\r\n/]*
         // Start scanning suffix from `end_body`.
-        var it_suffix = std.unicode.Utf8Iterator{ .bytes = slice, .i = end_body };
+        var it_suffix = SafeUtf8Iterator{ .bytes = slice, .i = end_body };
         var end_suffix = end_body;
 
         while (it_suffix.nextCodepoint()) |s| {
@@ -310,7 +322,7 @@ pub const O200kScanner = struct {
     fn tryScanNumber(slice: []const u8) ?usize {
         // Must start with Number (checked by caller dispatch usually, but safe to check)
         // Need to decode codepoints!
-        var it = std.unicode.Utf8Iterator{ .bytes = slice, .i = 0 };
+        var it = SafeUtf8Iterator{ .bytes = slice, .i = 0 };
         const cp1 = it.nextCodepoint() orelse return null;
 
         if (!unicode.isNumber(cp1)) return null;
@@ -344,7 +356,7 @@ pub const O200kScanner = struct {
     /// Branch 5: `\s*[\r\n]+`
     /// Matches whitespace that ends in at least one newline/CR.
     fn tryScanWhitespaceBranch5(slice: []const u8) ?usize {
-        var it = std.unicode.Utf8Iterator{ .bytes = slice, .i = 0 };
+        var it = SafeUtf8Iterator{ .bytes = slice, .i = 0 };
         const cp1 = it.nextCodepoint() orelse return null;
         if (!unicode.isWhitespace(cp1)) return null;
 
@@ -372,7 +384,7 @@ pub const O200kScanner = struct {
     /// Branch 6: `\s+(?!\S)`
     /// Matches greedy whitespace ONLY if it reaches EOF (or followed by whitespace, impossible since greedy).
     fn tryScanWhitespaceBranch6(slice: []const u8) ?usize {
-        var it = std.unicode.Utf8Iterator{ .bytes = slice, .i = 0 };
+        var it = SafeUtf8Iterator{ .bytes = slice, .i = 0 };
         const cp1 = it.nextCodepoint() orelse return null;
         if (!unicode.isWhitespace(cp1)) return null;
 
@@ -390,7 +402,7 @@ pub const O200kScanner = struct {
 
     /// Branch 7: `\s+`
     fn tryScanWhitespaceBranch7(slice: []const u8) ?usize {
-        var it = std.unicode.Utf8Iterator{ .bytes = slice, .i = 0 };
+        var it = SafeUtf8Iterator{ .bytes = slice, .i = 0 };
         const cp1 = it.nextCodepoint() orelse return null;
         if (!unicode.isWhitespace(cp1)) return null;
 
@@ -400,6 +412,39 @@ pub const O200kScanner = struct {
             ws_end = it.i;
         }
         return ws_end;
+    }
+
+    fn checkContractionSuffix(slice: []const u8, start_idx: usize) usize {
+        if (start_idx >= slice.len) return 0;
+        const s = slice[start_idx..];
+
+        // Suffixes: 's, 't, 're, 've, 'm, 'll, 'd (case insensitive)
+        // Must start with "'" (0x27)
+        if (s[0] != '\'') return 0;
+
+        if (s.len < 2) return 0;
+
+        // Len 2 candidates: 's, 't, 'm, 'd
+        const c1 = s[1];
+        // Lowercase conversion for ASCII is simple (c | 0x20).
+        const c1_lower = c1 | 0x20;
+
+        if (c1_lower == 's' or c1_lower == 't' or c1_lower == 'm' or c1_lower == 'd') {
+            return 2;
+        }
+
+        if (s.len >= 3) {
+            const c2 = s[2];
+            const c2_lower = c2 | 0x20;
+            // Len 3 candidates: 're, 've, 'll
+            if ((c1_lower == 'r' and c2_lower == 'e') or
+                (c1_lower == 'v' and c2_lower == 'e') or
+                (c1_lower == 'l' and c2_lower == 'l')) {
+                return 3;
+            }
+        }
+
+        return 0;
     }
 
     const DummyContext = struct {};

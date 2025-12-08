@@ -58,7 +58,7 @@ pub fn main() !void {
 
     // 1. Read all items
     var items = try std.ArrayList(VocabItem).initCapacity(alloc, 200500);
-    defer items.deinit(alloc);
+    defer items.deinit();
 
     // We need an arena for the token strings we decode
     var string_arena = std.heap.ArenaAllocator.init(alloc);
@@ -89,7 +89,7 @@ pub fn main() !void {
         const decoded = try str_alloc.alloc(u8, decoded_len);
         try std.base64.standard.Decoder.decode(decoded, b64);
 
-        try items.append(alloc, VocabItem{ .token = decoded, .rank = rank });
+        try items.append(VocabItem{ .token = decoded, .rank = rank });
         count += 1;
     }
     std.debug.print("Loaded {d} items. Sorting...\n", .{items.items.len});

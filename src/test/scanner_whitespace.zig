@@ -77,3 +77,63 @@ test "Complex Mixed Whitespace" {
     try std.testing.expectEqualStrings("  ", tokens[1].text);
     try std.testing.expectEqualStrings("a", tokens[2].text);
 }
+
+test "Senior Review Edge Cases" {
+    const alloc = std.testing.allocator;
+
+    // Case 1: " \n "
+    // Branch 5 (\s*[\r\n]+) should see " \n" as ending in newline.
+    // Length 2. Remainder " ".
+    // " " triggers Branch 6 (EOF) or 7.
+    // Result: [" \n", " "]
+    const t1 = try scanner.tokenize(undefined, alloc, " \n ");
+    defer alloc.free(t1);
+    try std.testing.expectEqual(@as(usize, 2), t1.len);
+    try std.testing.expectEqualStrings(" \n", t1[0].text);
+    try std.testing.expectEqualStrings(" ", t1[1].text);
+
+    // Case 2: "\r\n\r\n"
+    // Greedy \s* consumes all. [\r\n]+ consumes at least one.
+    // TryScanWhitespaceBranch5 matches full string of newlines.
+    const t2 = try scanner.tokenize(undefined, alloc, "\r\n\r\n");
+    defer alloc.free(t2);
+    try std.testing.expectEqual(@as(usize, 1), t2.len);
+    try std.testing.expectEqualStrings("\r\n\r\n", t2[0].text);
+
+    // Case 3: " \n\nx"
+    // " \n\nx" -> " \n\n" (Br 5) + "x"
+    const t3 = try scanner.tokenize(undefined, alloc, " \n\nx");
+    defer alloc.free(t3);
+    try std.testing.expectEqual(@as(usize, 2), t3.len);
+    try std.testing.expectEqualStrings(" \n\n", t3[0].text);
+    try std.testing.expectEqualStrings("x", t3[1].text);
+
+    // Case 4: "a \r\n b"
+    // "a" -> Br1
+    // " \r\n " -> " \r\n" (Br 5) - Backtracks from space
+    // " b" -> Br1 (Space is valid prefix for Word branch)
+    const t4 = try scanner.tokenize(undefined, alloc, "a \r\n b");
+    defer alloc.free(t4);
+    try std.testing.expectEqual(@as(usize, 3), t4.len);
+    try std.testing.expectEqualStrings("a", t4[0].text);
+    try std.testing.expectEqualStrings(" \r\n", t4[1].text);
+    try std.testing.expectEqualStrings(" b", t4[2].text);
+}
+
+test "strict whitespace scanner - invalid utf8 safety" {
+    const alloc = std.testing.allocator;
+    // scanner is imported as 'scanner' in this file (which is O200kScanner from line 2)
+
+    // Sequence that previously caused panic in Utf8Iterator
+    // 0xFF is invalid start byte.
+    // 0xC0 0xAF is overlong encoding (sometimes panic or fallback).
+    const invalid_input = "\xFF\xFF\xC0\x20\x80";
+
+    // Should NOT panic
+    const t = try scanner.tokenize(undefined, alloc, invalid_input);
+    defer alloc.free(t);
+
+    // We expect fallback bytes or replacement chars.
+    // Just verify we got *something* and survived.
+    try std.testing.expect(t.len > 0);
+}

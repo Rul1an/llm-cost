@@ -1,0 +1,136 @@
+{"model": "o200k_base", "text": "Hello world", "expected_ids": [13225, 2375], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "Hello world", "expected_ids": [9906, 1917], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "", "expected_ids": [], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "", "expected_ids": [], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": " ", "expected_ids": [220], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": " ", "expected_ids": [220], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "don't", "expected_ids": [91418], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "don't", "expected_ids": [15357, 956], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "it's", "expected_ids": [64190], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "it's", "expected_ids": [275, 596], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "you're", "expected_ids": [147221], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "you're", "expected_ids": [9514, 2351], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "I'll", "expected_ids": [67504], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "I'll", "expected_ids": [40, 3358], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "we've", "expected_ids": [854, 7341], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "we've", "expected_ids": [906, 3077], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "'s", "expected_ids": [885], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "'s", "expected_ids": [596], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "'t", "expected_ids": [1507], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "'t", "expected_ids": [956], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "'re", "expected_ids": [4118], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "'re", "expected_ids": [2351], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "'ve", "expected_ids": [7341], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "'ve", "expected_ids": [3077], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "'m", "expected_ids": [11146], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "'m", "expected_ids": [2846], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "'ll", "expected_ids": [6090], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "'ll", "expected_ids": [3358], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "'d", "expected_ids": [11062], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "'d", "expected_ids": [4265], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "It's", "expected_ids": [15834], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "It's", "expected_ids": [2181, 596], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "DON'T", "expected_ids": [134882, 51532], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "DON'T", "expected_ids": [85741, 17773], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": " 's", "expected_ids": [461, 82], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": " 's", "expected_ids": [364, 82], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "foo's", "expected_ids": [16660, 885], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "foo's", "expected_ids": [8134, 596], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "hello", "expected_ids": [24912], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "hello", "expected_ids": [15339], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "Hello", "expected_ids": [13225], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "Hello", "expected_ids": [9906], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "HELLO", "expected_ids": [111642, 2699], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "HELLO", "expected_ids": [51812, 1623], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "naïve", "expected_ids": [1503, 9954, 737], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "naïve", "expected_ids": [3458, 38672, 588], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "über", "expected_ids": [21022], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "über", "expected_ids": [50085], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "façade", "expected_ids": [4968, 704, 973], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "façade", "expected_ids": [3716, 3209, 1037], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "مرحبا", "expected_ids": [158894, 26537], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "مرحبا", "expected_ids": [10386, 11318, 30925, 22071, 5821], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "こんにちは", "expected_ids": [95839], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "こんにちは", "expected_ids": [90115], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "안녕하세요", "expected_ids": [14307, 171731], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "안녕하세요", "expected_ids": [31495, 230, 75265, 243, 92245], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "unfinished", "expected_ids": [32938], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "unfinished", "expected_ids": [15442], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "prefix space", "expected_ids": [26155, 4918], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "prefix space", "expected_ids": [12113, 3634], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "1", "expected_ids": [16], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "1", "expected_ids": [16], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "12", "expected_ids": [899], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "12", "expected_ids": [717], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "123", "expected_ids": [7633], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "123", "expected_ids": [4513], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "1234", "expected_ids": [7633, 19], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "1234", "expected_ids": [4513, 19], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "12345", "expected_ids": [7633, 2548], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "12345", "expected_ids": [4513, 1774], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "123456", "expected_ids": [7633, 19354], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "123456", "expected_ids": [4513, 10961], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "1234567890", "expected_ids": [7633, 19354, 29338, 15], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "1234567890", "expected_ids": [4513, 10961, 16474, 15], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "0", "expected_ids": [15], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "0", "expected_ids": [15], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "00", "expected_ids": [504], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "00", "expected_ids": [410], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "007", "expected_ids": [19378], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "007", "expected_ids": [11194], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "!", "expected_ids": [0], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "!", "expected_ids": [0], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": ".", "expected_ids": [13], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": ".", "expected_ids": [13], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "...", "expected_ids": [1008], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "...", "expected_ids": [1131], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "??", "expected_ids": [6961], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "??", "expected_ids": [7801], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": " ! ", "expected_ids": [1073, 220], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": " ! ", "expected_ids": [758, 220], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": " ... ", "expected_ids": [2550, 220], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": " ... ", "expected_ids": [2564, 220], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "////", "expected_ids": [1426], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "////", "expected_ids": [730], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "\n", "expected_ids": [198], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "\n", "expected_ids": [198], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "\r", "expected_ids": [201], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "\r", "expected_ids": [201], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "\r\n", "expected_ids": [370], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "\r\n", "expected_ids": [319], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "\n\r", "expected_ids": [198, 201], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "\n\r", "expected_ids": [198, 201], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": " \n ", "expected_ids": [793, 220], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": " \n ", "expected_ids": [720, 220], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": " \r\n ", "expected_ids": [4568, 220], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": " \r\n ", "expected_ids": [2591, 220], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "   ", "expected_ids": [271], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "   ", "expected_ids": [262], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "\t", "expected_ids": [197], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "\t", "expected_ids": [197], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "\t\n", "expected_ids": [2775], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "\t\n", "expected_ids": [1602], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "\n\t", "expected_ids": [198, 197], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "\n\t", "expected_ids": [198, 197], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "don't 123", "expected_ids": [91418, 220, 7633], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "don't 123", "expected_ids": [15357, 956, 220, 4513], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "foo123bar", "expected_ids": [16660, 7633, 2990], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "foo123bar", "expected_ids": [8134, 4513, 2308], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "123foo", "expected_ids": [7633, 16660], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "123foo", "expected_ids": [4513, 8134], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": " \r\n \t ", "expected_ids": [4568, 160432], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": " \r\n \t ", "expected_ids": [2591, 66597], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "user_name", "expected_ids": [1428, 2483], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "user_name", "expected_ids": [882, 1292], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "email@example.com", "expected_ids": [4261, 81309, 1136], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "email@example.com", "expected_ids": [2386, 36587, 916], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "1.2.3.4", "expected_ids": [16, 13, 17, 13, 18, 13, 19], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "1.2.3.4", "expected_ids": [16, 13, 17, 13, 18, 13, 19], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "1,000", "expected_ids": [16, 11, 1302], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "1,000", "expected_ids": [16, 11, 931], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "expected_ids": [117525, 117525, 117525, 117525, 117525, 117525, 117525, 117525, 117525, 117525, 117525, 117525, 45037], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "expected_ids": [70540, 70540, 70540, 70540, 70540, 70540, 70540, 70540, 70540, 70540, 70540, 70540, 29558], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "                                                                                                    ", "expected_ids": [9344, 22731], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "                                                                                                    ", "expected_ids": [5351, 10812], "tiktoken_version": "0.9.0"}
+{"model": "o200k_base", "text": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", "expected_ids": [132688, 132688, 132688, 132688, 132688, 132688, 14401], "tiktoken_version": "0.9.0"}
+{"model": "cl100k_base", "text": "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", "expected_ids": [51767, 51767, 51767, 51767, 51767, 51767, 51767, 51767, 51767, 51767, 51767, 51767, 17523], "tiktoken_version": "0.9.0"}

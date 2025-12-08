@@ -8,8 +8,41 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.13.0
+
+      - name: Unit Tests
+        run: zig build test
+
+      - name: Fuzzing Sanity Check
+        # Run full iterations (2000 per model) - fast enough for CI
+        run: zig build fuzz
+
+      - name: Parity Check
+        # Relies on committed testdata/evil_corpus_v2.jsonl
+        run: zig build test-parity
+
+      - name: BPE Microbenchmark (sanity)
+        # Run to ensure no crashes in bench code, though timing is flaky on CI
+        # Optimization level is handled by build.zig
+        run: zig build bench-bpe
+
   build-matrix:
+    needs: verify
     permissions:
       contents: read
       id-token: write # Required for keyless cosign signing

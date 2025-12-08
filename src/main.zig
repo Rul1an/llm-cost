@@ -14,4 +14,7 @@ pub fn main() !void {
 
 test {
     _ = @import("test/scanner_whitespace.zig");
+    _ = @import("test/cl100k_scanner_test.zig");
+    // _ = @import("test/parity.zig"); // Run via 'zig build test-parity'
+    // _ = @import("tokenizer/bpe.zig");
 }

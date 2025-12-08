@@ -7,8 +7,8 @@ pub const EncodingSpec = struct {
     name: []const u8,
 
     /// Regex pattern used for pre-tokenization splitting.
-    /// This is strictly for documentation/verification in v0.2,
-    /// as we might implement hand-written splitters for performance.
+    /// Regex pattern used for pre-tokenization splitting.
+    /// This is strictly for documentation; the actual scanner is handwritten for performance.
     pat_str: []const u8,
 
     /// Raw BPE vocabulary data (tiktoken binary format).
@@ -34,10 +34,14 @@ pub const Registry = struct {
          .{ .token = "<|endofprompt|>", .rank = 100276 },
     };
 
+    // Force 4-byte alignment for BPE binary data to avoid runtime @alignCast panic.
+    const cl100k_data align(4) = @embedFile("../data/cl100k_base.bin").*;
+    const o200k_data align(4) = @embedFile("../data/o200k_base.bin").*;
+
     pub const cl100k_base = EncodingSpec{
         .name = "cl100k_base",
-        .pat_str = "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
-        .vocab_data = "", // Empty for now; cl100k not fully supported in v0.2
+        .pat_str = "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?[\\p{L}\\p{N}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}|[^\\s\\p{L}\\p{N}]+[\\r\\n/]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
+        .vocab_data = &cl100k_data,
         .special_tokens = &cl100k_specials,
     };
 
@@ -48,8 +52,9 @@ pub const Registry = struct {
 
     pub const o200k_base = EncodingSpec{
         .name = "o200k_base",
-        .pat_str = "[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]*[\\p{Ll}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]+|[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]+(?=[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]|\\s|\\p{P}|\\p{S}|\\p{C}|$)|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n/]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
-        .vocab_data = @embedFile("../data/o200k_base.bin"),
+        // Actual regex structure covering Branches 1 & 2 with suffixes, plus numbers and whitespace.
+        .pat_str = "[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]*[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?|[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n/]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
+        .vocab_data = &o200k_data,
         .special_tokens = &o200k_specials,
     };
 
