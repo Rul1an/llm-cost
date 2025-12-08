@@ -2,7 +2,16 @@
 
 **Offline token counting and cost estimation for LLMs.**
 
+
 `llm-cost` is a high-performance, single-binary CLI written in [Zig](https://ziglang.org). It provides token counting (including GPT-4o `o200k_base` BPE) and pricing estimates from a local snapshot.
+
+## State of LLMs (2025)
+
+OpenAI’s GPT-4o family is now the default choice for many applications: it’s fast, relatively cheap, and uses the `o200k_base` tokenizer. Classic GPT-4 / GPT-3.5 models are still widely used in existing systems and rely on the older `cl100k_base` encoding.
+
+Above that, newer “frontier” models (e.g. GPT-5 and dedicated reasoning models) push quality further, but they don’t replace the huge installed base of 4o/4-class models overnight. In parallel, other vendors (Anthropic Claude, Google Gemini, open-weight Llama variants) keep raising the bar, but they mostly stick to their own BPE-style tokenizers.
+
+`llm-cost` focuses on the practical layer underneath all of this: **exact, offline token counting and cost estimation** for the two OpenAI encodings that currently matter most in production (`o200k_base` for GPT-4o and `cl100k_base` for GPT-4/3.5 and embeddings), with strict parity to `tiktoken` and defenses against worst-case inputs.
 
 > [!IMPORTANT]
 > **Requirement**: Zig 0.13.x (0.14+ is not currently supported).
@@ -163,3 +172,16 @@ zig build -Dtarget=aarch64-macos
 ## License
 
 MIT
+
+## Roadmap
+
+**v0.4 – UX & Multi-provider-ready**
+- CLI Ergonomics: Normalized model names (e.g. `openai/gpt-4o`), summary outputs, and "accuracy tier" indication.
+- Documentation: Guides for adding custom vocabularies/encodings.
+- Integration: Official examples for GitHub Actions and GitLab CI.
+
+**v0.5 – Extra Encodings & Scaling**
+- Support for additional vendor encodings (depending on ecosystem demand).
+- Optimizations for extremely long contexts (GB-scale inputs).
+
+See the full [Technical Spec & Roadmap](docs/v0.3-spec.md) for details.
