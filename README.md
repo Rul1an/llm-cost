@@ -1,164 +1,31 @@
 # llm-cost
 
-**Offline token counting and cost estimation for LLMs.**
+**Offline, exact token counting & cost estimation for OpenAI-style LLMs.**
 
+`llm-cost` is a high-performance, single-binary CLI written in [Zig](https://ziglang.org). It provides production-grade token counting (perfect parity with `tiktoken`) and offline cost estimation.
 
-`llm-cost` is a high-performance, single-binary CLI written in [Zig](https://ziglang.org). It provides token counting (including GPT-4o `o200k_base` BPE) and pricing estimates from a local snapshot.
+- **Features**: `o200k_base` (GPT-4o) & `cl100k_base` support, 100% offline, cross-platform binaries.
+- **Why not just tiktoken?**: Single binary (no Python required), built-in pricing DB, batch processing (`pipe`), and strict memory safety.
+- **Supported Models**: `gpt-4o`, `gpt-4`, `gpt-3.5-turbo`, and accurate pricing for all major OpenAI endpoints.
 
-## State of LLMs (2025)
+## Who is this for?
 
-OpenAI’s GPT-4o family is now the default choice for many applications: it’s fast, relatively cheap, and uses the `o200k_base` tokenizer. Classic GPT-4 / GPT-3.5 models are still widely used in existing systems and rely on the older `cl100k_base` encoding.
+- **ML Engineers**: Estimate costs for evaluation pipelines and RAG prompts.
+- **Data Teams**: Process JSONL logs in batch to reconstruct historical token usage.
+- **FinOps / Platform**: Add "budget guards" (`--max-cost`) to CI/CD pipelines to prevent accidental overspending.
 
-Above that, newer “frontier” models (e.g. GPT-5 and dedicated reasoning models) push quality further, but they don’t replace the huge installed base of 4o/4-class models overnight. In parallel, other vendors (Anthropic Claude, Google Gemini, open-weight Llama variants) keep raising the bar, but they mostly stick to their own BPE-style tokenizers.
+## Documentation
 
-`llm-cost` focuses on the practical layer underneath all of this: **exact, offline token counting and cost estimation** for the two OpenAI encodings that currently matter most in production (`o200k_base` for GPT-4o and `cl100k_base` for GPT-4/3.5 and embeddings), with strict parity to `tiktoken` and defenses against worst-case inputs.
-
-> [!IMPORTANT]
-> **Requirement**: Zig 0.13.x (0.14+ is not currently supported).
-
-## Quick Start
-
-```bash
-# Count tokens for GPT-4o
-echo "Hello AI" | llm-cost tokens --model gpt-4o
-
-# Estimate cost for a prompt file
-llm-cost price --model gpt-4o prompt.txt
-```
-
-## Features
-
-- **Production-Grade Tokenizer**:
-  - Full BPE support for `o200k_base` (GPT-4o) and `cl100k_base` (GPT-4/Turbo).
-  - Parity-verified against OpenAI's `tiktoken` (using Evil Corpus v2).
-  - Fuzz-tested for robustness against chaotic input.
-- **Offline & Private**: Runs entirely locally. No data leaves your machine.
-  - *Same tokenization as OpenAI's `tiktoken` for `o200k_base` and `cl100k_base`.*
-- **Fast**: Native binary performance, nearly instant startup.
-- **Cross-Platform**: Single binaries (no runtime required) for macOS (ARM64), Linux (x86_64, ARM64, MUSL), and Windows.
-- **Pipe-Friendly**: Designed for shell scripting and CI integration.
-- **Flexible Output**: Supports `text`, `json`, and `ndjson` formats.
-
-
-## Architecture
-
-At a high level, `llm-cost` is a single binary that takes text (or JSONL) on stdin, looks up the right tokenizer and pricing representation, and writes results to stdout. Internally it consists of a few clear layers:
-
-- **CLI**: Parses arguments, selects the subcommand (`tokens`, `price`, `pipe`).
-- **ModelRegistry**: Resolves `--model` to a canonical name, encoding, and accuracy tier.
-- **Engine**: Counts tokens and calculates costs based on pricing data.
-- **Tokenizer/BPE**: Implements `o200k_base` and `cl100k_base` with strict `tiktoken` parity.
-- **Pricing**: Reads an embedded price snapshot and calculates cost per call.
-- **Pipe**: Processes JSONL streams, enriches records, and maintains a summary/quota.
-
-### High-level Data Flow
-
-```ascii
-+----------------------+
-|        User          |
-| (shell / CI / agent) |
-+----------+-----------+
-           |
-           v
-+----------------------+
-|         CLI          |
-|  commands.zig        |
-|  - tokens            |
-|  - price             |
-|  - pipe              |
-+----------+-----------+
-           |
-           v
-+----------------------+         +----------------------+
-|    ModelRegistry     |         |     Pricing DB       |
-|  tokenizer/mod.zig   |<------->|   pricing.zig        |
-|  - resolve(--model)  |         |  (JSON snapshot)     |
-|  - canonical name    |         +----------------------+
-|  - encoding spec     |
-|  - accuracy tier     |
-+----------+-----------+
-           |
-           v
-+----------------------+
-|        Engine        |
-|   core/engine.zig    |
-|  - estimateTokens    |
-|  - estimateCost      |
-+-----+----------+-----+
-      |          |
-      |          |
-      v          v
-+-----------+  +------------------+
-| Tokenizer |  |   Pricing Logic  |
-|  (BPE)    |  |  (USD per token) |
-|  - o200k  |  |  - input/output  |
-|  - cl100k |  |  - reasoning     |
-+-----------+  +------------------+
-           |
-           v
-+----------------------+
-|       Output         |
-| - text / json        |
-| - ndjson (pipe)      |
-+----------------------+
-```
-
-### Components
-
-#### CLI & ModelRegistry
-
-The CLI reads arguments, selects a subcommand, and resolves the model:
-
-```
---model gpt-4o
-→ ModelRegistry.resolve("gpt-4o")
-→ canonical: openai/gpt-4o
-→ encoding: o200k_base
-→ accuracy: exact
-```
-
-For unknown models:
-```
---model my-weird-model
-→ provider: generic
-→ encoding: null (whitespace fallback)
-→ accuracy: heuristic
-```
-
-The CLI uses this `ModelSpec` to configure the tokenizer, look up pricing, and report the accuracy tier (`exact` vs `heuristic`).
-
-#### Engine & Tokenizer
-
-The Engine is the central layer that orchestrates:
-1.  **estimateTokens**: Calls the appropriate tokenizer.
-    -   **OpenAI**: Uses native BPE (`o200k_base` / `cl100k_base`).
-    -   **Generic**: Uses simple whitespace estimation.
-2.  **estimateCost**: Combines token counts with pricing data.
-
-The Tokenizer implementation:
--   Loads embedded vocab and BPE tables from binary assets.
--   Uses specialized regex-based scanners for `o200k` and `cl100k`.
--   Uses a heap-based BPE merge (O(N log N)) to handle worst-case inputs efficiently.
--   Verified against `tiktoken` using the "Evil Corpus".
-
-#### Pricing DB
-
-The pricing layer contains an embedded snapshot of model prices and calculates costs for input, output, and reasoning tokens.
-
-#### Pipe Mode
-
-`pipe` is designed for bulk scenarios (datasets, logs, CI). It reads a JSONL stream, parses each line, extracts text, calculates tokens/cost, and writes the enriched JSON back to stdout.
-
--   **Summary**: Tracks processed lines, failures, and total usage.
--   **Quotas**: Enforces `--max-tokens` or `--max-cost` limits.
-    -   When a quota is active, execution is forced to single-threaded mode to guarantee strict containment.
-    -   Without quotas, it supports parallel processing via `--workers N`.
+- **[Installation & Usage](#installation)**: Getting started.
+- **[Architecture](docs/architecture.md)**: High-level design and data flow.
+- **[Performance](docs/perf.md)**: Benchmarks and O(N log N) BPE implementation.
+- **[Verification](docs/evil_corpus.md)**: How we verify parity with OpenAI.
 
 ## Installation
 
 Download the latest binary from the [Releases Page](https://github.com/Rul1an/llm-cost/releases).
 
-**Linux / macOS:**
+**Linux / macOS / Windows**:
 ```bash
 # Example for Linux x86_64
 wget https://github.com/Rul1an/llm-cost/releases/latest/download/llm-cost-linux-x86_64.zip
@@ -167,149 +34,38 @@ chmod +x llm-cost
 sudo mv llm-cost /usr/local/bin/
 ```
 
-**Windows:**
-Download the `.zip`, extract, and add `llm-cost` to your PATH.
-
-### Verifying Downloads
-
-We publish SHA256 checksums with every release.
-
-```bash
-shasum -a 256 llm-cost-linux-x86_64
-# Compare hash with the GitHub release notes
-```
-
-### Signature Verification (Recommended)
-
-Every release includes Cosign signatures (keyless).
-
-```bash
-cosign verify-blob \
-  --certificate llm-cost-linux-x86_64.crt \
-  --signature llm-cost-linux-x86_64.sig \
-  llm-cost-linux-x86_64
-```
+*See [Releases](https://github.com/Rul1an/llm-cost/releases) for signatures and SHA256 hashes.*
 
 ## Usage
 
-### Token Counting
-
-Count tokens in a string or file. Defaults to `o200k_base` (GPT-4o) logic if model implies it.
+### Token Counting & Pricing
 
 ```bash
-# From stdin
+# Count tokens (defaults to o200k_base for gpt-4o)
 echo "Hello AI" | llm-cost tokens --model gpt-4o
 
-# From file
-llm-cost tokens --model gpt-4o input.txt
+# Estimate price for a file
+llm-cost price --model gpt-4o prompt.txt
 ```
 
-### Cost Estimation
+### Pipe Mode (Batch / Agent)
 
-Estimate cost based on an embedded pricing snapshot (OpenAI).
+Process JSONL streams efficiently. Useful for adding token counts to logs or enforcing quotas in agent loops.
 
 ```bash
-# Calculate price for an input file
-llm-cost price --model gpt-4o input.txt
-
-# Manually specifying token counts
-llm-cost price --model gpt-4o --tokens-in 5000 --tokens-out 200
+cat data.jsonl | llm-cost pipe --model gpt-4o --summary --max-cost 5.00
 ```
 
-### JSON Output
+See `llm-cost help` for full options.
 
-Ideal for integration with other tools (e.g., `jq`).
+## Contributing
 
-$ llm-cost price --model gpt-4o --tokens-in 1000 --format json
-{
-  "model": "gpt-4o",
-  "tokens_input": 1000,
-  "tokens_output": 0,
-  "cost_usd": 0.005,
-  "tokenizer": "from_db",
-  "approximate": false
-}
-```
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and guidelines.
 
-### Streaming JSONL (pipe mode)
+By participating in this project, you agree to abide by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-Efficiently process large datasets. Reads JSONL from stdin, enriches with token/cost fields, and writes to stdout.
-
-```bash
-cat data.jsonl \
-  | llm-cost pipe \
-      --model gpt-4o \
-      --field text \
-      --mode price \
-      --workers 4 \
-  > enriched.jsonl
-```
-
-- `--field text`: The input JSON key containing text to tokenize.
-- **Output Fields**: Adds `tokens_in`, `tokens_out`, and `cost_usd`.
-  - *Note: `pipe` uses slightly different keys (`tokens_in`) than `price` (`tokens_input`) for brevity in JSONL.*
-
-## Supported Models
-
-- **GPT-4o** (`o200k_base`): BPE-based tokenizer with embedded vocab.
-- **GPT-4 / 3.5** (`cl100k_base`): BPE-based tokenizer with embedded vocab.
-- **Generic**: Whitespace-based estimation for unknown models.
-
-*Note: For models without a native tokenizer implementation, `llm-cost` falls back to a heuristic. This is useful for cost estimation but is not exact.*
-
-## Building from Source
-
-Requirements: **Zig 0.13.0**
-
-```bash
-git clone https://github.com/Rul1an/llm-cost
-cd llm-cost
-
-# Build release binary (zig-out/bin/llm-cost)
-zig build -Doptimize=ReleaseFast
-
-# Run tests
-zig build test
-```
-
-## Cross-compilation
-
-To cross-compile locally:
-
-```bash
-zig build -Dtarget=x86_64-linux-gnu
-zig build -Dtarget=x86_64-windows-gnu
-zig build -Dtarget=aarch64-macos
-```
-
-## Advanced Usage: Custom Vocabularies
-
-`llm-cost` supports custom BPE vocabularies via a binary format optimized for zero-copy loading. You can convert a standard Tiktoken vocabulary file (base64-token rank pairs) using the included tool:
-
-1.  **Prepare your vocab file**: A text file where each line is `<base64_token> <rank>`.
-2.  **Convert**:
-    ```bash
-    zig run tools/convert_vocab.zig -- ./path/to/vocab.tiktoken ./src/data/my_custom_vocab.bin
-    ```
-3.  **Register**: Update `src/tokenizer/registry.zig` to embed your new binary and mapping.
-
-This feature allows support for future models (e.g., Llama 3) or private tokenizers without waiting for official releases.
-
-*These targets match the official release binaries built via GitHub Actions.*
+For security reports, please refer to [SECURITY.md](SECURITY.md).
 
 ## License
 
 MIT
-
-## Roadmap
-
-**v0.4 – UX & Multi-provider-ready**
-- CLI Ergonomics: Normalized model names (e.g. `openai/gpt-4o`), summary outputs, and "accuracy tier" indication.
-- Documentation: Guides for adding custom vocabularies/encodings.
-- Integration: Official examples for GitHub Actions and GitLab CI.
-
-**v0.5 – Extra Encodings & Scaling**
-- Support for additional vendor encodings (depending on ecosystem demand).
-- Optimizations for extremely long contexts (GB-scale inputs).
-
-See the full [Technical Spec & Roadmap](docs/v0.3-spec.md) for details.
