@@ -37,7 +37,7 @@ pub const Registry = struct {
     pub const cl100k_base = EncodingSpec{
         .name = "cl100k_base",
         .pat_str = "(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
-        .vocab_data = "", // TODO: Embed or load data
+        .vocab_data = "", // Empty for now; cl100k not fully supported in v0.2
         .special_tokens = &cl100k_specials,
     };
 

@@ -20,7 +20,9 @@ pub const PreTokenizer = struct {
     }
 };
 
-/// Legacy/Simple pre-tokenizer that splits on whitespace (approximate behavior).
+/// Placeholder pre-tokenizer that splits on whitespace (approximate behavior).
+/// This implementation is considered "legacy" because it does not handle more complex tokenization rules.
+/// In future versions, this will be replaced with a more robust pre-tokenizer supporting Unicode and custom rules.
 pub const LegacyPreTokenizer = struct {
     pub fn tokenize(_: *anyopaque, alloc: std.mem.Allocator, text: []const u8) ![]PreToken {
         var tokens = std.ArrayList(PreToken).init(alloc);

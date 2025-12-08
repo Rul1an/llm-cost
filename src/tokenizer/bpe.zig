@@ -140,21 +140,8 @@ pub const BpeEngine = struct {
         errdefer tokens.deinit();
 
         for (pre_tokens) |pt| {
-            if (pt.is_special) {
-                // Special tokens are already resolved to IDs?
-                // Wait, PreToken currently just has text.
-                // Resolving special tokens happens in PreTokenizer (v0.2 plan) or here?
-                // For now, assume special tokens are not supported in Legacy path,
-                // or we need a way to map them.
-                // In v0.2 Design: PreTokenizer produces PreTokens.
-                // If it's a special token, BPE should look it up in special_map.
-                // But BPE engine here only has `index` (merge ranks).
-                // Let's assume for this step strict BPE merge on text.
-                // TODO: Special token handling
-                try self.encodeWord(pt.text, &tokens);
-            } else {
-                try self.encodeWord(pt.text, &tokens);
-            }
+            // TODO: Special token handling
+            try self.encodeWord(pt.text, &tokens);
         }
 
         return tokens.toOwnedSlice();
