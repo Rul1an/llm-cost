@@ -47,6 +47,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const registry_v2_test = b.addTest(.{
+        .root_source_file = b.path("src/test/model_registry_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    registry_v2_test.root_module.addImport("llm_cost", lib_mod);
 
     const fuzz_tests = b.addTest(.{
         .root_source_file = b.path("src/fuzz_test.zig"),
@@ -55,10 +61,12 @@ pub fn build(b: *std.Build) void {
     });
 
     const run_tests = b.addRunArtifact(unit_tests);
+    const run_registry_v2 = b.addRunArtifact(registry_v2_test);
     const run_fuzz = b.addRunArtifact(fuzz_tests);
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_tests.step);
+    test_step.dependOn(&run_registry_v2.step);
 
     const fuzz_step = b.step("fuzz", "Run fuzz tests");
     fuzz_step.dependOn(&run_fuzz.step);

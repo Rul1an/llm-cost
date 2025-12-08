@@ -4,6 +4,7 @@ const format_lib = @import("format.zig");
 const io = @import("io.zig");
 const pricing = @import("../pricing.zig");
 const tokenizer_mod = @import("../tokenizer/mod.zig");
+const model_registry = tokenizer_mod.model_registry;
 const pipe_cmd = @import("pipe.zig"); // Added import
 
 pub const OutputFormat = format_lib.OutputFormat;
@@ -20,6 +21,9 @@ pub const GlobalOptions = struct {
     pipe_mode: pipe_cmd.PipeMode = .tokens,
     fail_on_error: bool = false,
     workers: usize = 1,
+    max_tokens: usize = 0,
+    max_cost: f64 = 0.0,
+    show_summary: bool = false,
 };
 
 pub const CliContext = struct {
@@ -92,6 +96,12 @@ pub fn main(alloc: std.mem.Allocator) !void {
              ctx.opts.fail_on_error = true;
         } else if (std.mem.eql(u8, arg, "--workers")) {
              if (args_it.next()) |n| ctx.opts.workers = std.fmt.parseInt(usize, n, 10) catch 1;
+        } else if (std.mem.eql(u8, arg, "--max-tokens")) {
+             if (args_it.next()) |n| ctx.opts.max_tokens = std.fmt.parseInt(usize, n, 10) catch 0;
+        } else if (std.mem.eql(u8, arg, "--max-cost")) {
+             if (args_it.next()) |n| ctx.opts.max_cost = std.fmt.parseFloat(f64, n) catch 0.0;
+        } else if (std.mem.eql(u8, arg, "--summary")) {
+             ctx.opts.show_summary = true;
         } else if (std.mem.eql(u8, arg, "--tokens-out")) {
              if (args_it.next()) |n| ctx.tokens_out = std.fmt.parseInt(usize, n, 10) catch 0;
         } else {
@@ -129,27 +139,39 @@ fn printHelp() !void {
         \\Commands:
         \\  tokens    Estimate token count for input
         \\  price     Estimate cost for prompt or token counts
+        \\  pipe      Enrich JSONL stream with tokens/cost (ndjson in -> ndjson out)
         \\  models    List available models
         \\  help      Show this help
         \\
-        \\Options:
-        \\  --model <name>    Model identifier (required for price)
-        \\  --format <fmt>    Output format: text (default), json, ndjson
-        \\  --allow-special-tokens  Treat special tokens as ordinary text
-        \\  --tokens-in <N>   Manual input token count override
-        \\  --tokens-out <N>  Manual output token count (for price)
+        \\Global options:
+        \\  --model <name>         Model identifier (e.g. openai/gpt-4o)
+        \\  --format <fmt>         Output format: text (default), json, ndjson
+        \\  --allow-special-tokens Treat special tokens as ordinary text
+        \\
+        \\Price options:
+        \\  --tokens-in <N>        Manual input token count override
+        \\  --tokens-out <N>       Manual output token count (for price)
+        \\
+        \\Pipe options:
+        \\  --field <name>         JSON field containing text (default: "text")
+        \\  --mode <tokens|price>  Pipe mode (add only tokens, or tokens+cost)
+        \\  --workers <N>          Number of worker threads (default: 1)
+        \\  --max-tokens <N>       Hard token quota (forces single-thread mode)
+        \\  --max-cost <USD>       Hard cost quota (forces single-thread mode)
+        \\  --fail-on-error        Treat per-line errors as fatal (single-thread only)
+        \\  --summary              Print aggregate stats to stderr
         \\
         \\Examples:
         \\  echo "hello" | llm-cost tokens --model gpt-4o
         \\  llm-cost price --model gpt-4o --tokens-in 1000
+        \\  cat data.jsonl | llm-cost pipe --model gpt-4o --field text --mode price --summary
         \\
     );
 }
 
 // Map model name to encoding spec, or null for generic
-fn getEncodingForModel(model_name: []const u8) ?tokenizer_mod.registry.EncodingSpec {
-    return tokenizer_mod.openai.resolveEncoding(model_name);
-}
+// Helper removed in favor of ModelRegistry.resolve
+
 
 fn readAllInto(reader: anytype, buffer: *std.ArrayList(u8)) !void {
     var read_buf: [4096]u8 = undefined;
@@ -179,9 +201,14 @@ fn runTokens(ctx: CliContext) !void {
     }
 
     // Config for engine
-    const model_name = ctx.opts.model orelse "generic";
+    const raw_model_name = ctx.opts.model orelse "generic";
+    const spec = model_registry.ModelRegistry.resolve(raw_model_name);
+
+    // Use canonical name for logic and display
+    const model_name = spec.canonical_name;
+
     const tk_cfg = engine.TokenizerConfig{
-        .spec = getEncodingForModel(model_name),
+        .spec = spec.encoding,
         .model_name = model_name,
     };
 
@@ -190,9 +217,10 @@ fn runTokens(ctx: CliContext) !void {
 
     // Optional: try to resolve cost if model is known
     var cost_usd: ?f64 = null;
-    if (ctx.opts.model) |m| {
-        // We set reasoning=0 for now in CLI v0.1
-        if (engine.estimateCost(ctx.db, m, t_res.tokens, 0, 0)) |c| {
+    if (ctx.opts.model) |_| {
+         // Use canonical name, not spec.id.name or raw input
+         // We set reasoning=0 for now in CLI v0.1
+        if (engine.estimateCost(ctx.db, model_name, t_res.tokens, 0, 0)) |c| {
             cost_usd = c.cost_total;
         } else |_| {
             // Squelch pricing error here
@@ -204,8 +232,9 @@ fn runTokens(ctx: CliContext) !void {
         .tokens_input = t_res.tokens,
         .tokens_output = 0,
         .cost_usd = cost_usd,
-        .tokenizer = "unknown",
-        .approximate = (cost_usd == null),
+        .tokenizer = if (spec.encoding) |e| e.name else "whitespace",
+        .accuracy = @tagName(spec.accuracy),
+        .approximate = (cost_usd == null) or (spec.accuracy != .exact),
     };
 
     const stdout = io.getStdoutWriter();
@@ -213,11 +242,14 @@ fn runTokens(ctx: CliContext) !void {
 }
 
 fn runPrice(ctx: CliContext) !void {
-    const model = ctx.opts.model orelse {
+    const raw_model = ctx.opts.model orelse {
         const stderr = io.getStderrWriter();
         try stderr.print("Error: --model required for price command.\n", .{});
         return error.UsageError;
     };
+
+    const spec = model_registry.ModelRegistry.resolve(raw_model);
+    const model = spec.canonical_name;
 
     var input_tokens: usize = 0;
 
@@ -239,7 +271,7 @@ fn runPrice(ctx: CliContext) !void {
 
         if (text_input.items.len > 0) {
              const tk_cfg = engine.TokenizerConfig{
-                 .spec = getEncodingForModel(model),
+                 .spec = spec.encoding,
                  .model_name = model,
              };
              const special_mode: engine.SpecialMode = if (ctx.opts.allow_special_tokens) .ordinary else .strict;
@@ -265,8 +297,9 @@ fn runPrice(ctx: CliContext) !void {
         .tokens_input = cost_res.input_tokens,
         .tokens_output = cost_res.output_tokens,
         .cost_usd = cost_res.cost_total,
-        .tokenizer = "from_db",
-        .approximate = false,
+        .tokenizer = if (spec.encoding) |e| e.name else "whitespace",
+        .accuracy = @tagName(spec.accuracy),
+        .approximate = (spec.accuracy != .exact),
     };
 
     const stdout = io.getStdoutWriter();
@@ -291,9 +324,12 @@ fn runModels(ctx: CliContext) !void {
 }
 
 fn runPipe(ctx: CliContext) !void {
-    const model_name = ctx.opts.model orelse "generic";
+    const raw_model_name = ctx.opts.model orelse "generic";
+    const spec = model_registry.ModelRegistry.resolve(raw_model_name);
+    const model_name = spec.canonical_name; // Use canonical
+
     const tk_cfg = engine.TokenizerConfig{
-        .spec = getEncodingForModel(model_name),
+        .spec = spec.encoding,
         .model_name = model_name,
     };
 
@@ -307,6 +343,11 @@ fn runPipe(ctx: CliContext) !void {
 
         .model = model_name,
         .field = ctx.opts.field,
+        .quota = .{
+            .max_tokens = ctx.opts.max_tokens,
+            .max_cost_usd = ctx.opts.max_cost,
+        },
+        .show_summary = ctx.opts.show_summary,
         .mode = ctx.opts.pipe_mode,
         .fail_on_error = ctx.opts.fail_on_error,
         .special_mode = special_mode,
@@ -314,8 +355,40 @@ fn runPipe(ctx: CliContext) !void {
 
         .cfg = tk_cfg,
         .db = ctx.db,
+        .accuracy = @tagName(spec.accuracy),
     };
 
-    try pipe_cmd.run(pipe_opts);
+    _ = pipe_cmd.run(pipe_opts) catch |err| {
+        if (err == pipe_cmd.PipeError.QuotaExceeded) {
+             const stderr = io.getStderrWriter();
+
+             const has_tokens = ctx.opts.max_tokens > 0;
+             const has_cost = ctx.opts.max_cost > 0.0;
+
+             if (has_tokens and has_cost) {
+                 try stderr.print(
+                     "error: quota exceeded (max_tokens={d}, max_cost={d:.6}).\n",
+                     .{ ctx.opts.max_tokens, ctx.opts.max_cost },
+                 );
+             } else if (has_tokens) {
+                 try stderr.print(
+                     "error: token quota exceeded (max_tokens={d}).\n",
+                     .{ ctx.opts.max_tokens },
+                 );
+             } else if (has_cost) {
+                 try stderr.print(
+                     "error: cost quota exceeded (max_cost={d:.6}).\n",
+                     .{ ctx.opts.max_cost },
+                 );
+             } else {
+                 try stderr.print("error: quota exceeded.\n", .{});
+             }
+
+             // In main() we treat this as a non-zero exit eventually due to returning error.
+             // We can return UsageError to signify "user error/limit hit" rather than system crash.
+             return CliError.UsageError;
+        }
+        return err;
+    };
 }
 

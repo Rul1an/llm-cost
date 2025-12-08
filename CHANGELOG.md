@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.0] - 2025-12-08
+
+### Added
+- **Registry V2**: Namespaced models (e.g., `openai/gpt-4o`) and aliases (`gpt-4o`).
+- **Accuracy Tiers**: JSON output now includes `"accuracy": "exact" | "heuristic"`.
+- **Pipe Summary**: New CLI flag `--summary` prints aggregate stats (lines, tokens in/out, cost) to stderr.
+- **Pipe Quota**: New CLI flags `--max-tokens N` and `--max-cost N` enforce limits and stop processing when exceeded.
+- **Rich Stats**: Pipe output now tracks input and output tokens separately in summary.
+- **Custom Vocab**: Documentation for converting and using custom Tiktoken files.
+
+### Changed
+- **CLI**: Pricing commands now use canonical model names for consistency.
+- **Pipe**: Forced single-threaded execution when quota limits are active to ensure deterministic containment.
+- **Behavior**: In parallel pipe mode, `--fail-on-error` marks lines as failed but does not abort the stream (best-effort); hard abort is guaranteed only in single-thread mode.
+- **Perf**: Refactored scanner logic to support `AccuracyTier` without performance regression.
+
 ## [v0.3.0] - 2025-12-08
 
 ### Highlights

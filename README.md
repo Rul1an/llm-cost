@@ -167,6 +167,19 @@ zig build -Dtarget=x86_64-windows-gnu
 zig build -Dtarget=aarch64-macos
 ```
 
+## Advanced Usage: Custom Vocabularies
+
+`llm-cost` supports custom BPE vocabularies via a binary format optimized for zero-copy loading. You can convert a standard Tiktoken vocabulary file (base64-token rank pairs) using the included tool:
+
+1.  **Prepare your vocab file**: A text file where each line is `<base64_token> <rank>`.
+2.  **Convert**:
+    ```bash
+    zig run tools/convert_vocab.zig -- ./path/to/vocab.tiktoken ./src/data/my_custom_vocab.bin
+    ```
+3.  **Register**: Update `src/tokenizer/registry.zig` to embed your new binary and mapping.
+
+This feature allows support for future models (e.g., Llama 3) or private tokenizers without waiting for official releases.
+
 *These targets match the official release binaries built via GitHub Actions.*
 
 ## License

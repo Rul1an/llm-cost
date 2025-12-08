@@ -14,6 +14,7 @@ pub const ResultRecord = struct {
     cost_usd: ?f64 = null,
 
     tokenizer: []const u8 = "unknown",
+    accuracy: []const u8 = "unknown",
     approximate: bool = false,
 };
 
@@ -33,6 +34,7 @@ pub fn formatOutput(
 fn renderText(writer: anytype, data: ResultRecord) !void {
     try writer.print("model: {s}\n", .{data.model});
     try writer.print("tokenizer: {s}\n", .{data.tokenizer});
+    try writer.print("accuracy: {s}\n", .{data.accuracy});
     if (data.approximate) {
         try writer.print("approximate: true\n", .{});
     }
