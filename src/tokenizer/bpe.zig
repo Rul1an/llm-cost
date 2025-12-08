@@ -133,15 +133,28 @@ pub const BpeEngine = struct {
         return text[start..end];
     }
 
-    /// Encode text into token IDs.
+    /// Encode pre-tokenized text segments.
     /// Caller owns result slice.
-    pub fn encode(self: BpeEngine, alloc: std.mem.Allocator, text: []const u8) ![]u32 {
+    pub fn encode(self: BpeEngine, alloc: std.mem.Allocator, pre_tokens: []const @import("pre_tokenizer.zig").PreToken) ![]u32 {
         var tokens = std.ArrayList(u32).init(alloc);
         errdefer tokens.deinit();
 
-        var start: usize = 0;
-        while (self.nextWord(text, &start)) |word| {
-            try self.encodeWord(word, &tokens);
+        for (pre_tokens) |pt| {
+            if (pt.is_special) {
+                // Special tokens are already resolved to IDs?
+                // Wait, PreToken currently just has text.
+                // Resolving special tokens happens in PreTokenizer (v0.2 plan) or here?
+                // For now, assume special tokens are not supported in Legacy path,
+                // or we need a way to map them.
+                // In v0.2 Design: PreTokenizer produces PreTokens.
+                // If it's a special token, BPE should look it up in special_map.
+                // But BPE engine here only has `index` (merge ranks).
+                // Let's assume for this step strict BPE merge on text.
+                // TODO: Special token handling
+                try self.encodeWord(pt.text, &tokens);
+            } else {
+                try self.encodeWord(pt.text, &tokens);
+            }
         }
 
         return tokens.toOwnedSlice();

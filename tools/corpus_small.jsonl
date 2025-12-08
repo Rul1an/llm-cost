@@ -1,0 +1,12 @@
+{"text": "Hello world", "model": "gpt-4o", "encoding": "o200k_base", "tokens": [13225, 2375], "count": 2}
+{"text": "Hello   world", "model": "gpt-4o", "encoding": "o200k_base", "tokens": [13225, 256, 2375], "count": 3}
+{"text": "hello world", "model": "gpt-4o", "encoding": "o200k_base", "tokens": [24912, 2375], "count": 2}
+{"text": " The quick brown fox jumps over the lazy dog.", "model": "gpt-4o", "encoding": "o200k_base", "tokens": [623, 4853, 19705, 68347, 65613, 1072, 290, 29082, 6446, 13], "count": 10}
+{"text": "\u00e4\u00f6\u00fc\u00df", "model": "gpt-4o", "encoding": "o200k_base", "tokens": [450, 573, 572, 2819], "count": 4}
+{"text": "\ud83d\ude0a", "model": "gpt-4o", "encoding": "o200k_base", "tokens": [102630], "count": 1}
+{"text": "data: [1, 2, 3]", "model": "gpt-4o", "encoding": "o200k_base", "tokens": [1074, 25, 723, 16, 11, 220, 17, 11, 220, 18, 60], "count": 11}
+{"text": "def foo(x):\n    return x + 1", "model": "gpt-4o", "encoding": "o200k_base", "tokens": [1314, 30551, 4061, 1883, 271, 622, 1215, 659, 220, 16], "count": 10}
+{"text": "user@example.com", "model": "gpt-4o", "encoding": "o200k_base", "tokens": [1428, 81309, 1136], "count": 3}
+{"text": "1234567890", "model": "gpt-4o", "encoding": "o200k_base", "tokens": [7633, 19354, 29338, 15], "count": 4}
+{"text": "     ", "model": "gpt-4o", "encoding": "o200k_base", "tokens": [530], "count": 1}
+{"text": "\n\n\n", "model": "gpt-4o", "encoding": "o200k_base", "tokens": [2499], "count": 1}

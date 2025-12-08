@@ -3,6 +3,8 @@ const engine = @import("../core/engine.zig");
 const format_lib = @import("format.zig");
 const io = @import("io.zig");
 const pricing = @import("../pricing.zig");
+const tokenizer_mod = @import("../tokenizer/mod.zig");
+const pipe_cmd = @import("pipe.zig"); // Added import
 
 pub const OutputFormat = format_lib.OutputFormat;
 
@@ -11,6 +13,13 @@ pub const GlobalOptions = struct {
     vendor: ?[]const u8 = null,
     format: OutputFormat = .text,
     config_path: ?[]const u8 = null,
+    allow_special_tokens: bool = false,
+
+    // Pipe specific
+    field: []const u8 = "text",
+    pipe_mode: pipe_cmd.PipeMode = .tokens,
+    fail_on_error: bool = false,
+    workers: usize = 1,
 };
 
 pub const CliContext = struct {
@@ -54,6 +63,8 @@ pub fn main(alloc: std.mem.Allocator) !void {
     while (args_it.next()) |arg| {
         if (std.mem.eql(u8, arg, "tokens")) {
             ctx.subcommand = "tokens";
+        } else if (std.mem.eql(u8, arg, "pipe")) {
+            ctx.subcommand = "pipe";
         } else if (std.mem.eql(u8, arg, "price")) {
             ctx.subcommand = "price";
         } else if (std.mem.eql(u8, arg, "models")) {
@@ -68,6 +79,19 @@ pub fn main(alloc: std.mem.Allocator) !void {
              }
         } else if (std.mem.eql(u8, arg, "--tokens-in")) {
              if (args_it.next()) |n| ctx.tokens_in = std.fmt.parseInt(usize, n, 10) catch 0;
+        } else if (std.mem.eql(u8, arg, "--allow-special-tokens")) {
+             ctx.opts.allow_special_tokens = true;
+        } else if (std.mem.eql(u8, arg, "--field")) {
+             if (args_it.next()) |val| ctx.opts.field = val;
+        } else if (std.mem.eql(u8, arg, "--mode")) {
+             if (args_it.next()) |val| {
+                 if (std.mem.eql(u8, val, "price")) ctx.opts.pipe_mode = .price
+                 else ctx.opts.pipe_mode = .tokens;
+             }
+        } else if (std.mem.eql(u8, arg, "--fail-on-error")) {
+             ctx.opts.fail_on_error = true;
+        } else if (std.mem.eql(u8, arg, "--workers")) {
+             if (args_it.next()) |n| ctx.opts.workers = std.fmt.parseInt(usize, n, 10) catch 1;
         } else if (std.mem.eql(u8, arg, "--tokens-out")) {
              if (args_it.next()) |n| ctx.tokens_out = std.fmt.parseInt(usize, n, 10) catch 0;
         } else {
@@ -80,6 +104,8 @@ pub fn main(alloc: std.mem.Allocator) !void {
     // 2. Dispatch
     if (std.mem.eql(u8, ctx.subcommand, "tokens")) {
         try runTokens(ctx);
+    } else if (std.mem.eql(u8, ctx.subcommand, "pipe")) {
+        try runPipe(ctx);
     } else if (std.mem.eql(u8, ctx.subcommand, "price")) {
         try runPrice(ctx);
     } else if (std.mem.eql(u8, ctx.subcommand, "models")) {
@@ -109,6 +135,7 @@ fn printHelp() !void {
         \\Options:
         \\  --model <name>    Model identifier (required for price)
         \\  --format <fmt>    Output format: text (default), json, ndjson
+        \\  --allow-special-tokens  Treat special tokens as ordinary text
         \\  --tokens-in <N>   Manual input token count override
         \\  --tokens-out <N>  Manual output token count (for price)
         \\
@@ -119,12 +146,9 @@ fn printHelp() !void {
     );
 }
 
-// TODO: Move this helper to some tokenizer-utils if logic gets complex
-fn pickTokenizerKindFromModel(model_name: []const u8) engine.TokenizerKind {
-    if (std.mem.startsWith(u8, model_name, "gpt-4o")) return .openai_o200k;
-    if (std.mem.startsWith(u8, model_name, "gpt-4")) return .openai_cl100k;
-    if (std.mem.startsWith(u8, model_name, "gpt-3.5")) return .openai_cl100k;
-    return .generic_whitespace;
+// Map model name to encoding spec, or null for generic
+fn getEncodingForModel(model_name: []const u8) ?tokenizer_mod.registry.EncodingSpec {
+    return tokenizer_mod.openai.resolveEncoding(model_name);
 }
 
 fn readAllInto(reader: anytype, buffer: *std.ArrayList(u8)) !void {
@@ -141,27 +165,6 @@ fn runTokens(ctx: CliContext) !void {
     defer text_input.deinit();
 
     // I/O Logic: File > Stdin
-    // Line 138: `var text_input = try std.ArrayList(u8).initCapacity(ctx.alloc, 4096);`
-    // Line 139: `defer text_input.deinit(ctx.alloc);` -> This looks like wrong syntax for std.ArrayList if checking 0.13 docs?
-    // std.ArrayList.deinit() takes no args.
-    // std.ArrayListUnmanaged.deinit(allocator) takes args.
-    // If it *compiled* before, maybe it was `deinit()` and I misremembered or the previous file content view shows...
-    // Let's check the previous replace...
-    // Step 1145: `defer text_input.deinit(ctx.alloc);` was inserted.
-    // ERROR potential: `std.ArrayList` `deinit` usually takes NO allocator. `initCapacity` takes it and stores it.
-    // I should fix this too if it's an error.
-
-    // However, the reported error is ONLY `unused function parameter`.
-    // If `deinit(ctx.alloc)` was an error, it would likely be reported too.
-    // Wait, `ArrayList.deinit` signature: `pub fn deinit(self: Self) void`.
-    // Passing an argument to a function that takes none IS an error in Zig.
-    // Why did the user only report the unused param? Maybe the compiler stopped at the first error?
-    // Or maybe `text_input` is actually `ArrayListUnmanaged`?
-    // Line 138 says `std.ArrayList(u8)`.
-    // So `deinit(ctx.alloc)` IS WRONG.
-    // I will fix `deinit` usage as well just in case.
-
-    // I/O Logic: File > Stdin
     if (ctx.payload) |path| {
         const f = try std.fs.cwd().openFile(path, .{});
         defer f.close();
@@ -170,7 +173,6 @@ fn runTokens(ctx: CliContext) !void {
         const stdin = io.getStdinReader();
         try readAllInto(stdin, &text_input);
     }
-// ...
 
     if (text_input.items.len == 0) {
         // If no input, effectively 0 tokens.
@@ -179,11 +181,12 @@ fn runTokens(ctx: CliContext) !void {
     // Config for engine
     const model_name = ctx.opts.model orelse "generic";
     const tk_cfg = engine.TokenizerConfig{
-        .kind = pickTokenizerKindFromModel(model_name),
+        .spec = getEncodingForModel(model_name),
         .model_name = model_name,
     };
 
-    const t_res = try engine.estimateTokens(ctx.alloc, tk_cfg, text_input.items);
+    const special_mode: engine.SpecialMode = if (ctx.opts.allow_special_tokens) .ordinary else .strict;
+    const t_res = try engine.estimateTokens(ctx.alloc, tk_cfg, text_input.items, special_mode);
 
     // Optional: try to resolve cost if model is known
     var cost_usd: ?f64 = null;
@@ -236,10 +239,11 @@ fn runPrice(ctx: CliContext) !void {
 
         if (text_input.items.len > 0) {
              const tk_cfg = engine.TokenizerConfig{
-                 .kind = pickTokenizerKindFromModel(model),
+                 .spec = getEncodingForModel(model),
                  .model_name = model,
              };
-             const t_res = try engine.estimateTokens(ctx.alloc, tk_cfg, text_input.items);
+             const special_mode: engine.SpecialMode = if (ctx.opts.allow_special_tokens) .ordinary else .strict;
+             const t_res = try engine.estimateTokens(ctx.alloc, tk_cfg, text_input.items, special_mode);
              input_tokens = t_res.tokens;
         }
     }
@@ -285,3 +289,33 @@ fn runModels(ctx: CliContext) !void {
          }
     }
 }
+
+fn runPipe(ctx: CliContext) !void {
+    const model_name = ctx.opts.model orelse "generic";
+    const tk_cfg = engine.TokenizerConfig{
+        .spec = getEncodingForModel(model_name),
+        .model_name = model_name,
+    };
+
+    const special_mode: engine.SpecialMode = if (ctx.opts.allow_special_tokens) .ordinary else .strict;
+
+    const pipe_opts = pipe_cmd.PipeOptions{
+        .allocator = ctx.alloc,
+        .stdin = io.getStdinReader(),
+        .stdout = io.getStdoutWriter(),
+        .stderr = io.getStderrWriter(),
+
+        .model = model_name,
+        .field = ctx.opts.field,
+        .mode = ctx.opts.pipe_mode,
+        .fail_on_error = ctx.opts.fail_on_error,
+        .special_mode = special_mode,
+        .workers = ctx.opts.workers,
+
+        .cfg = tk_cfg,
+        .db = ctx.db,
+    };
+
+    try pipe_cmd.run(pipe_opts);
+}
+```
