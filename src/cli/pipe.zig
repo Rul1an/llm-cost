@@ -188,7 +188,7 @@ fn runSingleThreaded(opts: PipeOptions) PipeError!void {
         const rc = processLine(opts, line_arena.allocator(), line_buf.items, line_number, out_stream, opts.stderr, false);
         switch (rc) {
             .ok => {
-                try out_stream.writeByte('\n');
+                out_stream.writeByte('\n') catch |err| return @errorCast(err);
             },
             .skip => {},
             .fatal => return error.PipeFatal,
@@ -196,7 +196,7 @@ fn runSingleThreaded(opts: PipeOptions) PipeError!void {
 
         if (is_eof) break;
     }
-    try buf_writer.flush();
+    buf_writer.flush() catch |err| return @errorCast(err);
 }
 
 fn runParallel(opts: PipeOptions) PipeError!void {
@@ -404,7 +404,13 @@ fn processLine(
     };
 
     // 4. Augment JSON
-    try parsed.value.object.put(opts.field_tokens_in, std.json.Value{ .integer = @intCast(tok_res.tokens) });
+    parsed.value.object.put(opts.field_tokens_in, std.json.Value{ .integer = @intCast(tok_res.tokens) }) catch |err| {
+        if (is_parallel) logError(io_ctx, opts.stderr, line_number, "JSON mutate failed (tokens_in)", err)
+        else logErrorSingleThread(io_ctx, line_number, "JSON mutate failed (tokens_in)", err);
+
+        if (opts.fail_on_error) return .fatal;
+        return .skip;
+    };
 
     if (opts.mode == .price) {
         var tokens_out: usize = 0;
@@ -415,7 +421,13 @@ fn processLine(
             }
         }
 
-        try parsed.value.object.put(opts.field_tokens_out, std.json.Value{ .integer = @intCast(tokens_out) });
+        parsed.value.object.put(opts.field_tokens_out, std.json.Value{ .integer = @intCast(tokens_out) }) catch |err| {
+            if (is_parallel) logError(io_ctx, opts.stderr, line_number, "JSON mutate failed (tokens_out)", err)
+            else logErrorSingleThread(io_ctx, line_number, "JSON mutate failed (tokens_out)", err);
+
+            if (opts.fail_on_error) return .fatal;
+            return .skip;
+        };
 
         const cost_res = engine.estimateCost(opts.db, opts.model, tok_res.tokens, tokens_out, 0) catch |err| {
              if (is_parallel) logError(io_ctx, opts.stderr, line_number, "pricing failed", err)
@@ -425,7 +437,13 @@ fn processLine(
              return .skip;
         };
 
-        try parsed.value.object.put(opts.field_cost, std.json.Value{ .float = cost_res.cost_total });
+        parsed.value.object.put(opts.field_cost, std.json.Value{ .float = cost_res.cost_total }) catch |err| {
+            if (is_parallel) logError(io_ctx, opts.stderr, line_number, "JSON mutate failed (cost)", err)
+            else logErrorSingleThread(io_ctx, line_number, "JSON mutate failed (cost)", err);
+
+            if (opts.fail_on_error) return .fatal;
+            return .skip;
+        };
     }
 
     // 5. Write JSON
