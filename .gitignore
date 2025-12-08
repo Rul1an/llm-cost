@@ -1,6 +1,10 @@
 zig-cache/
+.zig-cache/
 zig-out/
 .DS_Store
 .vscode/
 *.swp
 *~
+tools/unicode_data/
+zig-0.13.0/
+

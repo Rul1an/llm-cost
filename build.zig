@@ -1,4 +1,12 @@
 const std = @import("std");
+const builtin = @import("builtin");
+
+comptime {
+    // Hard: 0.13.x only. Patch versions allowed, 0.14+ not.
+    if (!(builtin.zig_version.major == 0 and builtin.zig_version.minor == 13)) {
+        @compileError("llm-cost v0.2 currently requires Zig 0.13.x; found " ++ builtin.zig_version_string);
+    }
+}
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -30,7 +38,38 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const fuzz_tests = b.addTest(.{
+        .root_source_file = b.path("src/fuzz_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const run_tests = b.addRunArtifact(unit_tests);
+    const run_fuzz = b.addRunArtifact(fuzz_tests);
+
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_tests.step);
+    test_step.dependOn(&run_fuzz.step);
+
+    // Parity Test
+    const parity_test_exe = b.addExecutable(.{
+        .name = "parity_test",
+        .root_source_file = b.path("src/test/parity.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const run_parity = b.addRunArtifact(parity_test_exe);
+    const parity_step = b.step("test-parity", "Run parity check against corpus");
+    parity_step.dependOn(&run_parity.step);
+
+    // Benchmark Tool
+    const bench_exe = b.addExecutable(.{
+        .name = "benchmark",
+        .root_source_file = b.path("tools/benchmark.zig"),
+        .target = target,
+        .optimize = .ReleaseFast, // Always benchmark in ReleaseFast
+    });
+    const run_bench = b.addRunArtifact(bench_exe);
+    const bench_step = b.step("benchmark", "Run performance benchmark");
+    bench_step.dependOn(&run_bench.step);
 }

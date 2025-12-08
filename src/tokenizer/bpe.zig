@@ -133,15 +133,15 @@ pub const BpeEngine = struct {
         return text[start..end];
     }
 
-    /// Encode text into token IDs.
+    /// Encode pre-tokenized text segments.
     /// Caller owns result slice.
-    pub fn encode(self: BpeEngine, alloc: std.mem.Allocator, text: []const u8) ![]u32 {
+    pub fn encode(self: BpeEngine, alloc: std.mem.Allocator, pre_tokens: []const @import("pre_tokenizer.zig").PreToken) ![]u32 {
         var tokens = std.ArrayList(u32).init(alloc);
         errdefer tokens.deinit();
 
-        var start: usize = 0;
-        while (self.nextWord(text, &start)) |word| {
-            try self.encodeWord(word, &tokens);
+        for (pre_tokens) |pt| {
+            // TODO: Special token handling
+            try self.encodeWord(pt.text, &tokens);
         }
 
         return tokens.toOwnedSlice();

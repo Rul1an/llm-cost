@@ -1,24 +1,32 @@
 const std = @import("std");
 const pricing = @import("../pricing.zig");
-const openai_tok = @import("../tokenizer/openai.zig");
+const tokenizer_mod = @import("../tokenizer/mod.zig");
+const openai_tok = tokenizer_mod.openai;
+const registry = tokenizer_mod.registry;
 
 pub const EngineError = error{
     ModelNotFound,
     InvalidPricing,
     TokenizerNotSupported,
     TokenizerInternalError,
+    DisallowedSpecialToken,
 };
 
-pub const TokenizerKind = enum {
-    generic_whitespace,
-    openai_cl100k,
-    openai_o200k,
+pub const SpecialMode = union(enum) {
+    /// Default: behave like tiktoken’s `encode`:
+    /// any occurrence of a special token in text is an error.
+    strict,
+
+    /// Treat all specials as ordinary text, like tiktoken’s `encode_ordinary`.
+    ordinary,
+
+    /// Only these special token names are allowed; others cause an error.
+    allow_list: []const []const u8,
 };
 
 pub const TokenizerConfig = struct {
-    kind: TokenizerKind,
+    spec: ?registry.EncodingSpec = null,
     /// Logical model name (e.g. "gpt-4o").
-    /// Tokenizer impl maps this to internal details.
     model_name: []const u8,
 };
 
@@ -46,35 +54,69 @@ pub const CostResult = struct {
     }
 };
 
+fn isAllowedSpecial(name: []const u8, mode: SpecialMode) bool {
+    return switch (mode) {
+        .strict => false,
+        .ordinary => true,
+        .allow_list => |list| blk: {
+            for (list) |allowed| {
+                if (std.mem.eql(u8, allowed, name)) break :blk true;
+            }
+            break :blk false;
+        },
+    };
+}
+
+/// Returns byte index of first disallowed special token in `text`,
+/// or null if none found.
+fn findDisallowedSpecial(
+    text: []const u8,
+    spec: registry.EncodingSpec,
+    mode: SpecialMode,
+) ?usize {
+    // Fast exit: in ordinary mode we never treat specials specially.
+    switch (mode) {
+        .ordinary => return null,
+        else => {},
+    }
+
+    // Simple O(#specials * N * len) approach.
+    for (spec.special_tokens) |tok| {
+        if (isAllowedSpecial(tok.token, mode)) continue;
+
+        if (std.mem.indexOfPos(u8, text, 0, tok.token)) |idx| {
+             // Return first occurrence of disallowed token
+             return idx;
+        }
+    }
+    return null;
+}
+
 /// Core API: calculate token count for text using specified tokenizer.
 pub fn estimateTokens(
     alloc: std.mem.Allocator,
     cfg: TokenizerConfig,
     text: []const u8,
+    special_mode: SpecialMode,
 ) EngineError!TokenResult {
-    switch (cfg.kind) {
-        .generic_whitespace => {
-            const count = simpleWordLikeCount(text);
-            return .{ .tokens = count };
-        },
-        .openai_cl100k => {
-            var tok = openai_tok.OpenAITokenizer.init(.{
-                .kind = .cl100k_base,
-                .approximate_ok = true, // For v0.x always allowed to approx if needed
-            }) catch return EngineError.TokenizerInternalError;
+    if (cfg.spec) |spec| {
+        // Check for disallowed special tokens before processing
+        if (findDisallowedSpecial(text, spec, special_mode)) |_| {
+            return EngineError.DisallowedSpecialToken;
+        }
 
-            const res = tok.count(alloc, text) catch return EngineError.TokenizerInternalError;
-            return .{ .tokens = res.tokens };
-        },
-        .openai_o200k => {
-            var tok = openai_tok.OpenAITokenizer.init(.{
-                .kind = .o200k_base,
-                .approximate_ok = true,
-            }) catch return EngineError.TokenizerInternalError;
+        // Use OpenAI-style tokenizer for known specs (BPE based)
+        var tok = openai_tok.OpenAITokenizer.init(.{
+            .spec = spec,
+            .approximate_ok = true,
+        }) catch return EngineError.TokenizerInternalError;
 
-            const res = tok.count(alloc, text) catch return EngineError.TokenizerInternalError;
-            return .{ .tokens = res.tokens };
-        },
+        const res = tok.count(alloc, text) catch return EngineError.TokenizerInternalError;
+        return .{ .tokens = res.tokens };
+    } else {
+        // Fallback to simple whitespace
+        const count = simpleWordLikeCount(text);
+        return .{ .tokens = count };
     }
 }
 
@@ -144,4 +186,52 @@ pub fn estimateCost(
         .cost_reasoning = cost_reasoning,
         .cost_total = cost_in + cost_out + cost_reasoning,
     };
+}
+
+test "findDisallowedSpecial logic" {
+    // Create a dummy spec for testing
+    const specials = [_]registry.EncodingSpec.SpecialToken{
+        .{ .token = "<|endoftext|>", .rank = 1 },
+        .{ .token = "<|special|>", .rank = 2 },
+    };
+    const spec = registry.EncodingSpec{
+        .name = "test_spec",
+        .pat_str = "",
+        .vocab_data = "",
+        .special_tokens = &specials,
+    };
+
+    const text = "Hello <|endoftext|> world";
+
+    // Strict mode: should find it
+    if (findDisallowedSpecial(text, spec, .strict)) |idx| {
+        try std.testing.expectEqual(@as(usize, 6), idx);
+    } else {
+        return error.TestExpectedFound;
+    }
+
+    // Ordinary mode: should not find it
+    if (findDisallowedSpecial(text, spec, .ordinary)) |_| {
+        return error.TestExpectedNull;
+    }
+
+    // Allow list (not allowed): should find it
+    const allowed = [_][]const u8{ "<|special|>" };
+    if (findDisallowedSpecial(text, spec, .{ .allow_list = &allowed })) |idx| {
+        try std.testing.expectEqual(@as(usize, 6), idx);
+    } else {
+        return error.TestExpectedFound;
+    }
+
+    // Allow list (allowed): should not find it
+    const allowed_eot = [_][]const u8{ "<|endoftext|>" };
+    if (findDisallowedSpecial(text, spec, .{ .allow_list = &allowed_eot })) |_| {
+        return error.TestExpectedNull;
+    }
+
+    // Test text with no special tokens
+    const safe_text = "Just normal text";
+    if (findDisallowedSpecial(safe_text, spec, .strict)) |_| {
+        return error.TestExpectedNull;
+    }
 }
