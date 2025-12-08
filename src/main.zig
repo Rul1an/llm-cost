@@ -11,3 +11,7 @@ pub fn main() !void {
 
     try cli.main(arena.allocator());
 }
+
+test {
+    _ = @import("test/scanner_whitespace.zig");
+}

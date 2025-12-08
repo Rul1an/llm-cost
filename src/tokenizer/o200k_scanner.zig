@@ -16,13 +16,9 @@ pub const O200kScanner = struct {
             // Decode first codepoint (fallback to byte if invalid utf8, effectively Latin-1 replacement or error handling)
             // Tiktoken generally assumes valid UTF-8.
             // We use standard iterator-like decoding.
-            const len_cp = std.unicode.utf8ByteSequenceLength(text[i]) catch 1;
-            // Decode codepoint
-            const cp_slice = if (i + len_cp <= text.len) text[i..i+len_cp] else text[i..];
-            const cp = std.unicode.utf8Decode(cp_slice) catch 0xFFFD; // Replacement char logic
-            const slice = text[i..];
 
-            var matched_len: ?usize = null;
+            // Decode codepoint
+
 
             // Strict Priority Order:
             // 1. Branch 1: Words (Lower suffix)
@@ -67,7 +63,22 @@ pub const O200kScanner = struct {
             // Branch 4 is Punctuation `?[^\s\p{L}\p{N}]+`.
             // If we have "   ", Branch 7 matches.
             // If punctuation fails, try whitespace.
-            if (tryScanWhitespaceGroup(text[i..])) |len| {
+            // 5. Branch 5: Whitespace ending in newline `\s*[\r\n]+`
+            if (tryScanWhitespaceBranch5(text[i..])) |len| {
+                try tokens.append(.{ .text = text[i..i+len] });
+                i += len;
+                continue;
+            }
+
+            // 6. Branch 6: Trailing whitespace `\s+(?!\S)`
+            if (tryScanWhitespaceBranch6(text[i..])) |len| {
+                try tokens.append(.{ .text = text[i..i+len] });
+                i += len;
+                continue;
+            }
+
+            // 7. Branch 7: Generic whitespace `\s+`
+            if (tryScanWhitespaceBranch7(text[i..])) |len| {
                 try tokens.append(.{ .text = text[i..i+len] });
                 i += len;
                 continue;
@@ -192,7 +203,7 @@ pub const O200kScanner = struct {
 
         // Now `cp` is the first character after the optional prefix.
         // `it.i` is the index *after* `cp`.
-        const body_start_idx = it.i - (std.unicode.utf8CodepointSequenceLength(cp) catch 1);
+        // `it.i` is the index *after* `cp`.
 
         // 2. Body: Upperish+
         // Must match at least one Upperish character.
@@ -316,7 +327,6 @@ pub const O200kScanner = struct {
         while (count < 3) {
             // Peek next char? Iterator modifies state.
             // Use clone or just continue relative to slice.
-            const before_next = it.i;
             if (it.nextCodepoint()) |cp| {
                 if (unicode.isNumber(cp)) {
                     count += 1;
@@ -331,24 +341,65 @@ pub const O200kScanner = struct {
         return len_bytes;
     }
 
-    /// Branches 5, 6, 7: Whitespace Logic
-    fn tryScanWhitespaceGroup(slice: []const u8) ?usize {
+    /// Branch 5: `\s*[\r\n]+`
+    /// Matches whitespace that ends in at least one newline/CR.
+    fn tryScanWhitespaceBranch5(slice: []const u8) ?usize {
         var it = std.unicode.Utf8Iterator{ .bytes = slice, .i = 0 };
         const cp1 = it.nextCodepoint() orelse return null;
         if (!unicode.isWhitespace(cp1)) return null;
 
-        // Scan full whitespace run to analyze structure
-        var ws_len: usize = it.i;
-        var has_newline = (cp1 == '\r' or cp1 == '\n');
-
+        // 1. Scan greedy whitespace
+        var ws_end = it.i;
         while (it.nextCodepoint()) |cp| {
             if (!unicode.isWhitespace(cp)) break;
-            if (cp == '\r' or cp == '\n') has_newline = true;
-            ws_len = it.i;
+            ws_end = it.i;
         }
 
-        // Branch 5/6/7 logic (Stubbed to greedy whitespace for now)
-        return ws_len;
+        // 2. Backtrack to find the last newline in this run.
+        // The match is the longest prefix of the run that ends in [\r\n].
+        var i = ws_end;
+        while (i > 0) {
+            i -= 1;
+            const c = slice[i];
+            if (c == '\r' or c == '\n') {
+                return i + 1;
+            }
+        }
+
+        return null;
+    }
+
+    /// Branch 6: `\s+(?!\S)`
+    /// Matches greedy whitespace ONLY if it reaches EOF (or followed by whitespace, impossible since greedy).
+    fn tryScanWhitespaceBranch6(slice: []const u8) ?usize {
+        var it = std.unicode.Utf8Iterator{ .bytes = slice, .i = 0 };
+        const cp1 = it.nextCodepoint() orelse return null;
+        if (!unicode.isWhitespace(cp1)) return null;
+
+        var ws_end = it.i;
+        while (it.nextCodepoint()) |cp| {
+            if (!unicode.isWhitespace(cp)) break;
+            ws_end = it.i;
+        }
+
+        // Lookahead: Must be EOF.
+        if (ws_end < slice.len) return null;
+
+        return ws_end;
+    }
+
+    /// Branch 7: `\s+`
+    fn tryScanWhitespaceBranch7(slice: []const u8) ?usize {
+        var it = std.unicode.Utf8Iterator{ .bytes = slice, .i = 0 };
+        const cp1 = it.nextCodepoint() orelse return null;
+        if (!unicode.isWhitespace(cp1)) return null;
+
+        var ws_end = it.i;
+        while (it.nextCodepoint()) |cp| {
+            if (!unicode.isWhitespace(cp)) break;
+            ws_end = it.i;
+        }
+        return ws_end;
     }
 
     const DummyContext = struct {};
