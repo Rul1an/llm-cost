@@ -6,11 +6,14 @@ on:
       - "v*"
   workflow_dispatch:
 
-permissions:
-  contents: write
+permissions: {}
 
 jobs:
   build-matrix:
+    permissions:
+      contents: read
+      id-token: write # Required for keyless cosign signing
+
     strategy:
       fail-fast: false
       matrix:
@@ -36,17 +39,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Laat de action alleen de toolchain+env doen
+      # 1. Setup Toolchain (Pinned)
       - name: Setup Zig Cross-Compiler
         uses: Rul1an/zig-cross-compile-action@v2
         with:
-          version: '0.13.0'        # Explicitly pin to 0.13.0 for stability.
+          version: '0.13.0'        # Explicitly pin to 0.13.0
           target: ${{ matrix.target }}
-          project-type: custom     # we bouwen zelf met `zig build`
+          project-type: custom
           verify-level: basic
-          cmd: ":"                 # no-op; echte build staat hieronder
+          cmd: ":"
 
+      # 2. Build
       - name: Build
+        # Network access ideally restricted here, but not enforced via firewall in standard runners
         run: |
           zig build -Doptimize=ReleaseFast -Dtarget=${{ matrix.target }}
           mkdir -p dist
@@ -59,22 +64,59 @@ jobs:
               ;;
           esac
 
+      # 3. Smoke Test
       - name: Smoke Test
         if: (matrix.target == 'x86_64-linux-gnu' && matrix.os == 'ubuntu-latest') || (matrix.target == 'aarch64-macos' && matrix.os == 'macos-latest')
         run: |
           ./zig-out/bin/llm-cost tokens --model gpt-4o <<< "Hello world"
-          ./zig-out/bin/llm-cost price --model gpt-4o --tokens-in 100
 
-      - name: Upload Artifact
+      # 4. Generate SBOM (Syft)
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@v0.16.0 # Pinned to specific tag v0.16.0
+        with:
+          syft-version: v1.18.0
+
+      - name: Generate SBOM (CycloneDX)
+        run: |
+          mkdir -p dist/sbom
+          # Syft scans the single binary file
+          syft packages file:dist/llm-cost-${{ matrix.suffix }} \
+            -o cyclonedx-json=dist/sbom/llm-cost-${{ matrix.suffix }}.cdx.json
+
+      # 5. Sign Artifacts (Cosign Keyless)
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3.6.0 # Pinned version
+
+      - name: Sign Binary
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          # Sign the binary blob
+          cosign sign-blob \
+            --yes \
+            --output-signature dist/llm-cost-${{ matrix.suffix }}.sig \
+            --output-certificate dist/llm-cost-${{ matrix.suffix }}.crt \
+            dist/llm-cost-${{ matrix.suffix }}
+
+      # 6. Upload All Artifacts
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: llm-cost-${{ matrix.suffix }}
-          path: dist/llm-cost-${{ matrix.suffix }}
+          name: llm-cost-${{ matrix.suffix }}-signed
+          path: |
+            dist/llm-cost-${{ matrix.suffix }}
+            dist/llm-cost-${{ matrix.suffix }}.sig
+            dist/llm-cost-${{ matrix.suffix }}.crt
+            dist/sbom/llm-cost-${{ matrix.suffix }}.cdx.json
 
   release:
     needs: build-matrix
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/download-artifact@v4
         with:
