@@ -1,27 +1,37 @@
 # Contributing to llm-cost
 
-## Development
+Thank you for your interest in contributing! We value clean, performant, and reliable code.
 
-Prerequisites:
-- Zig 0.15.x (master/nightly)
+## Prerequisites
 
-### Build
-```bash
-zig build
-```
+- **Zig 0.13.0** (strictly pinned).
+- Python 3 + `tiktoken` (only for running parity checks validation).
 
-### Test
-```bash
-zig build test
-```
+## Workflow
 
-### Cross-Compilation
-This project uses [zig-cross-compile-action](https://github.com/Rul1an/zig-cross-compile-action) for CI releases.
-Local testing of cross-compilation can be done via `zig build -Dtarget=...`.
+1.  **Fork & Branch**: Create a feature branch.
+2.  **Develop**: Make your changes.
+3.  **Verify**: Run the verification suite locally.
+    ```bash
+    zig build test        # Unit tests
+    zig build fuzz        # Fuzzing sanity check
+    zig build test-parity # Parity check (requires python env)
+    zig build bench-bpe   # Performance check
+    ```
+4.  **PR**: Submit a Pull Request targeting `main`.
 
-## Directory Structure
-- `src/cli/`: CLI entry points and formatting.
-- `src/core/`: Core business logic (cost calc).
-- `src/tokenizer/`: Tokenizer implementations.
-- `src/pricing.zig`: Pricing database loader.
-- `src/data/`: Embedded assets.
+## Code Style
+
+- **No Panics**: Library code (`src/core`, `src/tokenizer`) should never panic. Use Zig's error sets to bubble up failures.
+- **Explicit Memory**: Pass allocators explicitly.
+- **Minimal Dependencies**: We avoid external Zig dependencies where possible.
+- **Formatting**: Run `zig fmt` before committing.
+
+## Adding a New Model
+
+1.  Update `src/tokenizer/model_registry.zig` to include the new model/alias.
+2.  Update `src/pricing.zig` with the latest pricing info.
+3.  If the model uses a **new tokenizer** family:
+    -   Add the vocab file to `src/data/`.
+    -   Implement the scanner in `src/tokenizer/`.
+    -   Register the encoding in `src/tokenizer/registry.zig`.
