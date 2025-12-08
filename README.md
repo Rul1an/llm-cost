@@ -39,6 +39,121 @@ llm-cost price --model gpt-4o prompt.txt
 - **Pipe-Friendly**: Designed for shell scripting and CI integration.
 - **Flexible Output**: Supports `text`, `json`, and `ndjson` formats.
 
+
+## Architecture
+
+At a high level, `llm-cost` is a single binary that takes text (or JSONL) on stdin, looks up the right tokenizer and pricing representation, and writes results to stdout. Internally it consists of a few clear layers:
+
+- **CLI**: Parses arguments, selects the subcommand (`tokens`, `price`, `pipe`).
+- **ModelRegistry**: Resolves `--model` to a canonical name, encoding, and accuracy tier.
+- **Engine**: Counts tokens and calculates costs based on pricing data.
+- **Tokenizer/BPE**: Implements `o200k_base` and `cl100k_base` with strict `tiktoken` parity.
+- **Pricing**: Reads an embedded price snapshot and calculates cost per call.
+- **Pipe**: Processes JSONL streams, enriches records, and maintains a summary/quota.
+
+### High-level Data Flow
+
+```ascii
++----------------------+
+|        User          |
+| (shell / CI / agent) |
++----------+-----------+
+           |
+           v
++----------------------+
+|         CLI          |
+|  commands.zig        |
+|  - tokens            |
+|  - price             |
+|  - pipe              |
++----------+-----------+
+           |
+           v
++----------------------+         +----------------------+
+|    ModelRegistry     |         |     Pricing DB       |
+|  tokenizer/mod.zig   |<------->|   pricing.zig        |
+|  - resolve(--model)  |         |  (JSON snapshot)     |
+|  - canonical name    |         +----------------------+
+|  - encoding spec     |
+|  - accuracy tier     |
++----------+-----------+
+           |
+           v
++----------------------+
+|        Engine        |
+|   core/engine.zig    |
+|  - estimateTokens    |
+|  - estimateCost      |
++-----+----------+-----+
+      |          |
+      |          |
+      v          v
++-----------+  +------------------+
+| Tokenizer |  |   Pricing Logic  |
+|  (BPE)    |  |  (USD per token) |
+|  - o200k  |  |  - input/output  |
+|  - cl100k |  |  - reasoning     |
++-----------+  +------------------+
+           |
+           v
++----------------------+
+|       Output         |
+| - text / json        |
+| - ndjson (pipe)      |
++----------------------+
+```
+
+### Components
+
+#### CLI & ModelRegistry
+
+The CLI reads arguments, selects a subcommand, and resolves the model:
+
+```
+--model gpt-4o
+→ ModelRegistry.resolve("gpt-4o")
+→ canonical: openai/gpt-4o
+→ encoding: o200k_base
+→ accuracy: exact
+```
+
+For unknown models:
+```
+--model my-weird-model
+→ provider: generic
+→ encoding: null (whitespace fallback)
+→ accuracy: heuristic
+```
+
+The CLI uses this `ModelSpec` to configure the tokenizer, look up pricing, and report the accuracy tier (`exact` vs `heuristic`).
+
+#### Engine & Tokenizer
+
+The Engine is the central layer that orchestrates:
+1.  **estimateTokens**: Calls the appropriate tokenizer.
+    -   **OpenAI**: Uses native BPE (`o200k_base` / `cl100k_base`).
+    -   **Generic**: Uses simple whitespace estimation.
+2.  **estimateCost**: Combines token counts with pricing data.
+
+The Tokenizer implementation:
+-   Loads embedded vocab and BPE tables from binary assets.
+-   Uses specialized regex-based scanners for `o200k` and `cl100k`.
+-   Uses a heap-based BPE merge (O(N log N)) to handle worst-case inputs efficiently.
+-   Verified against `tiktoken` using the "Evil Corpus".
+
+#### Pricing DB
+
+The pricing layer contains an embedded snapshot of model prices and calculates costs for input, output, and reasoning tokens.
+
+#### Pipe Mode
+
+`pipe` is designed for bulk scenarios (datasets, logs, CI). It reads a JSONL stream, parses each line, extracts text, calculates tokens/cost, and writes the enriched JSON back to stdout.
+
+-   **Summary**: Tracks processed lines, failures, and total usage.
+-   **Quotas**: Enforces `--max-tokens` or `--max-cost` limits.
+    -   When a quota is active, execution is forced to single-threaded mode to guarantee strict containment.
+    -   Without quotas, it supports parallel processing via `--workers N`.
+
 ## Installation
 
 Download the latest binary from the [Releases Page](https://github.com/Rul1an/llm-cost/releases).
@@ -166,6 +281,19 @@ zig build -Dtarget=x86_64-linux-gnu
 zig build -Dtarget=x86_64-windows-gnu
 zig build -Dtarget=aarch64-macos
 ```
+
+## Advanced Usage: Custom Vocabularies
+
+`llm-cost` supports custom BPE vocabularies via a binary format optimized for zero-copy loading. You can convert a standard Tiktoken vocabulary file (base64-token rank pairs) using the included tool:
+
+1.  **Prepare your vocab file**: A text file where each line is `<base64_token> <rank>`.
+2.  **Convert**:
+    ```bash
+    zig run tools/convert_vocab.zig -- ./path/to/vocab.tiktoken ./src/data/my_custom_vocab.bin
+    ```
+3.  **Register**: Update `src/tokenizer/registry.zig` to embed your new binary and mapping.
+
+This feature allows support for future models (e.g., Llama 3) or private tokenizers without waiting for official releases.
 
 *These targets match the official release binaries built via GitHub Actions.*
 

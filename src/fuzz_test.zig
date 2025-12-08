@@ -1,5 +1,8 @@
 const std = @import("std");
+const engine = @import("core/engine.zig");
 const openai = @import("tokenizer/openai.zig");
+const tokenizer_mod = @import("tokenizer/mod.zig");
+const model_registry = tokenizer_mod.model_registry;
 
 /// Run deterministic chaos testing on a specific model
 fn runChaosForModel(model_name: []const u8, seed: u64) !void {
@@ -45,4 +48,30 @@ test "chaos o200k (gpt-4o)" {
 
 test "chaos cl100k (gpt-4)" {
     try runChaosForModel("gpt-4", 0xDEADBEEF);
+}
+
+test "registry resolution fuzz" {
+    var prng = std.rand.DefaultPrng.init(0xCAFEBABE);
+    const rnd = prng.random();
+
+    var i: usize = 0;
+    while (i < 10000) : (i += 1) {
+        // Generate random model name string
+        const len = rnd.uintLessThan(usize, 64);
+        var buf: [64]u8 = undefined;
+        var j: usize = 0;
+        while (j < len) : (j += 1) {
+             buf[j] = rnd.int(u8);
+        }
+        const input = buf[0..len];
+
+        // Ensure resolve() never panics
+        const spec = model_registry.ModelRegistry.resolve(input);
+
+        // Invariants
+        if (spec.accuracy == .exact) {
+             // Exact matches must have encoding
+             if (spec.encoding == null) @panic("Exact accuracy must have encoding");
+        }
+    }
 }
