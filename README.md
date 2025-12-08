@@ -1,11 +1,16 @@
 # llm-cost
 
+[![Release](https://img.shields.io/github/v/release/Rul1an/llm-cost)](https://github.com/Rul1an/llm-cost/releases)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/Rul1an/llm-cost/release.yml?branch=main)](https://github.com/Rul1an/llm-cost/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 **Offline, exact token counting & cost estimation for OpenAI-style LLMs.**
 
 `llm-cost` is a high-performance, single-binary CLI written in [Zig](https://ziglang.org). It provides production-grade token counting (perfect parity with `tiktoken`) and offline cost estimation.
 
 - **Features**: `o200k_base` (GPT-4o) & `cl100k_base` support, 100% offline, cross-platform binaries.
 - **Why not just tiktoken?**: Single binary (no Python required), built-in pricing DB, batch processing (`pipe`), and strict memory safety.
+- **Privacy & Safety**: **No data leaves your machine.** All tokenization and pricing logic runs 100% locally.
 - **Supported Models**: `gpt-4o`, `gpt-4`, `gpt-3.5-turbo`, and accurate pricing for all major OpenAI endpoints.
 
 ## Who is this for?

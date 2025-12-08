@@ -1,19 +1,15 @@
-# Release Process & Verification
+## Verification Matrix
 
-This document outlines the steps to verify and release a new version of `llm-cost`.
+Before any release (or PR merge), the following checks must pass:
 
-## Verification Checklist
+| Check | Command | Purpose |
+| :--- | :--- | :--- |
+| **Unit Tests** | `zig build test` | Core logic, pipe IO, pricing math |
+| **Parity Tests** | `zig build test-parity` | 100% match with `tiktoken` (requires Python) |
+| **Fuzz Tests** | `zig build fuzz` | Parser robustness (no panics on random input) |
+| **Benchmarks** | `zig build bench-bpe` | Performance regression check (~1ms/4KB) |
 
-All four checks must be green before tagging a release.
-
-### 1. Unit Tests
-Ensures core logic correctness (includes `src/main.zig` and `src/fuzz_test.zig` mini-fuzz).
-```bash
-zig build test
-```
-
-### 2. Fuzzing (Sanity Check)
-Runs a bounded fuzzing session to detect crashes or undefined behavior on chaotic inputs.
+## Release Process
 ```bash
 zig build fuzz
 ```
