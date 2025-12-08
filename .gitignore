@@ -7,4 +7,5 @@ zig-out/
 *~
 tools/unicode_data/
 zig-0.13.0/
+testdata/bench_realistic.jsonl
 
