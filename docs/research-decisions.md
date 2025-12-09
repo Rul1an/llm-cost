@@ -1,8 +1,8 @@
 # Research Decisions: BPE & Tokenization Literature Review
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Date:** 2025-01  
-**Status:** FINAL DECISIONS
+**Status:** FINAL DECISIONS (updated)
 
 Dit document bevat de definitieve beslissingen over alle onderzochte research papers en technieken voor llm-cost.
 
@@ -16,13 +16,16 @@ Na uitgebreid onderzoek van 15+ papers en implementaties zijn dit de kernbesliss
 |-----------|------------|------|
 | BPE Runtime | Index-based TokenBuffer + min-heap | **1.5** ✅ |
 | Testing | Differential fuzzing vs tiktoken | **1.5** ✅ |
-| Metrics | bytes/token, compression ratio | **1.5** ✅ |
+| Formal Properties | Injectivity, exactness, context-invariance | **1.5** ✅ |
+| Metrics | bytes/token, compression ratio, Gini | **1.5** ✅ |
 | Fairness Analysis | Token Tax analyzer command | **2** 🔄 |
 | Scenario Planning | `llm-cost plan` command | **2** 🔄 |
+| Policy Checker | `llm-cost check-policy` command | **2** 🔄 |
 | BPE v3 | Bucket queue (O(N)) | **When needed** ⏸️ |
 | SIMD Pre-tokenizer | Vectorized scanning | **When needed** ⏸️ |
+| Cost-as-SLO | Formal cost SLO framework | **Phase 3+** 📚 |
 | DFA Equivalence | Formal verification | **Research** 📚 |
-| SuperBPE/BoundlessBPE | Alternative tokenizers | **NEVER** ❌ |
+| SuperBPE/BoundlessBPE/Parity-Aware | Training innovations | **NEVER** ❌ |
 
 ---
 
@@ -144,6 +147,17 @@ Na uitgebreid onderzoek van 15+ papers en implementaties zijn dit de kernbesliss
 
 **Decision:** ✅ ADOPT AS ANALYSIS FEATURE
 
+**Fairness Metrics (from research):**
+
+| Metric | Definition | Source |
+|--------|------------|--------|
+| **Tokenization Parity (TP)** | `tokens(lang_L) / tokens(English)` for same content | mBERT studies |
+| **Gini Coefficient** | Distribution inequality of per-language costs (0=equal) | Parity-Aware BPE |
+| **MorphScore** | Alignment of token boundaries with morpheme boundaries | Fairness papers |
+| **Vocabulary Utilization** | Fraction of vocab actually used per language | SuperBPE metrics |
+| **Bytes per Token** | Compression efficiency per language | Universal |
+| **Token Premium** | Cost multiplier vs English baseline | Token Tax papers |
+
 **Implementation:**
 
 ```bash
@@ -159,14 +173,30 @@ llm-cost analyze-fairness \
 {
   "model": "gpt-4o",
   "languages": {
-    "en": { "bytes_per_token": 4.2, "tokens_per_sentence": 12.3, "premium": 1.0 },
-    "zh": { "bytes_per_token": 2.1, "tokens_per_sentence": 8.7, "premium": 0.71 },
-    "am": { "bytes_per_token": 1.2, "tokens_per_sentence": 45.2, "premium": 3.67 }
+    "en": { 
+      "bytes_per_token": 4.2, 
+      "tokens_per_sentence": 12.3, 
+      "vocab_utilization": 0.82,
+      "premium": 1.0 
+    },
+    "zh": { 
+      "bytes_per_token": 2.1, 
+      "tokens_per_sentence": 8.7, 
+      "vocab_utilization": 0.34,
+      "premium": 0.71 
+    },
+    "am": { 
+      "bytes_per_token": 1.2, 
+      "tokens_per_sentence": 45.2, 
+      "vocab_utilization": 0.08,
+      "premium": 3.67 
+    }
   },
   "fairness_metrics": {
     "gini_coefficient": 0.34,
     "max_premium": 3.67,
-    "worst_language": "am"
+    "worst_language": "am",
+    "parity_ratio_range": [0.71, 3.67]
   }
 }
 ```
@@ -252,6 +282,31 @@ pub const BucketQueue = struct {
 
 ## 4. Formal Verification & Testing (PARTIALLY ADOPTING)
 
+### 4.0 Formal Properties (from Category Theory Framework)
+
+**Source:** Stochastic maps category framework for tokenizer representation
+
+**Key Properties:**
+
+| Property | Definition | Why It Matters |
+|----------|------------|----------------|
+| **Exactness** | `∀b: decode(encode(b)) = b` | Lossless roundtrip |
+| **Injectivity** | Encoder may not assign same tokens to different texts | No collision |
+| **Surjectivity** | Decoder must map every token sequence to some text | Complete coverage |
+| **Context-invariance** | Tokenization independent of surrounding context | Deterministic |
+| **Statistical consistency** | Preserves estimator properties | For ML training |
+
+**Inconsistency sources to test:**
+- Non-injective encoders (lowercasing, accent stripping)
+- UNK token handling creating non-injectivity
+- Boundary effects from pre-tokenization
+
+**Decision:** ✅ INFORM TESTING STRATEGY
+
+These properties guide our property-based tests and differential fuzzing.
+
+---
+
 ### 4.1 DFA for BPE (CIAA 2024)
 
 **Paper:** "Constructing a BPE Tokenization DFA" (Berglund et al.)
@@ -305,13 +360,23 @@ pub fn fuzz_parity(input: []const u8) void {
 
 **Decision:** ✅ ADOPT IN PHASE 1.5
 
-**Properties to test:**
-1. **Roundtrip:** `decode(encode(text)) == text`
-2. **No crash:** Any UTF-8 input should not crash
-3. **Deterministic:** Same input always produces same output
-4. **Length bounds:** Output length bounded by input length
+**Properties to test (informed by formal framework):**
 
-**Implementation:** Part of existing test suite
+| Property | Test | Priority |
+|----------|------|----------|
+| **Roundtrip (Exactness)** | `decode(encode(text)) == text` | P0 |
+| **Injectivity** | Different inputs → different outputs | P1 |
+| **No crash** | Any UTF-8 input should not crash | P0 |
+| **Deterministic** | Same input always produces same output | P0 |
+| **Length bounds** | Output length bounded by input length | P1 |
+| **Context-invariance** | `encode(a + b)[0..len(encode(a))] == encode(a)` | P2 |
+
+**Extended properties (Phase 2+):**
+- **Monotonicity:** Longer input → at least as many tokens
+- **Prefix stability:** Tokenization of prefix is prefix of full tokenization
+- **Special token isolation:** Special tokens never merged with regular text
+
+**Implementation:** Part of existing test suite + fuzzing harness
 
 ---
 
@@ -395,17 +460,157 @@ See section 2.1 above.
 
 ---
 
+### 5.4 Policy Checker (`llm-cost check-policy`)
+
+**Research basis:** Cost-as-SLO literature, gateway/routing papers
+
+**What it does:**
+Validates usage events against declarative policies and SLOs.
+
+```bash
+llm-cost check-policy \
+  --events events.jsonl \
+  --policy policy.yaml \
+  --format json
+```
+
+**Policy config:**
+```yaml
+rules:
+  - name: "no_flagship_for_tier_b"
+    match:
+      tenant_tier: "B"
+    forbid_models: ["gpt-5", "claude-opus"]
+    
+  - name: "max_tokens_per_call"
+    max_tokens_total: 4096
+    
+  - name: "max_output_tokens"
+    max_output_tokens: 2048
+    
+  - name: "cost_cap_per_request"
+    max_cost_usd: 0.10
+    
+  - name: "language_routing"
+    match:
+      detected_language: ["fr", "de", "es"]
+    prefer_models: ["gpt-4o-mini"]  # Better non-English tokenization
+    
+slos:
+  - name: "cost_parity"
+    metric: "cost_per_1k_chars"
+    max_variance_pct: 20  # Max 20% cost difference across languages
+```
+
+**Output:**
+```json
+{
+  "total_events": 10000,
+  "violations": [
+    {
+      "rule": "no_flagship_for_tier_b",
+      "count": 23,
+      "events": ["evt_123", "evt_456"]
+    },
+    {
+      "rule": "max_tokens_per_call",
+      "count": 5,
+      "max_observed": 8192
+    }
+  ],
+  "slo_status": {
+    "cost_parity": {
+      "status": "BREACHED",
+      "variance_pct": 34.2,
+      "worst_language": "am"
+    }
+  }
+}
+```
+
+**Use cases:**
+- Gateway policy enforcement
+- FinOps governance
+- Fairness SLO monitoring
+- Cost attribution & chargeback
+
+**Phase:** 2
+
+**Effort:** 2 weeks
+
+---
+
+### 5.5 Cost-as-SLO Framework
+
+**Research basis:** Bleeding edge whitespace - no existing tooling
+
+**Concept:**
+Formalize cost as a first-class SLO alongside latency and quality.
+
+```yaml
+# Formal cost SLO definition
+cost_slo:
+  name: "enterprise_tier"
+  constraints:
+    max_cost_per_1k_requests_usd: 50.00
+    max_cost_per_1k_chars_usd: 0.01
+    quality_floor: 0.85  # Min quality score
+    latency_p99_ms: 2000
+  fairness:
+    max_language_premium: 2.0  # No language pays >2x English
+    report_gini: true
+```
+
+**Why this matters:**
+- Current state: Cost is billing afterthought, not SLO
+- Future state: Cost parity as enforceable contract
+- Regulatory angle: Demonstrate fairness to auditors
+
+**Phase:** Research / Phase 3+
+
+**Effort:** 4-6 weeks (requires integration with monitoring)
+
+---
+
+### 5.6 Whitespaces Identified (Future Research)
+
+Based on bleeding edge analysis, these are documented whitespaces:
+
+| Whitespace | Description | llm-cost Relevance |
+|------------|-------------|-------------------|
+| **Cost Compiler** | Auto-synthesize min-cost semantically-equivalent prompts | High - but requires ML |
+| **Joint RAG Planning** | Optimize retrieval + tokenization + model together | Medium - extends `plan` |
+| **Multi-tokenizer Profiles** | Per-request tokenizer selection for cost | Medium - Phase 3+ |
+| **Tenant-specific Tuning** | Auto-generate cached macro-prompts per tenant | Low - SaaS layer |
+| **Hardware-aware Vocab** | Vocab optimized for cache-line/SIMD | Low - we use vendor vocab |
+
+**Explicit non-goals for llm-cost core:**
+- We don't synthesize prompts (no ML in core)
+- We don't route requests (gateway layer)
+- We don't cache (stateless CLI)
+
+These whitespaces inform the *analytics* and *policy* features, not the core tokenizer.
+
+---
+
 ## 6. Explicit Exclusions
 
 | Item | Reason | Source |
 |------|--------|--------|
 | SuperBPE | Changes tokenizer training, breaks parity | Liu et al. 2025 |
 | BoundlessBPE | Breaks tiktoken parity | Schmidt et al. 2024 |
+| **Parity-Aware BPE** | **Changes training objective, not runtime. We use vendor vocab.** | Bleeding edge 2024-25 |
+| **AG-BPE** | **Vocab/merge strategies for runtime - still changes training** | Research 2025 |
 | Binary BPE | Wrong domain (executables, not text) | Bommarito 2025 |
 | MAGNET | Requires model architecture changes | Ahia et al. 2024 |
 | R-BPE caching | Premature optimization for streaming | EMNLP 2025 |
 | BlockBPE GPU | Out of scope (GPU dependency) | ICML 2025 |
 | LoPT chunking | Only for >1MB files, defer | ArXiv 2025 |
+| **Preprocessing transducers** | **SentencePiece-specific (LLAMA2 space markers)** | - |
+| **Tenant-specific caching** | **SaaS layer, not CLI tool** | Gateway papers |
+
+**Key insight:**
+> Alle tokenizer training innovations (SuperBPE, BoundlessBPE, Parity-Aware BPE, MAGNET, AG-BPE) zijn uitgesloten omdat llm-cost vendor vocabularies gebruikt voor parity. We trainen geen tokenizers; we matchen bestaande exact.
 
 ---
 
@@ -421,9 +626,11 @@ See section 2.1 above.
 | 6 | Tokenizer-report command | 1 week | **2** | 🔄 PLANNED |
 | 7 | Fairness analyzer | 2-3 weeks | **2** | 🔄 PLANNED |
 | 8 | Scenario planner | 2 weeks | **2** | 🔄 PLANNED |
-| 9 | BPE v3 bucket queue | 1-2 weeks | **When needed** | ⏸️ DEFERRED |
-| 10 | SIMD pre-tokenizer | 1-2 weeks | **When needed** | ⏸️ DEFERRED |
-| 11 | DFA equivalence | 3-4 weeks | **Research** | 📚 BACKLOG |
+| 9 | **Policy checker** | **2 weeks** | **2** | 🔄 PLANNED |
+| 10 | BPE v3 bucket queue | 1-2 weeks | **When needed** | ⏸️ DEFERRED |
+| 11 | SIMD pre-tokenizer | 1-2 weeks | **When needed** | ⏸️ DEFERRED |
+| 12 | DFA equivalence | 3-4 weeks | **Research** | 📚 BACKLOG |
+| 13 | **Cost-as-SLO framework** | **4-6 weeks** | **Phase 3+** | 📚 RESEARCH |
 
 ---
 
@@ -434,6 +641,8 @@ See section 2.1 above.
 2. Token Tax papers - fairness metrics and analysis approach
 3. DFA for BPE - formal properties (exactness, injectivity)
 4. Differential fuzzing literature - testing methodology
+5. **Stochastic maps category framework** - formal tokenizer properties
+6. **Parity-Aware BPE** - Gini coefficient, fairness metrics (analysis only)
 
 ### Reviewed but not adopted
 1. SuperBPE (COLM 2025) - tokenizer training innovation
@@ -442,11 +651,16 @@ See section 2.1 above.
 4. MAGNET (NeurIPS 2024) - requires model changes
 5. BlockBPE (ICML 2025) - GPU-only
 6. LoPT (2025) - only for large files
+7. **Parity-Aware BPE** - training, not runtime
+8. **AG-BPE** - training, not runtime
+9. **Preprocessing transducers** - SentencePiece-specific
 
 ### For future consideration
 1. DFA construction - formal verification
 2. SIMD optimization - performance
 3. Bucket queue - O(N) complexity
+4. **Cost compiler** - requires ML, whitespace
+5. **Joint RAG planning** - extends `plan` command
 
 ---
 
@@ -457,3 +671,9 @@ See section 2.1 above.
 | 2025-01 | Initial research decisions document |
 | 2025-01 | Added Token Tax analysis, fairness features |
 | 2025-01 | Explicit rejection of SuperBPE/BoundlessBPE |
+| 2025-01 | **v1.1:** Added check-policy command |
+| 2025-01 | **v1.1:** Added Cost-as-SLO framework (research) |
+| 2025-01 | **v1.1:** Added Parity-Aware BPE, AG-BPE to exclusions |
+| 2025-01 | **v1.1:** Expanded fairness metrics (Gini, MorphScore, Vocab Util) |
+| 2025-01 | **v1.1:** Added formal properties section (injectivity, surjectivity) |
+| 2025-01 | **v1.1:** Added whitespaces section (cost compiler, joint RAG) |
