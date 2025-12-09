@@ -24,6 +24,8 @@ pub const GlobalOptions = struct {
     max_tokens: usize = 0,
     max_cost: f64 = 0.0,
     show_summary: bool = false,
+    summary_format: OutputFormat = .text,
+    quiet: bool = false,
 };
 
 pub const CliContext = struct {
@@ -45,7 +47,7 @@ pub const CliError = error{
     IoError,
 } || std.mem.Allocator.Error || engine.EngineError; // extend with engine errors
 
-pub fn main(alloc: std.mem.Allocator) !void {
+pub fn main(alloc: std.mem.Allocator) !u8 {
     var args_it = try std.process.argsWithAllocator(alloc);
     defer args_it.deinit();
 
@@ -101,7 +103,13 @@ pub fn main(alloc: std.mem.Allocator) !void {
         } else if (std.mem.eql(u8, arg, "--max-cost")) {
              if (args_it.next()) |n| ctx.opts.max_cost = std.fmt.parseFloat(f64, n) catch 0.0;
         } else if (std.mem.eql(u8, arg, "--summary")) {
-             ctx.opts.show_summary = true;
+              ctx.opts.show_summary = true;
+         } else if (std.mem.eql(u8, arg, "--summary-format")) {
+              if (args_it.next()) |fmt_str| {
+                  ctx.opts.summary_format = parseFormat(fmt_str);
+              }
+        } else if (std.mem.eql(u8, arg, "--quiet") or std.mem.eql(u8, arg, "-q")) {
+             ctx.opts.quiet = true;
         } else if (std.mem.eql(u8, arg, "--tokens-out")) {
              if (args_it.next()) |n| ctx.tokens_out = std.fmt.parseInt(usize, n, 10) catch 0;
         } else {
@@ -112,6 +120,29 @@ pub fn main(alloc: std.mem.Allocator) !void {
     }
 
     // 2. Dispatch
+    const res = dispatch(ctx);
+    if (res) |_| {
+         return ExitCode.OK;
+    } else |err| {
+         const stderr = io.getStderrWriter();
+         // Specific mapping
+         if (err == pipe_cmd.PipeError.QuotaExceeded) {
+             return ExitCode.USAGE;
+         } else if (err == error.ModelNotFound) {
+             stderr.print("Error: Model not found.\n", .{}) catch {};
+             return ExitCode.DATA_ERR;
+         } else if (err == error.UsageError) {
+             // UsageError usually already printed a message
+             return ExitCode.USAGE;
+         } else {
+             // Generic fallback
+             stderr.print("Error: {s}\n", .{@errorName(err)}) catch {};
+             return ExitCode.SOFTWARE;
+         }
+    }
+}
+
+fn dispatch(ctx: CliContext) !void {
     if (std.mem.eql(u8, ctx.subcommand, "tokens")) {
         try runTokens(ctx);
     } else if (std.mem.eql(u8, ctx.subcommand, "pipe")) {
@@ -124,6 +155,15 @@ pub fn main(alloc: std.mem.Allocator) !void {
         try printHelp();
     }
 }
+
+pub const ExitCode = struct {
+    pub const OK = 0;
+    pub const USAGE = 64;
+    pub const DATA_ERR = 65;
+    pub const NO_INPUT = 66;
+    pub const UNAVAILABLE = 69;
+    pub const SOFTWARE = 70;
+};
 
 fn parseFormat(s: []const u8) OutputFormat {
     if (std.mem.eql(u8, s, "json")) return .json;
@@ -200,6 +240,15 @@ fn runTokens(ctx: CliContext) !void {
         // If no input, effectively 0 tokens.
     }
 
+    // Explicitly check model existence in pricing DB if provided
+    if (ctx.opts.model) |specified_model| {
+        if (ctx.db.resolveModel(specified_model) == null) {
+             const stderr = io.getStderrWriter();
+             try stderr.print("Error: Model '{s}' not found in pricing database.\n", .{specified_model});
+             return error.ModelNotFound;
+        }
+    }
+
     // Config for engine
     const raw_model_name = ctx.opts.model orelse "generic";
     const spec = model_registry.ModelRegistry.resolve(raw_model_name);
@@ -231,7 +280,9 @@ fn runTokens(ctx: CliContext) !void {
         .model = model_name,
         .tokens_input = t_res.tokens,
         .tokens_output = 0,
-        .cost_usd = cost_usd,
+        .cost_input_usd = cost_usd, // Simplification: input-only command
+        .cost_output_usd = 0.0,
+        .cost_total_usd = cost_usd,
         .tokenizer = if (spec.encoding) |e| e.name else "whitespace",
         .accuracy = @tagName(spec.accuracy),
         .approximate = (cost_usd == null) or (spec.accuracy != .exact),
@@ -296,7 +347,9 @@ fn runPrice(ctx: CliContext) !void {
         .model = cost_res.model_name,
         .tokens_input = cost_res.input_tokens,
         .tokens_output = cost_res.output_tokens,
-        .cost_usd = cost_res.cost_total,
+        .cost_input_usd = cost_res.cost_input,
+        .cost_output_usd = cost_res.cost_output,
+        .cost_total_usd = cost_res.cost_total,
         .tokenizer = if (spec.encoding) |e| e.name else "whitespace",
         .accuracy = @tagName(spec.accuracy),
         .approximate = (spec.accuracy != .exact),
@@ -348,6 +401,7 @@ fn runPipe(ctx: CliContext) !void {
             .max_cost_usd = ctx.opts.max_cost,
         },
         .show_summary = ctx.opts.show_summary,
+        .summary_format = ctx.opts.summary_format,
         .mode = ctx.opts.pipe_mode,
         .fail_on_error = ctx.opts.fail_on_error,
         .special_mode = special_mode,
@@ -356,6 +410,7 @@ fn runPipe(ctx: CliContext) !void {
         .cfg = tk_cfg,
         .db = ctx.db,
         .accuracy = @tagName(spec.accuracy),
+        .quiet = ctx.opts.quiet,
     };
 
     _ = pipe_cmd.run(pipe_opts) catch |err| {

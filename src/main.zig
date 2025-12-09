@@ -9,7 +9,8 @@ pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(gpa.allocator());
     defer arena.deinit();
 
-    try cli.main(arena.allocator());
+    const exit_code = try cli.main(arena.allocator());
+    std.process.exit(exit_code);
 }
 
 test {

@@ -11,7 +11,9 @@ pub const ResultRecord = struct {
     tokens_output: usize = 0,
     tokens_reasoning: usize = 0,
 
-    cost_usd: ?f64 = null,
+    cost_input_usd: ?f64 = null,
+    cost_output_usd: ?f64 = null,
+    cost_total_usd: ?f64 = null,
 
     tokenizer: []const u8 = "unknown",
     accuracy: []const u8 = "unknown",
@@ -45,8 +47,8 @@ fn renderText(writer: anytype, data: ResultRecord) !void {
     if (data.tokens_reasoning > 0) {
         try writer.print("tokens_reasoning: {d}\n", .{data.tokens_reasoning});
     }
-    if (data.cost_usd) |cost| {
-        try writer.print("cost_usd: {d:.6}\n", .{cost});
+    if (data.cost_total_usd) |cost| {
+        try writer.print("cost_total_usd: {d:.6}\n", .{cost});
     }
 }
 

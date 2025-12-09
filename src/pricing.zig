@@ -3,6 +3,21 @@ const std = @import("std");
 /// Embedded default data
 const default_json = @embedFile("data/default_pricing.json");
 
+pub const CostBreakdown = struct {
+    tokens_input: u64,
+    tokens_output: u64,
+    cost_input_usd: f64,
+    cost_output_usd: f64,
+    cost_total_usd: f64,
+    accuracy: Accuracy,
+
+    pub const Accuracy = enum {
+        exact,
+        heuristic,
+        estimate,
+    };
+};
+
 pub const PricingModel = struct {
     name: []const u8,
     input_price_per_million: f64,
@@ -36,12 +51,27 @@ pub const PricingDB = struct {
 
         // 1. Check aliases (one-level only)
         var resolved_name = name;
-        if (root.object.get("aliases")) |aliases| {
-            if (aliases.object.get(name)) |alias_target| {
-                if (alias_target == .string) {
-                    resolved_name = alias_target.string;
-                }
+
+        // Try strict lookup first
+        const maybe_alias = root.object.get("aliases");
+        var target: ?std.json.Value = if (maybe_alias) |a| a.object.get(name) else null;
+
+        // If not found and input has '/', try stripping vendor
+        if (target == null) {
+            if (std.mem.indexOfScalar(u8, name, '/')) |idx| {
+                 const short_name = name[idx+1..];
+                 if (maybe_alias) |a| target = a.object.get(short_name);
+                 // If alias found for short name, use it.
+                 // If not, maybe short_name IS the key in models?
+                 // We handle that in next step.
+                 if (target == null) resolved_name = short_name;
             }
+        }
+
+        if (target) |alias_target| {
+             if (alias_target == .string) {
+                 resolved_name = alias_target.string;
+             }
         }
 
         // 2. Lookup in models

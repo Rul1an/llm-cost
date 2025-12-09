@@ -134,4 +134,13 @@ pub fn build(b: *std.Build) void {
     const run_bench_legacy = b.addRunArtifact(bench_legacy_exe);
     const bench_legacy_step = b.step("bench-legacy", "Run Legacy BPE benchmark");
     bench_legacy_step.dependOn(&run_bench_legacy.step);
+    // Golden Tests
+    const golden_tests = b.addTest(.{
+        .root_source_file = b.path("src/test/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const run_golden = b.addRunArtifact(golden_tests);
+    const golden_step = b.step("test-golden", "Run CLI golden tests");
+    golden_step.dependOn(&run_golden.step);
 }

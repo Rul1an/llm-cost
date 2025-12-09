@@ -69,7 +69,42 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for buil
 
 By participating in this project, you agree to abide by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-For security reports, please refer to [SECURITY.md](SECURITY.md).
+## Security & Integrity
+
+`llm-cost` is designed as a single static CLI binary with a strong focus on
+supply-chain and output correctness:
+
+- **Reproducible builds**
+  All binaries are built via `zig build` / `zig build -Doptimize=ReleaseFast`
+  using a fixed Zig toolchain (`0.13.x`).
+
+- **Pinned GitHub Actions**
+  CI and release workflows pin GitHub Actions by **commit SHA** instead of
+  floating tags (e.g. `actions/checkout@<sha>`), reducing supply-chain risk.
+
+- **Tested before every release**
+  Release builds run the full test suite before artifacts are produced:
+  - `zig build test` (unit tests)
+  - `zig build test-golden` (CLI contract + JSON/exit codes)
+  - `zig build fuzz` (tokenizer fuzz harness sanity)
+  - `zig build test-parity` (tokenization parity vs reference corpus)
+  - `zig build bench-bpe` (BPE microbenchmark smoke test)
+
+- **SBOM & signing**
+  For supported targets, the release workflow:
+  - Generates a CycloneDX SBOM (`llm-cost-<platform>.cdx.json`)
+  - Produces a signed binary plus signature and certificate:
+    - `llm-cost-<platform>`
+    - `llm-cost-<platform>.sig`
+    - `llm-cost-<platform>.crt`
+
+- **Stable CLI contract**
+  Golden tests assert **STDOUT**, **STDERR**, and **exit codes** exactly for
+  common scenarios (e.g. `tokens`, `price`, `pipe`, bad models, quota errors).
+  Breaking changes to the CLI contract must update the golden files.
+
+For details on reporting vulnerabilities, provenance, and hardening practices,
+see [`SECURITY.md`](./SECURITY.md).
 
 ## License
 
