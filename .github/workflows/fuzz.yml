@@ -16,7 +16,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v1 # TODO: Pin SHA
         with:
-          version: 0.15.1
+          version: 0.14.0
 
       - name: Run Fuzz Harness
         # Runs the "fuzz" step defined in build.zig, which executes src/fuzz_test.zig

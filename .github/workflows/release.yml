@@ -23,7 +23,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v1 # TODO: Pin SHA
         with:
-          version: 0.15.1
+          version: 0.14.0
 
       - name: Unit Tests
         run: zig build test
@@ -93,7 +93,7 @@ jobs:
       - name: Build + SBOM + Sign
         uses: Rul1an/zig-cross-compile-action@66076af8e44f186b08e2d05b5a1aa7c91c8042d6
         with:
-          version: "0.15.1"
+          version: "0.14.0"
           strict_version: true
           target: ${{ matrix.target }}
           project-type: zig
