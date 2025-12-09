@@ -26,8 +26,8 @@ pub const SpecialMode = union(enum) {
 
 pub const BpeVersion = enum {
     legacy, // Not really used in V2 engine, but for context
-    v2,     // Current Heap BPE (Text-based)
-    v2_1,   // Optimized Index+Heap BPE (Token-based)
+    v2, // Current Heap BPE (Text-based)
+    v2_1, // Optimized Index+Heap BPE (Token-based)
 };
 
 pub const TokenizerConfig = struct {

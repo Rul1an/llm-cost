@@ -118,8 +118,7 @@ const evil_corpus = [_][]const u8{
     "aaa",
     "a" ** 100,
     "a" ** 1000,
-
-    // Unicode boundaries
+        // Unicode boundaries
     "\x00", // Null
     "\x7f", // DEL
     "\x80", // First continuation byte (invalid alone)

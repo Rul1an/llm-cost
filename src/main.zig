@@ -24,7 +24,6 @@ pub const tokenizer = struct {
 ///   version   Show version information
 ///
 /// For more information: https://github.com/your-org/llm-cost
-
 const version = "0.1.0-dev";
 
 pub fn main() !void {

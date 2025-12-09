@@ -97,7 +97,7 @@ fn measureBpeOnly(alloc: std.mem.Allocator, engine: *bpe_v2.BpeEngineV2, scanner
     const avg_v21 = total_ns_v21 / iterations;
 
     if (hash_v2 != hash_v21) {
-        std.debug.print("MISMATCH in {s}: v2 hash={x}, v2.1 hash={x}\n", .{name, hash_v2, hash_v21});
+        std.debug.print("MISMATCH in {s}: v2 hash={x}, v2.1 hash={x}\n", .{ name, hash_v2, hash_v21 });
     }
 
     std.debug.print("| {s} (N={d}) | {d} | Pure | {d} | {d} | {d:.2}x |\n", .{ name, logical_len, input.len, avg_v2, avg_v21, @as(f64, @floatFromInt(avg_v2)) / @as(f64, @floatFromInt(avg_v21)) });
