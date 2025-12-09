@@ -69,42 +69,43 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for buil
 
 By participating in this project, you agree to abide by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-## Security & Integrity
+## Security & Compliance
 
-`llm-cost` is designed as a single static CLI binary with a strong focus on
-supply-chain and output correctness:
+llm-cost is ontworpen als een **offline** CLI-tool met een sterke focus op supply chain veiligheid en voorspelbaar gedrag.
 
-- **Reproducible builds**
-  All binaries are built via `zig build` / `zig build -Doptimize=ReleaseFast`
-  using a fixed Zig toolchain (`0.13.x`).
+- 🔒 **Offline by design**
+  llm-cost maakt geen netwerkverbindingen, slaat geen secrets op en leest alleen van stdin of expliciete bestanden.
 
-- **Pinned GitHub Actions**
-  CI and release workflows pin GitHub Actions by **commit SHA** instead of
-  floating tags (e.g. `actions/checkout@<sha>`), reducing supply-chain risk.
+- 🧾 **Signed releases + SBOM**
+  Alle officiële releases bevatten:
+  - ondertekende binaries (`.sig` + `.crt`),
+  - een CycloneDX SBOM (`.cdx.json`),
+  - SLSA Level 2 provenance voor build-herkomst.
 
-- **Tested before every release**
-  Release builds run the full test suite before artifacts are produced:
-  - `zig build test` (unit tests)
-  - `zig build test-golden` (CLI contract + JSON/exit codes)
-  - `zig build fuzz` (tokenizer fuzz harness sanity)
-  - `zig build test-parity` (tokenization parity vs reference corpus)
-  - `zig build bench-bpe` (BPE microbenchmark smoke test)
+- 🧱 **Reproducible CI pipeline**
+  - Zig 0.13.x gepind.
+  - GitHub Actions gepind op SHA.
+  - Release workflow draait `zig build test`, `zig build test-golden`, `zig build fuzz`, `zig build test-parity` voordat binaries worden gebouwd en gesigned.
 
-- **SBOM & signing**
-  For supported targets, the release workflow:
-  - Generates a CycloneDX SBOM (`llm-cost-<platform>.cdx.json`)
-  - Produces a signed binary plus signature and certificate:
-    - `llm-cost-<platform>`
-    - `llm-cost-<platform>.sig`
-    - `llm-cost-<platform>.crt`
+- ✅ **Supported versions & disclosure policy**
+  Zie [`SECURITY.md`](./SECURITY.md) voor:
+  - ondersteunde versies (support matrix),
+  - responsible disclosure proces,
+  - response targets (72h ack / 90d fix).
 
-- **Stable CLI contract**
-  Golden tests assert **STDOUT**, **STDERR**, and **exit codes** exactly for
-  common scenarios (e.g. `tokens`, `price`, `pipe`, bad models, quota errors).
-  Breaking changes to the CLI contract must update the golden files.
+- 🔍 **Security & verification guide**
+  Zie [`docs/security.md`](./docs/security.md) voor:
+  - stap-voor-stap verificatie van signatures & SLSA provenance,
+  - SBOM-verificatie,
+  - voorbeeld-commando’s voor enterprise omgevingen.
 
-For details on reporting vulnerabilities, provenance, and hardening practices,
-see [`SECURITY.md`](./SECURITY.md).
+- 📊 **Performance & regression testing**
+  Zie [`docs/benchmarks.md`](./docs/benchmarks.md) voor:
+  - benchmark-scripts,
+  - interpretatie van resultaten,
+  - hoe regressies gedetecteerd worden voordat een release live gaat.
+
+Als je llm-cost wilt inzetten in een streng gereguleerde omgeving (financieel, zorg, overheid) en extra informatie nodig hebt, start dan bij [`SECURITY.md`](./SECURITY.md) en [`docs/security.md`](./docs/security.md).
 
 ## License
 
