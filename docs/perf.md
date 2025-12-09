@@ -39,6 +39,26 @@ Before optimization, scaling was $O(N^2)$. Now effectively $O(N)$ / $O(N \log N)
 
 *This confirms that heap-merge solves the O(N^2) issue for multi-byte codepoints as well.*
 
+## Phase 1.5 – BPE v2 (Pure Zig)
+
+**Status**: Implemented (Dec 2025).
+**Comparison**: v2 (O(1) rank lookup and improved data structures) vs v0.3 Legacy.
+
+> **Note on earlier design sketches**:
+> Some early design notes mentioned a naive `findBestMerge()` implementation that would rescan all pairs on each merge step (O(N²) worst-case). That variant was never shipped. The current BPE v2 engine is explicitly heap-based O(N log N) with O(1) rank lookup and has been validated against the Evil Corpus parity suite.
+
+**Complexity**: Heap-based merge is technically $O(N \log N)$ worst-case, similar to v0.3. However, O(1) rank lookups and improved memory layout result in significantly better constant factors.
+
+| Input (N) | Legacy (ms) | v2 (ms) | Speedup |
+|---|---|---|---|
+| a * 4096 | ~1.08ms | ~0.80ms | 1.35x |
+| a * 8192 | ~2.21ms | ~1.54ms | 1.43x |
+| emoji * 4096 | ~2.48ms | ~1.71ms | 1.45x |
+| emoji * 8192 | ~5.11ms | ~3.40ms | 1.50x |
+
+**Scaling**: Observed behavior approaches linear ($O(N)$) for these inputs due to efficiency gains, though theoretical worst-case remains $O(N \log N)$.
+The new engine provides ~35-50% throughput improvement over the v0.3 optimized engine, while maintaining a pure Zig codebase and simpler memory model (single allocation per encoding).
+
 ### End-to-End Pipeline
 **Input A (Realistic)**: 50MB JSONL (Synthetic "realistic" sentences).
 **Input B (Stress)**: 10MB JSONL (`a*512` repeated).

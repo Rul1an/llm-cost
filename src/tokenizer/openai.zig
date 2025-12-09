@@ -1,5 +1,5 @@
 const std = @import("std");
-const bpe = @import("bpe.zig");
+const bpe = @import("bpe_v2.zig");
 const registry = @import("registry.zig");
 const pre_tokenizer = @import("pre_tokenizer.zig");
 
@@ -17,14 +17,14 @@ pub const Config = struct {
 /// Wraps the low-level BPE engine (if available).
 pub const OpenAITokenizer = struct {
     spec: registry.EncodingSpec,
-    engine: ?bpe.BpeEngine = null,
+    engine: ?bpe.BpeEngineV2 = null,
 
-    pub fn init(cfg: Config) !OpenAITokenizer {
+    pub fn init(alloc: std.mem.Allocator, cfg: Config) !OpenAITokenizer {
         // Initialize BPE engine based on spec data
-        var eng: ?bpe.BpeEngine = null;
+        var eng: ?bpe.BpeEngineV2 = null;
 
         if (cfg.spec.vocab_data.len > 0) {
-            eng = bpe.BpeEngine.init(cfg.spec.vocab_data) catch |err| {
+            eng = bpe.BpeEngineV2.init(alloc, cfg.spec.vocab_data) catch |err| {
                 if (cfg.approximate_ok) return OpenAITokenizer{ .spec = cfg.spec, .engine = null };
                 return err;
             };
@@ -43,8 +43,14 @@ pub const OpenAITokenizer = struct {
         };
     }
 
+    pub fn deinit(self: *OpenAITokenizer) void {
+        if (self.engine) |*e| {
+            e.deinit();
+        }
+    }
+
     pub fn count(self: OpenAITokenizer, alloc: std.mem.Allocator, text: []const u8) !Result {
-        if (self.engine) |eng| {
+        if (self.engine) |*eng| {
             // Determine PreTokenizer
             var pt_interface: pre_tokenizer.PreTokenizer = undefined;
             if (std.mem.eql(u8, self.spec.name, "o200k_base")) {
@@ -69,7 +75,7 @@ pub const OpenAITokenizer = struct {
 
     /// Encode text to IDs (for testing/verification).
     pub fn encode(self: OpenAITokenizer, alloc: std.mem.Allocator, text: []const u8) ![]u32 {
-        if (self.engine) |eng| {
+        if (self.engine) |*eng| {
              var pt_interface: pre_tokenizer.PreTokenizer = undefined;
             if (std.mem.eql(u8, self.spec.name, "o200k_base")) {
                  pt_interface = @import("o200k_scanner.zig").O200kScanner.interface();

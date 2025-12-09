@@ -106,10 +106,11 @@ pub fn estimateTokens(
         }
 
         // Use OpenAI-style tokenizer for known specs (BPE based)
-        var tok = openai_tok.OpenAITokenizer.init(.{
+        var tok = openai_tok.OpenAITokenizer.init(alloc, .{
             .spec = spec,
             .approximate_ok = true,
         }) catch return EngineError.TokenizerInternalError;
+        defer tok.deinit();
 
         const res = tok.count(alloc, text) catch return EngineError.TokenizerInternalError;
         return .{ .tokens = res.tokens };

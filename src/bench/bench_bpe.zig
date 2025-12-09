@@ -19,7 +19,8 @@ pub fn main() !void {
     // Note: OpenAITokenizer initialization might be cheap (pointers), but if it changes
     // to build maps, we'd want to initialize ONCE.
     // For now, it's cheap.
-    var tok = try OpenAITokenizer.init(config);
+    var tok = try OpenAITokenizer.init(alloc, config);
+    defer tok.deinit();
 
     try stdout.print("Running BPE Microbenchmark (o200k_base)...\n", .{});
     try stdout.print("| Scenario | Logical (N) | Bytes | Time (ns) | Tokens |\n", .{});

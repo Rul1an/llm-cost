@@ -70,7 +70,8 @@ test "parity evil corpus v2" {
             .spec = spec,
             .approximate_ok = false,
         };
-        var tok = try OpenAITokenizer.init(config);
+        var tok = try OpenAITokenizer.init(alloc, config);
+        defer tok.deinit();
         // Note: OpenAITokenizer holds reference to spec, doesn't need deinit explicitly unless it allocates?
         // OpenAITokenizer.init allocates BpeEngine (which references embedded data).
         // It does not allocate memory on heap for structure, just returns struct.

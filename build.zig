@@ -109,4 +109,29 @@ pub fn build(b: *std.Build) void {
     const run_bench_bpe = b.addRunArtifact(bench_bpe_exe);
     const bench_bpe_step = b.step("bench-bpe", "Run BPE microbenchmark");
     bench_bpe_step.dependOn(&run_bench_bpe.step);
+
+    // Microbenchmark BPE v2
+    const bench_bpe_v2_exe = b.addExecutable(.{
+        .name = "bench_bpe_v2",
+        .root_source_file = b.path("src/bench/bench_bpe_v2.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    bench_bpe_v2_exe.root_module.addImport("llm_cost", lib_mod);
+
+    const run_bench_bpe_v2 = b.addRunArtifact(bench_bpe_v2_exe);
+    const bench_bpe_v2_step = b.step("bench-bpe-v2", "Run BPE v2 microbenchmark");
+    bench_bpe_v2_step.dependOn(&run_bench_bpe_v2.step);
+
+    // Bench Legacy
+    const bench_legacy_exe = b.addExecutable(.{
+        .name = "bench_legacy",
+        .root_source_file = b.path("src/bench/bench_legacy.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    bench_legacy_exe.root_module.addImport("llm_cost", lib_mod);
+    const run_bench_legacy = b.addRunArtifact(bench_legacy_exe);
+    const bench_legacy_step = b.step("bench-legacy", "Run Legacy BPE benchmark");
+    bench_legacy_step.dependOn(&run_bench_legacy.step);
 }
