@@ -2,6 +2,7 @@ const std = @import("std");
 const bpe = @import("bpe_v2.zig");
 const registry = @import("registry.zig");
 const pre_tokenizer = @import("pre_tokenizer.zig");
+const engine_mod = @import("../core/engine.zig"); // For BpeVersion enum
 
 pub const Result = struct {
     tokens: usize,
@@ -11,6 +12,7 @@ pub const Result = struct {
 pub const Config = struct {
     spec: registry.EncodingSpec,
     approximate_ok: bool = false,
+    bpe_version: engine_mod.BpeVersion = .v2,
 };
 
 /// The OpenAI Tokenizer instance.
@@ -18,6 +20,7 @@ pub const Config = struct {
 pub const OpenAITokenizer = struct {
     spec: registry.EncodingSpec,
     engine: ?bpe.BpeEngineV2 = null,
+    bpe_version: engine_mod.BpeVersion,
 
     pub fn init(alloc: std.mem.Allocator, cfg: Config) !OpenAITokenizer {
         // Initialize BPE engine based on spec data
@@ -25,7 +28,7 @@ pub const OpenAITokenizer = struct {
 
         if (cfg.spec.vocab_data.len > 0) {
             eng = bpe.BpeEngineV2.init(alloc, cfg.spec.vocab_data) catch |err| {
-                if (cfg.approximate_ok) return OpenAITokenizer{ .spec = cfg.spec, .engine = null };
+                if (cfg.approximate_ok) return OpenAITokenizer{ .spec = cfg.spec, .engine = null, .bpe_version = cfg.bpe_version };
                 return err;
             };
         } else {
@@ -40,6 +43,7 @@ pub const OpenAITokenizer = struct {
         return OpenAITokenizer{
             .spec = cfg.spec,
             .engine = eng,
+            .bpe_version = cfg.bpe_version,
         };
     }
 
@@ -64,7 +68,7 @@ pub const OpenAITokenizer = struct {
             const pre_tokens = try pt_interface.tokenize(alloc, text);
             defer alloc.free(pre_tokens);
 
-            const tokens = try eng.encode(alloc, pre_tokens);
+            const tokens = try eng.encode(alloc, pre_tokens, self.bpe_version == .v2_1);
             defer alloc.free(tokens);
             return Result{ .tokens = tokens.len, .approximate = false };
         } else {
@@ -88,7 +92,7 @@ pub const OpenAITokenizer = struct {
             const pre_tokens = try pt_interface.tokenize(alloc, text);
             defer alloc.free(pre_tokens);
 
-            return eng.encode(alloc, pre_tokens);
+            return eng.encode(alloc, pre_tokens, self.bpe_version == .v2_1);
         } else {
             return error.NoEngine;
         }

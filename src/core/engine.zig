@@ -24,10 +24,17 @@ pub const SpecialMode = union(enum) {
     allow_list: []const []const u8,
 };
 
+pub const BpeVersion = enum {
+    legacy, // Not really used in V2 engine, but for context
+    v2,     // Current Heap BPE (Text-based)
+    v2_1,   // Optimized Index+Heap BPE (Token-based)
+};
+
 pub const TokenizerConfig = struct {
     spec: ?registry.EncodingSpec = null,
     /// Logical model name (e.g. "gpt-4o").
     model_name: []const u8,
+    bpe_version: BpeVersion = .v2,
 };
 
 pub const TokenResult = struct {
@@ -109,6 +116,7 @@ pub fn estimateTokens(
         var tok = openai_tok.OpenAITokenizer.init(alloc, .{
             .spec = spec,
             .approximate_ok = true,
+            .bpe_version = cfg.bpe_version,
         }) catch return EngineError.TokenizerInternalError;
         defer tok.deinit();
 

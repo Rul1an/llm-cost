@@ -8,8 +8,8 @@ const SafeUtf8Iterator = @import("utf8.zig").SafeUtf8Iterator;
 /// `(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+`
 pub const Cl100kScanner = struct {
     pub fn tokenize(_: *anyopaque, alloc: std.mem.Allocator, text: []const u8) ![]pre_tokenizer.PreToken {
-        var tokens = std.ArrayList(pre_tokenizer.PreToken).init(alloc);
-        errdefer tokens.deinit();
+        var tokens = std.ArrayList(pre_tokenizer.PreToken).initCapacity(alloc, text.len / 4) catch return error.OutOfMemory;
+        errdefer tokens.deinit(alloc);
 
         var i: usize = 0;
         while (i < text.len) {
@@ -17,59 +17,59 @@ pub const Cl100kScanner = struct {
 
             // 1. Contractions
             if (tryScanContraction(remainder)) |len| {
-                try tokens.append(.{ .text = remainder[0..len] });
+                try tokens.append(alloc, .{ .text = remainder[0..len] });
                 i += len;
                 continue;
             }
 
             // 2. Words (Letters only)
             if (tryScanWordLetters(remainder)) |len| {
-                try tokens.append(.{ .text = remainder[0..len] });
+                try tokens.append(alloc, .{ .text = remainder[0..len] });
                 i += len;
                 continue;
             }
 
             // 3. Numbers
             if (tryScanNumber(remainder)) |len| {
-                try tokens.append(.{ .text = remainder[0..len] });
+                try tokens.append(alloc, .{ .text = remainder[0..len] });
                 i += len;
                 continue;
             }
 
             // 4. Punctuation
             if (tryScanPunctuation(remainder)) |len| {
-                try tokens.append(.{ .text = remainder[0..len] });
+                try tokens.append(alloc, .{ .text = remainder[0..len] });
                 i += len;
                 continue;
             }
 
             // 5. Whitespace (Newline)
             if (tryScanWhitespaceBranch5(remainder)) |len| {
-                try tokens.append(.{ .text = remainder[0..len] });
+                try tokens.append(alloc, .{ .text = remainder[0..len] });
                 i += len;
                 continue;
             }
 
             // 6. Whitespace (Trailing)
             if (tryScanWhitespaceBranch6(remainder)) |len| {
-                try tokens.append(.{ .text = remainder[0..len] });
+                try tokens.append(alloc, .{ .text = remainder[0..len] });
                 i += len;
                 continue;
             }
 
             // 7. Whitespace (Generic)
             if (tryScanWhitespaceBranch7(remainder)) |len| {
-                try tokens.append(.{ .text = remainder[0..len] });
+                try tokens.append(alloc, .{ .text = remainder[0..len] });
                 i += len;
                 continue;
             }
 
             // Fallback: Consume 1 byte.
-            try tokens.append(.{ .text = remainder[0..1] });
+            try tokens.append(alloc, .{ .text = remainder[0..1] });
             i += 1;
         }
 
-        return tokens.toOwnedSlice();
+        return tokens.toOwnedSlice(alloc);
     }
 
     /// Helper for Words Letter prefix: [^\r\n\p{L}\p{N}]

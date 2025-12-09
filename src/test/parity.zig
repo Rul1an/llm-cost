@@ -11,38 +11,18 @@ test "parity evil corpus v2" {
     const alloc = std.testing.allocator;
 
     // Check if file exists
-    const file = std.fs.cwd().openFile(TEST_FILE, .{}) catch |err| {
+    const file_content = std.fs.cwd().readFileAlloc(alloc, TEST_FILE, 100 * 1024 * 1024) catch |err| {
         if (err == error.FileNotFound) {
             std.debug.print("\nSkipping Parity Tests: {s} not found. Run tools/gen_evil_corpus.py first.\n", .{TEST_FILE});
             return;
         }
         return err;
     };
-    defer file.close();
+    defer alloc.free(file_content);
 
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
-
-    var buf: [16384]u8 = undefined;
-
-    // Pre-load encodings to avoid re-init cost?
-    // Or just init per line for correctness testing (stateless)?
-    // Re-init is safer for isolation but slower.
-    // Let's optimize slightly by caching if expensive?
-    // Tokenizer init parses vocab. That IS expensive (mb's of data).
-    // Better to cache tokenizers.
-    // However, for cl100k, vocab is missing.
-
-    // Simple approach: Map(String -> Tokenizer)
-    // Zig doesn't have easy AutoHashMap of String->Object without management.
-    // I'll just check "o200k_base" and "cl100k_base".
-
-    // We need to load o200k.
-    // But this test runs in "test" mode.
-    // Does it have access to `embedFile` data? Yes.
-
+    var lines = std.mem.tokenizeScalar(u8, file_content, '\n');
     var line_no: usize = 0;
-    while (try in_stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+    while (lines.next()) |line| {
         line_no += 1;
         if (line.len == 0) continue;
 
@@ -66,9 +46,10 @@ test "parity evil corpus v2" {
         }
 
         // Initialize Tokenizer
-        const config = .{
+        const config = llm_cost.tokenizer.openai.Config{
             .spec = spec,
             .approximate_ok = false,
+            .bpe_version = llm_cost.engine.BpeVersion.v2_1,
         };
         var tok = try OpenAITokenizer.init(alloc, config);
         defer tok.deinit();

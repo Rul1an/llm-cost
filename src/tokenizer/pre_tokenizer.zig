@@ -25,8 +25,8 @@ pub const PreTokenizer = struct {
 /// In future versions, this will be replaced with a more robust pre-tokenizer supporting Unicode and custom rules.
 pub const LegacyPreTokenizer = struct {
     pub fn tokenize(_: *anyopaque, alloc: std.mem.Allocator, text: []const u8) ![]PreToken {
-        var tokens = std.ArrayList(PreToken).init(alloc);
-        errdefer tokens.deinit();
+        var tokens = std.ArrayList(PreToken).initCapacity(alloc, text.len / 4) catch return error.OutOfMemory;
+        errdefer tokens.deinit(alloc);
 
         var start: usize = 0;
         var i: usize = 0;
@@ -34,7 +34,7 @@ pub const LegacyPreTokenizer = struct {
             const c = text[i];
             if (std.ascii.isWhitespace(c)) {
                 if (i > start) {
-                    try tokens.append(.{ .text = text[start..i] });
+                    try tokens.append(alloc, .{ .text = text[start..i] });
                 }
                 // Skip whitespace
                 while (i < text.len and std.ascii.isWhitespace(text[i])) : (i += 1) {}
@@ -44,10 +44,10 @@ pub const LegacyPreTokenizer = struct {
             }
         }
         if (i > start) {
-            try tokens.append(.{ .text = text[start..i] });
+            try tokens.append(alloc, .{ .text = text[start..i] });
         }
 
-        return tokens.toOwnedSlice();
+        return tokens.toOwnedSlice(alloc);
     }
 
     const DummyContext = struct {};

@@ -8,8 +8,8 @@ const SafeUtf8Iterator = @import("utf8.zig").SafeUtf8Iterator;
 pub const O200kScanner = struct {
     /// Main tokenization loop matching regex priority.
     pub fn tokenize(_: *anyopaque, alloc: std.mem.Allocator, text: []const u8) ![]pre_tokenizer.PreToken {
-        var tokens = std.ArrayList(pre_tokenizer.PreToken).init(alloc);
-        errdefer tokens.deinit();
+        var tokens = std.ArrayList(pre_tokenizer.PreToken).initCapacity(alloc, text.len / 4) catch return error.OutOfMemory;
+        errdefer tokens.deinit(alloc);
 
         var i: usize = 0;
         while (i < text.len) {
@@ -34,25 +34,25 @@ pub const O200kScanner = struct {
             // "Hello": H (Upper), ello (Lower+). Matches Branch 1. Prefix empty.
 
             if (tryScanWordBranch1(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i .. i + len] });
+                try tokens.append(alloc, .{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             if (tryScanWordBranch2(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i .. i + len] });
+                try tokens.append(alloc, .{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             if (tryScanNumber(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i .. i + len] });
+                try tokens.append(alloc, .{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             if (tryScanPunctuation(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i .. i + len] });
+                try tokens.append(alloc, .{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
@@ -65,32 +65,32 @@ pub const O200kScanner = struct {
             // If punctuation fails, try whitespace.
             // 5. Branch 5: Whitespace ending in newline `\s*[\r\n]+`
             if (tryScanWhitespaceBranch5(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i .. i + len] });
+                try tokens.append(alloc, .{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             // 6. Branch 6: Trailing whitespace `\s+(?!\S)`
             if (tryScanWhitespaceBranch6(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i .. i + len] });
+                try tokens.append(alloc, .{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             // 7. Branch 7: Generic whitespace `\s+`
             if (tryScanWhitespaceBranch7(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i .. i + len] });
+                try tokens.append(alloc, .{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             // Fallback: Consume 1 byte.
             // This ensures forward progress on invalid UTF-8 or uncovered chars.
-            try tokens.append(.{ .text = text[i .. i + 1] });
+            try tokens.append(alloc, .{ .text = text[i .. i + 1] });
             i += 1;
         }
 
-        return tokens.toOwnedSlice();
+        return tokens.toOwnedSlice(alloc);
     }
 
     fn isWordUpperBody(cp: unicode.CodePoint) bool {

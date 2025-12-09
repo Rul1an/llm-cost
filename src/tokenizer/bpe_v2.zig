@@ -1,5 +1,6 @@
 const std = @import("std");
 const pre_tokenizer = @import("pre_tokenizer.zig");
+const bpe_v2_1 = @import("bpe_v2_1.zig");
 
 /// The binary file layout (Must match tools/convert_vocab.zig)
 const Header = extern struct {
@@ -28,6 +29,10 @@ pub const BpeEngineV2 = struct {
     string_blob: []const u8,
     allocator: std.mem.Allocator,
 
+    // v2.1 support tables
+    token_slices: [][]const u8,
+    byte_to_token: [256]u32,
+
     pub fn init(allocator: std.mem.Allocator, embedded_data: []const u8) !BpeEngineV2 {
         if (embedded_data.len < @sizeOf(Header)) return error.InvalidData;
 
@@ -53,20 +58,59 @@ pub const BpeEngineV2 = struct {
         var map = std.StringHashMap(u32).init(allocator);
         try map.ensureTotalCapacity(initial_capacity);
 
+        // Also build token_slices for v2.1 inverse lookup
+        // Assuming max rank is < header.count (dense), but let's be safe and alloc based on max rank found?
+        // Actually, tiktoken counts are vocabulary sizes. Ranks are 0..Count-1 usually.
+        var max_rank: u32 = 0;
+        for (index) |entry| {
+            if (entry.rank > max_rank) max_rank = entry.rank;
+        }
+
+        // Inverse table: Rank -> String
+        // Initialize with empty slices
+        var token_slices = try allocator.alloc([]const u8, max_rank + 1);
+        @memset(token_slices, "");
+
         for (index) |entry| {
             const token_slice = string_blob[entry.offset .. entry.offset + entry.len];
             map.putAssumeCapacity(token_slice, entry.rank);
+            if (entry.rank < token_slices.len) {
+                token_slices[entry.rank] = token_slice;
+            }
+        }
+
+        // Build byte_to_token map for v2.1 initial seeding
+        var byte_to_token: [256]u32 = undefined;
+        // Default to a sentinel or 0? 0 is usually UNK or valid token.
+        // Let's assume 0 for now, but usually we should find them.
+        @memset(&byte_to_token, 0);
+
+        // Scan for 1-byte tokens corresponding to all 256 bytes.
+        // For cl100k, these should exist.
+        for (0..256) |b| {
+            const byte_val = @as(u8, @intCast(b));
+            // const char_slice = string_blob[0..0]; // Dummy removed
+
+            // We search in map. Construct a 1-byte slice on stack?
+            const byte_slice = [1]u8{byte_val};
+            if (map.get(&byte_slice)) |rank| {
+                byte_to_token[b] = rank;
+            }
+            // If missing, it remains 0. Ideally should not happen for bytes used in text.
         }
 
         return BpeEngineV2{
             .rank_map = map,
             .string_blob = string_blob,
             .allocator = allocator,
+            .token_slices = token_slices,
+            .byte_to_token = byte_to_token,
         };
     }
 
     pub fn deinit(self: *BpeEngineV2) void {
         self.rank_map.deinit();
+        self.allocator.free(self.token_slices);
     }
 
     pub fn getRank(self: BpeEngineV2, token: []const u8) ?u32 {
@@ -74,23 +118,86 @@ pub const BpeEngineV2 = struct {
     }
 
     /// Encode pre-tokenized text segments.
-    pub fn encode(self: *const BpeEngineV2, alloc: std.mem.Allocator, pre_tokens: []const pre_tokenizer.PreToken) ![]u32 {
-        var tokens = std.ArrayList(u32).init(alloc);
-        errdefer tokens.deinit();
+    /// Supports switching between "v2" (text-based heap) and "v2_1" (index-based heap).
+    /// `version` arg controls the engine implementation.
+    /// Note: engine.zig should propagate the version from config.
+    pub fn encode(self: *const BpeEngineV2, alloc: std.mem.Allocator, pre_tokens: []const pre_tokenizer.PreToken, use_v2_1: bool) ![]u32 {
+        var tokens = std.ArrayList(u32).initCapacity(alloc, pre_tokens.len) catch return error.OutOfMemory;
+        errdefer tokens.deinit(alloc);
 
         for (pre_tokens) |pt| {
             if (pt.is_special) {
-                // TODO: when we support special token IDs via vocab, handle them here.
-                // For now, pre_tokenizer should not produce is_special=true for o200k/cl100k parity paths.
-                // If we hit this, it's a logic error or unsupported feature usage.
-                std.debug.assert(false);
-                try tokens.append(0);
+                std.debug.assert(false); // Should not happen in current paths
+                try tokens.append(alloc, 0);
             } else {
-                try self.encodeWord(alloc, pt.text, &tokens);
+                if (use_v2_1) {
+                    try self.encodeWordV2_1(alloc, pt.text, &tokens);
+                } else {
+                    try self.encodeWord(alloc, pt.text, &tokens);
+                }
             }
         }
 
-        return tokens.toOwnedSlice();
+        return tokens.toOwnedSlice(alloc);
+    }
+
+    /// Lookup table adapter for bpe_v2_1
+    const TextLookupTable = struct {
+        engine: *const BpeEngineV2,
+
+        pub fn lookup(self: TextLookupTable, left: u32, right: u32) ?struct{id: u32, rank: u32} {
+            // Reconstruct the pair string
+            // We use a small static buffer optimization if possible, or alloc.
+            // But we can't easily alloc here without an allocator passed to lookup.
+            // BPeEngineV2 has .allocator but it is not arena-scoped.
+            // HOWEVER: We can use the engine's rank_map directly if we have the string.
+            // left/right act as indices into token_slices.
+            if (left >= self.engine.token_slices.len or right >= self.engine.token_slices.len) return null;
+
+            const s1 = self.engine.token_slices[left];
+            const s2 = self.engine.token_slices[right];
+
+            // Fast path for small strings (most BPE pairs)
+            var buf: [128]u8 = undefined;
+            if (s1.len + s2.len <= buf.len) {
+                const total_len = s1.len + s2.len;
+                @memcpy(buf[0..s1.len], s1);
+                @memcpy(buf[s1.len..total_len], s2);
+                if (self.engine.rank_map.get(buf[0..total_len])) |r| {
+                    return .{ .id = r, .rank = r };
+                }
+            } else {
+                // Large string fallback (allocating)
+                const concat = self.engine.allocator.alloc(u8, s1.len + s2.len) catch return null; // Swallow error? bpe_v2_1 expects ?Entry
+                defer self.engine.allocator.free(concat);
+                @memcpy(concat[0..s1.len], s1);
+                @memcpy(concat[s1.len..], s2);
+                if (self.engine.rank_map.get(concat)) |r| {
+                    return .{ .id = r, .rank = r };
+                }
+            }
+            return null;
+        }
+    };
+
+    fn encodeWordV2_1(self: *const BpeEngineV2, alloc: std.mem.Allocator, word: []const u8, output: *std.ArrayList(u32)) !void {
+        if (word.len == 0) return;
+
+        // 1. Map bytes to initial tokens
+        var initial_tokens = try std.ArrayList(u32).initCapacity(alloc, word.len);
+        defer initial_tokens.deinit(alloc);
+
+        for (word) |b| {
+            initial_tokens.appendAssumeCapacity(self.byte_to_token[b]);
+        }
+
+        // 2. Call v2.1 Engine
+        const table = TextLookupTable{ .engine = self };
+        const res = try bpe_v2_1.encodeLinear(alloc, initial_tokens.items, &table);
+        defer alloc.free(res); // result is owned by alloc (arena from caller)
+
+        // 3. Append to output
+        try output.appendSlice(alloc, res);
     }
 
     /// Core BPE Merge for a single word
@@ -132,7 +239,7 @@ pub const BpeEngineV2 = struct {
         };
 
         var nodes = try std.ArrayList(Node).initCapacity(alloc, word.len);
-        defer nodes.deinit();
+        defer nodes.deinit(alloc);
 
         // Used to track valid merges
         const Merge = struct {
@@ -265,14 +372,14 @@ pub const BpeEngineV2 = struct {
             const n = nodes.items[curr];
             const piece = word[n.offset .. n.offset + n.len];
             if (self.getRank(piece)) |r| {
-                try output.append(r);
+                try output.append(alloc, r);
             } else {
                 // Fallback for bytes that didn't merge into anything?
                 // Usually bytes map to ranks. If not, UNK (0).
                 // Actually, in Tiktoken vocabs, every byte usually has a rank.
                 // If we get here, our vocab definition is incomplete or data corrupted.
                 std.debug.assert(false);
-                try output.append(0);
+                try output.append(alloc, 0);
             }
             curr = n.next;
         }
