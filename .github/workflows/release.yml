@@ -88,7 +88,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build + SBOM + Sign
-        uses: Rul1an/zig-cross-compile-action@c448b94651afcdc2b56d93789acd7ccc74224e22
+        uses: Rul1an/zig-cross-compile-action@66076af8e44f186b08e2d05b5a1aa7c91c8042d6
         with:
           version: "0.13.0"
           strict_version: true
