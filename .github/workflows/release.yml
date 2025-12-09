@@ -54,84 +54,69 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-linux-gnu
             suffix: linux-x86_64
+            binary: llm-cost
+            do_sbom: true
+            do_sign: true
           - os: ubuntu-latest
             target: x86_64-linux-musl
             suffix: linux-x86_64-musl
+            binary: llm-cost
+            do_sbom: true
+            do_sign: true
           - os: ubuntu-latest
             target: aarch64-linux-gnu
             suffix: linux-arm64
+            binary: llm-cost
+            do_sbom: true
+            do_sign: true
           - os: ubuntu-latest
             target: x86_64-windows-gnu
             suffix: windows-x86_64.exe
+            binary: llm-cost.exe
+            do_sbom: true
+            do_sign: true
           - os: macos-latest
             target: aarch64-macos
             suffix: macos-arm64
+            binary: llm-cost
+            do_sbom: false
+            do_sign: false
 
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
 
-      # 1. Setup Toolchain (Pinned)
-      - name: Setup Zig Cross-Compiler
-        uses: Rul1an/zig-cross-compile-action@v2
+      - name: Build + SBOM + Sign
+        uses: Rul1an/zig-cross-compile-action@c448b94651afcdc2b56d93789acd7ccc74224e22
         with:
-          version: '0.13.0'        # Explicitly pin to 0.13.0
+          version: "0.13.0"
+          strict_version: true
           target: ${{ matrix.target }}
-          project-type: custom
-          verify-level: basic
-          cmd: ":"
+          project-type: zig
+          cmd: "-Doptimize=ReleaseFast"
+          use_cache: true
+          sbom: ${{ matrix.do_sbom }}
+          sbom_target: "zig-out/bin/${{ matrix.binary }}"
+          sbom_output: "dist/llm-cost-${{ matrix.suffix }}.cdx.json"
+          sign: ${{ matrix.do_sign }}
+          sign_artifact: "zig-out/bin/${{ matrix.binary }}"
 
-      # 2. Build
-      - name: Build
-        # Network access ideally restricted here, but not enforced via firewall in standard runners
+      - name: Stage Artifacts
         run: |
-          zig build -Doptimize=ReleaseFast -Dtarget=${{ matrix.target }}
           mkdir -p dist
-          case "${{ matrix.target }}" in
-            x86_64-windows-gnu)
-              cp zig-out/bin/llm-cost.exe "dist/llm-cost-${{ matrix.suffix }}"
-              ;;
-            *)
-              cp zig-out/bin/llm-cost "dist/llm-cost-${{ matrix.suffix }}"
-              ;;
-          esac
+          cp "zig-out/bin/${{ matrix.binary }}" "dist/llm-cost-${{ matrix.suffix }}"
+          # Move signatures and certificates if they exist (created by v3 in zig-out/bin alongside the binary)
+          if [ "${{ matrix.do_sign }}" = "true" ]; then
+            cp "zig-out/bin/${{ matrix.binary }}.sig" "dist/llm-cost-${{ matrix.suffix }}.sig"
+            cp "zig-out/bin/${{ matrix.binary }}.crt" "dist/llm-cost-${{ matrix.suffix }}.crt"
+          fi
 
-      # 3. Smoke Test
       - name: Smoke Test
-        if: (matrix.target == 'x86_64-linux-gnu' && matrix.os == 'ubuntu-latest') || (matrix.target == 'aarch64-macos' && matrix.os == 'macos-latest')
+        if: matrix.target == 'x86_64-linux-gnu' || matrix.target == 'aarch64-macos'
         run: |
-          ./zig-out/bin/llm-cost tokens --model gpt-4o <<< "Hello world"
+          ./dist/llm-cost-${{ matrix.suffix }} tokens --model gpt-4o <<< "Hello world"
 
-      # 4. Generate SBOM (Syft)
-      - name: Install Syft
-        uses: anchore/sbom-action/download-syft@v0.16.0 # Pinned to specific tag v0.16.0
-        with:
-          syft-version: v1.18.0
-
-      - name: Generate SBOM (CycloneDX)
-        run: |
-          mkdir -p dist/sbom
-          # Syft scans the single binary file
-          syft packages file:dist/llm-cost-${{ matrix.suffix }} \
-            -o cyclonedx-json=dist/sbom/llm-cost-${{ matrix.suffix }}.cdx.json
-
-      # 5. Sign Artifacts (Cosign Keyless)
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@v3.6.0 # Pinned version
-
-      - name: Sign Binary
-        env:
-          COSIGN_EXPERIMENTAL: "true"
-        run: |
-          # Sign the binary blob
-          cosign sign-blob \
-            --yes \
-            --output-signature dist/llm-cost-${{ matrix.suffix }}.sig \
-            --output-certificate dist/llm-cost-${{ matrix.suffix }}.crt \
-            dist/llm-cost-${{ matrix.suffix }}
-
-      # 6. Upload All Artifacts
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -140,7 +125,7 @@ jobs:
             dist/llm-cost-${{ matrix.suffix }}
             dist/llm-cost-${{ matrix.suffix }}.sig
             dist/llm-cost-${{ matrix.suffix }}.crt
-            dist/sbom/llm-cost-${{ matrix.suffix }}.cdx.json
+            dist/llm-cost-${{ matrix.suffix }}.cdx.json
 
   release:
     needs: build-matrix
