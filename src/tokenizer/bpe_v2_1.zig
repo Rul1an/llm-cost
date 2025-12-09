@@ -118,22 +118,21 @@ pub const MergeCandidate = struct {
     left_pos: Index,
     rank: u32,
 
-    pub fn compare(context: void, a: MergeCandidate, b: MergeCandidate) std.math.Order {
+    pub fn lessThan(context: void, a: MergeCandidate, b: MergeCandidate) bool {
         _ = context;
-        if (a.rank < b.rank) return .lt;
-        if (a.rank > b.rank) return .gt;
-        if (a.left_pos < b.left_pos) return .lt;
-        if (a.left_pos > b.left_pos) return .gt;
-        return .eq;
+        if (a.rank < b.rank) return true;
+        if (a.rank > b.rank) return false;
+        if (a.left_pos < b.left_pos) return true;
+        return false;
     }
 };
 
 pub const MergeQueue = struct {
-    pq: std.PriorityQueue(MergeCandidate, void, MergeCandidate.compare),
+    pq: std.PriorityQueue(MergeCandidate, void, MergeCandidate.lessThan),
 
     pub fn init(allocator: std.mem.Allocator) MergeQueue {
         return .{
-            .pq = std.PriorityQueue(MergeCandidate, void, MergeCandidate.compare).init(allocator, {}),
+            .pq = std.PriorityQueue(MergeCandidate, void, MergeCandidate.lessThan).init(allocator, {}),
         };
     }
 

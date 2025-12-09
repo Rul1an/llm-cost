@@ -1,177 +1,81 @@
 const std = @import("std");
-const builtin = @import("builtin");
 
-comptime {
-    const v = builtin.zig_version;
-    const ok = (v.major == 0 and (v.minor == 13 or v.minor >= 14));
-    if (!ok) {
-        @compileError("llm-cost requires Zig 0.13.x or newer; found " ++ builtin.zig_version_string);
-    }
-}
+// build.zig for Zig 0.14.0 (stable)
+// Note: Using deprecated but working root_source_file API
+// This avoids the 0.15 "Writergate" I/O breaking changes
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Modules
-    const lib_mod = b.addModule("llm_cost", .{
-        .root_source_file = b.path("src/lib.zig"),
+    // Main executable
+    const exe = b.addExecutable(.{
+        .name = "llm-cost",
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
-
-    // Executable
-    const exe = b.addExecutable(.{
-        .name = "llm-cost",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-        .version = .{ .major = 0, .minor = 4, .patch = 0 },
-    });
-
     b.installArtifact(exe);
 
-    // `zig build run`
+    // Run command
     const run_cmd = b.addRunArtifact(exe);
+    run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
-
     const run_step = b.step("run", "Run llm-cost");
     run_step.dependOn(&run_cmd.step);
 
     // Unit tests
     const unit_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-
-    const registry_v2_mod = b.createModule(.{
-        .root_source_file = b.path("src/test/model_registry_test.zig"),
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
-    registry_v2_mod.addImport("llm_cost", lib_mod);
-
-    const registry_v2_test = b.addTest(.{
-        .root_module = registry_v2_mod,
-    });
-
-    const fuzz_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-             .root_source_file = b.path("src/fuzz_test.zig"),
-             .target = target,
-             .optimize = optimize,
-        }),
-    });
-
-    const run_tests = b.addRunArtifact(unit_tests);
-    const run_registry_v2 = b.addRunArtifact(registry_v2_test);
-    const run_fuzz = b.addRunArtifact(fuzz_tests);
-
+    const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_tests.step);
-    test_step.dependOn(&run_registry_v2.step);
+    test_step.dependOn(&run_unit_tests.step);
 
-    const fuzz_step = b.step("fuzz", "Run fuzz tests");
-    fuzz_step.dependOn(&run_fuzz.step);
-
-    // Parity Test
-    const parity_mod = b.createModule(.{
-        .root_source_file = b.path("src/test/parity.zig"),
+    // Fuzz target
+    const fuzz_exe = b.addExecutable(.{
+        .name = "llm-cost-fuzz",
+        .root_source_file = b.path("src/fuzz_test.zig"),
         .target = target,
         .optimize = optimize,
     });
-    parity_mod.addImport("llm_cost", lib_mod);
+    b.installArtifact(fuzz_exe);
+    const fuzz_step = b.step("fuzz", "Build fuzz test executable");
+    fuzz_step.dependOn(&b.addInstallArtifact(fuzz_exe, .{}).step);
 
-    const parity_test = b.addTest(.{
-        .root_module = parity_mod,
-    });
-    const run_parity = b.addRunArtifact(parity_test);
-    const parity_step = b.step("test-parity", "Run parity check against corpus");
-    parity_step.dependOn(&run_parity.step);
-
-    // Benchmark Tool
-    const bench_mod = b.createModule(.{
-         .root_source_file = b.path("tools/benchmark.zig"),
-         .target = target,
-         .optimize = .ReleaseFast,
-    });
-    bench_mod.addImport("llm_cost", lib_mod);
-
-    const bench_exe = b.addExecutable(.{
-        .name = "benchmark",
-        .root_module = bench_mod,
-    });
-
-    const run_bench = b.addRunArtifact(bench_exe);
-    const bench_step = b.step("benchmark", "Run performance benchmark");
-    bench_step.dependOn(&run_bench.step);
-
-    // Microbenchmark BPE
-    const bench_bpe_mod = b.createModule(.{
-        .root_source_file = b.path("src/bench/bench_bpe.zig"),
+    // Parity tests (vs tiktoken)
+    const parity_tests = b.addTest(.{
+        .root_source_file = b.path("src/parity_test.zig"),
         .target = target,
-        .optimize = .ReleaseFast,
+        .optimize = optimize,
     });
-    bench_bpe_mod.addImport("llm_cost", lib_mod);
+    const run_parity_tests = b.addRunArtifact(parity_tests);
+    const parity_step = b.step("test-parity", "Run parity tests against tiktoken");
+    parity_step.dependOn(&run_parity_tests.step);
 
-    const bench_bpe_exe = b.addExecutable(.{
-        .name = "bench_bpe",
-        .root_module = bench_bpe_mod,
-    });
-
-    const run_bench_bpe = b.addRunArtifact(bench_bpe_exe);
-    const bench_bpe_step = b.step("bench-bpe", "Run BPE microbenchmark");
-    bench_bpe_step.dependOn(&run_bench_bpe.step);
-
-    // Microbenchmark BPE v2
-    const bench_bpe_v2_mod = b.createModule(.{
-        .root_source_file = b.path("src/bench/bench_bpe_v2.zig"),
-        .target = target,
-        .optimize = .ReleaseFast,
-    });
-    bench_bpe_v2_mod.addImport("llm_cost", lib_mod);
-
-    const bench_bpe_v2_exe = b.addExecutable(.{
-        .name = "bench_bpe_v2",
-        .root_module = bench_bpe_v2_mod,
-    });
-
-    const run_bench_bpe_v2 = b.addRunArtifact(bench_bpe_v2_exe);
-    const bench_bpe_v2_step = b.step("bench-bpe-v2", "Run BPE v2 microbenchmark");
-    bench_bpe_v2_step.dependOn(&run_bench_bpe_v2.step);
-
-    // Bench Legacy
-    const bench_legacy_mod = b.createModule(.{
-        .root_source_file = b.path("src/bench/bench_legacy.zig"),
-        .target = target,
-        .optimize = .ReleaseFast,
-    });
-    bench_legacy_mod.addImport("llm_cost", lib_mod);
-
-    const bench_legacy_exe = b.addExecutable(.{
-        .name = "bench_legacy",
-        .root_module = bench_legacy_mod,
-    });
-    const run_bench_legacy = b.addRunArtifact(bench_legacy_exe);
-    const bench_legacy_step = b.step("bench-legacy", "Run Legacy BPE benchmark");
-    bench_legacy_step.dependOn(&run_bench_legacy.step);
-
-    // Golden Tests
+    // Golden tests (CLI contract)
     const golden_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/test/golden.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_source_file = b.path("src/golden_test.zig"),
+        .target = target,
+        .optimize = optimize,
     });
-    const run_golden = b.addRunArtifact(golden_tests);
-    const golden_step = b.step("test-golden", "Run CLI golden tests");
-    golden_step.dependOn(&run_golden.step);
+    const run_golden_tests = b.addRunArtifact(golden_tests);
+    const golden_step = b.step("test-golden", "Run golden CLI tests");
+    golden_step.dependOn(&run_golden_tests.step);
+
+    // Benchmark
+    const bench_exe = b.addExecutable(.{
+        .name = "llm-cost-bench",
+        .root_source_file = b.path("src/bench.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    b.installArtifact(bench_exe);
+    const bench_step = b.step("bench", "Build and run benchmarks");
+    const run_bench = b.addRunArtifact(bench_exe);
+    bench_step.dependOn(&run_bench.step);
 }

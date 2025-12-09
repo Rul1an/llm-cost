@@ -34,19 +34,19 @@ pub const O200kScanner = struct {
             // "Hello": H (Upper), ello (Lower+). Matches Branch 1. Prefix empty.
 
             if (tryScanWordBranch1(text[i..])) |len| {
-                try tokens.append(alloc, .{ .text = text[i .. i + len] });
+                try tokens.append(.{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             if (tryScanWordBranch2(text[i..])) |len| {
-                try tokens.append(alloc, .{ .text = text[i .. i + len] });
+                try tokens.append(.{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             if (tryScanNumber(text[i..])) |len| {
-                try tokens.append(alloc, .{ .text = text[i .. i + len] });
+                try tokens.append(.{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }

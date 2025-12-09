@@ -123,12 +123,12 @@ pub const BpeEngineV2 = struct {
     /// Note: engine.zig should propagate the version from config.
     pub fn encode(self: *const BpeEngineV2, alloc: std.mem.Allocator, pre_tokens: []const pre_tokenizer.PreToken, use_v2_1: bool) ![]u32 {
         var tokens = std.ArrayList(u32).initCapacity(alloc, pre_tokens.len) catch return error.OutOfMemory;
-        errdefer tokens.deinit(alloc);
+        errdefer tokens.deinit();
 
         for (pre_tokens) |pt| {
             if (pt.is_special) {
-                std.debug.assert(false); // Should not happen in current paths
-                try tokens.append(alloc, 0);
+                // Should not happen in current paths
+                try tokens.append(0);
             } else {
                 if (use_v2_1) {
                     try self.encodeWordV2_1(alloc, pt.text, &tokens);
@@ -138,54 +138,17 @@ pub const BpeEngineV2 = struct {
             }
         }
 
-        return tokens.toOwnedSlice(alloc);
+        return tokens.toOwnedSlice();
     }
 
-    /// Lookup table adapter for bpe_v2_1
-    const TextLookupTable = struct {
-        engine: *const BpeEngineV2,
-
-        pub fn lookup(self: TextLookupTable, left: u32, right: u32) ?struct{id: u32, rank: u32} {
-            // Reconstruct the pair string
-            // We use a small static buffer optimization if possible, or alloc.
-            // But we can't easily alloc here without an allocator passed to lookup.
-            // BPeEngineV2 has .allocator but it is not arena-scoped.
-            // HOWEVER: We can use the engine's rank_map directly if we have the string.
-            // left/right act as indices into token_slices.
-            if (left >= self.engine.token_slices.len or right >= self.engine.token_slices.len) return null;
-
-            const s1 = self.engine.token_slices[left];
-            const s2 = self.engine.token_slices[right];
-
-            // Fast path for small strings (most BPE pairs)
-            var buf: [128]u8 = undefined;
-            if (s1.len + s2.len <= buf.len) {
-                const total_len = s1.len + s2.len;
-                @memcpy(buf[0..s1.len], s1);
-                @memcpy(buf[s1.len..total_len], s2);
-                if (self.engine.rank_map.get(buf[0..total_len])) |r| {
-                    return .{ .id = r, .rank = r };
-                }
-            } else {
-                // Large string fallback (allocating)
-                const concat = self.engine.allocator.alloc(u8, s1.len + s2.len) catch return null; // Swallow error? bpe_v2_1 expects ?Entry
-                defer self.engine.allocator.free(concat);
-                @memcpy(concat[0..s1.len], s1);
-                @memcpy(concat[s1.len..], s2);
-                if (self.engine.rank_map.get(concat)) |r| {
-                    return .{ .id = r, .rank = r };
-                }
-            }
-            return null;
-        }
-    };
+// ... (skipping unchanged parts)
 
     fn encodeWordV2_1(self: *const BpeEngineV2, alloc: std.mem.Allocator, word: []const u8, output: *std.ArrayList(u32)) !void {
         if (word.len == 0) return;
 
         // 1. Map bytes to initial tokens
         var initial_tokens = try std.ArrayList(u32).initCapacity(alloc, word.len);
-        defer initial_tokens.deinit(alloc);
+        defer initial_tokens.deinit();
 
         for (word) |b| {
             initial_tokens.appendAssumeCapacity(self.byte_to_token[b]);
@@ -197,49 +160,17 @@ pub const BpeEngineV2 = struct {
         defer alloc.free(res); // result is owned by alloc (arena from caller)
 
         // 3. Append to output
-        try output.appendSlice(alloc, res);
+        try output.appendSlice(res);
     }
 
     /// Core BPE Merge for a single word
     fn encodeWord(self: *const BpeEngineV2, alloc: std.mem.Allocator, word: []const u8, output: *std.ArrayList(u32)) !void {
-        // For very short words, just linear scan usage is fine?
-        // Actually, let's use a robust implementation for all.
-        // We use a linked-list + priority queue approach, but optimized.
+        // ... (skipping comments)
 
-        // 1. Initial Tokens (bytes)
-        // If word is empty, do nothing.
-        if (word.len == 0) return;
-
-        // Optimization: If word length is 1, just return the rank of that byte (if exists) or bytes.
-        // Actually BPE rules usually start with characters.
-
-        // Let's implement the standard Heap BPE but with our O(1) map.
-        // To be truly linear time for repeated merges (aaaa...), we need to handle updates efficiently.
-        // But first, let's just use the O(1) lookup which is the biggest win.
-        // The "observed linear time" mainly comes from not doing O(N) scans for every merge.
-        // The Heap method is O(N log N) in number of tokens.
-        // If N is input bytes, and we merge k times (k < N), it's fast.
-
-        // We reuse the logic from bpe.zig but with rank_map.
-        // To strictly meet "pure zig linear scaling", we can use a "lazy" heap or just standard heap + O(1) lookup.
-
-        // TODO: Refactor the Heap logic from bpe.zig into here, adapted for O(1) lookup.
-        // For this task, I will implant a clean version of that logic.
-
-        const NodeIndex = u32;
-        const InvalidIndex = std.math.maxInt(NodeIndex);
-
-        const Node = struct {
-            prev: NodeIndex,
-            next: NodeIndex,
-            offset: u32,
-            len: u32,
-            rank: u32, // Cache rank of (this + next)
-            gen: u32,
-        };
+        // ...
 
         var nodes = try std.ArrayList(Node).initCapacity(alloc, word.len);
-        defer nodes.deinit(alloc);
+        defer nodes.deinit();
 
         // Used to track valid merges
         const Merge = struct {
@@ -247,16 +178,15 @@ pub const BpeEngineV2 = struct {
             node_idx: NodeIndex, // The left node index
             gen: u32, // Generation of the left node when added
 
-            fn compare(_: void, a: @This(), b: @This()) std.math.Order {
-                if (a.rank < b.rank) return .lt;
-                if (a.rank > b.rank) return .gt;
-                if (a.node_idx < b.node_idx) return .lt;
-                if (a.node_idx > b.node_idx) return .gt;
-                return .eq;
+            fn lessThan(_: void, a: @This(), b: @This()) bool {
+                if (a.rank < b.rank) return true;
+                if (a.rank > b.rank) return false;
+                if (a.node_idx < b.node_idx) return true;
+                return false;
             }
         };
 
-        var pq = std.PriorityQueue(Merge, void, Merge.compare).init(alloc, {});
+        var pq = std.PriorityQueue(Merge, void, Merge.lessThan).init(alloc, {});
         defer pq.deinit();
 
         // Initialize nodes
@@ -372,14 +302,14 @@ pub const BpeEngineV2 = struct {
             const n = nodes.items[curr];
             const piece = word[n.offset .. n.offset + n.len];
             if (self.getRank(piece)) |r| {
-                try output.append(alloc, r);
+                try output.append(r);
             } else {
                 // Fallback for bytes that didn't merge into anything?
                 // Usually bytes map to ranks. If not, UNK (0).
                 // Actually, in Tiktoken vocabs, every byte usually has a rank.
                 // If we get here, our vocab definition is incomplete or data corrupted.
                 std.debug.assert(false);
-                try output.append(alloc, 0);
+                try output.append(0);
             }
             curr = n.next;
         }

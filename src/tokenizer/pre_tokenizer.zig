@@ -25,21 +25,22 @@ pub const PreTokenizer = struct {
 /// In future versions, this will be replaced with a more robust pre-tokenizer supporting Unicode and custom rules.
 pub const LegacyPreTokenizer = struct {
     pub fn tokenize(_: *anyopaque, alloc: std.mem.Allocator, text: []const u8) ![]PreToken {
-        var tokens = std.ArrayList(PreToken).initCapacity(alloc, text.len / 4) catch return error.OutOfMemory;
-        errdefer tokens.deinit(alloc);
+        // Default implementation: split by generic delimeters logic or provided regex
+        // Current simple fallback: whitespace
+        var tokens = try std.ArrayList(PreToken).initCapacity(alloc, text.len / 4);
+        errdefer tokens.deinit();
 
-        var start: usize = 0;
         var i: usize = 0;
         while (i < text.len) {
-            const c = text[i];
-            if (std.ascii.isWhitespace(c)) {
-                if (i > start) {
-                    try tokens.append(alloc, .{ .text = text[start..i] });
-                }
-                // Skip whitespace
-                while (i < text.len and std.ascii.isWhitespace(text[i])) : (i += 1) {}
-                start = i;
-            } else {
+            const start = i;
+            // Basic split by space
+            while (i < text.len and text[i] != ' ') : (i += 1) {}
+
+            if (i > start) {
+                try tokens.append(.{ .text = text[start..i] });
+            }
+            while (i < text.len and text[i] == ' ') {
+                try tokens.append(.{ .text = text[i..i+1] });
                 i += 1;
             }
         }

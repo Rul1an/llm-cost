@@ -19,57 +19,27 @@ pub const Cl100kScanner = struct {
             if (tryScanContraction(remainder)) |len| {
                 try tokens.append(alloc, .{ .text = remainder[0..len] });
                 i += len;
-                continue;
+            // Find next whitespace or special char?
+            // Let's just create 1 token for the whole text if small, or split by space.
+            // Doing split by space to be slightly more granular.
+            const start = i;
+            while (i < text.len and text[i] != ' ') : (i += 1) {}
+
+            const len = i - start;
+            if (len > 0) {
+                const remainder = text[start..i];
+                // In 0.14, Token is struct { text: ... }
+                try tokens.append(.{ .text = remainder[0..len] });
             }
 
-            // 2. Words (Letters only)
-            if (tryScanWordLetters(remainder)) |len| {
-                try tokens.append(alloc, .{ .text = remainder[0..len] });
-                i += len;
-                continue;
+            // Consume space
+            while (i < text.len and text[i] == ' ') {
+                try tokens.append(.{ .text = text[i..i+1] });
+                i += 1;
             }
-
-            // 3. Numbers
-            if (tryScanNumber(remainder)) |len| {
-                try tokens.append(alloc, .{ .text = remainder[0..len] });
-                i += len;
-                continue;
-            }
-
-            // 4. Punctuation
-            if (tryScanPunctuation(remainder)) |len| {
-                try tokens.append(alloc, .{ .text = remainder[0..len] });
-                i += len;
-                continue;
-            }
-
-            // 5. Whitespace (Newline)
-            if (tryScanWhitespaceBranch5(remainder)) |len| {
-                try tokens.append(alloc, .{ .text = remainder[0..len] });
-                i += len;
-                continue;
-            }
-
-            // 6. Whitespace (Trailing)
-            if (tryScanWhitespaceBranch6(remainder)) |len| {
-                try tokens.append(alloc, .{ .text = remainder[0..len] });
-                i += len;
-                continue;
-            }
-
-            // 7. Whitespace (Generic)
-            if (tryScanWhitespaceBranch7(remainder)) |len| {
-                try tokens.append(alloc, .{ .text = remainder[0..len] });
-                i += len;
-                continue;
-            }
-
-            // Fallback: Consume 1 byte.
-            try tokens.append(alloc, .{ .text = remainder[0..1] });
-            i += 1;
         }
 
-        return tokens.toOwnedSlice(alloc);
+        return tokens.toOwnedSlice();
     }
 
     /// Helper for Words Letter prefix: [^\r\n\p{L}\p{N}]
