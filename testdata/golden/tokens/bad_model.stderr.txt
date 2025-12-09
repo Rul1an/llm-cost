@@ -1,0 +1,2 @@
+Error: Model 'foo/bar' not found in pricing database.
+Error: Model not found.

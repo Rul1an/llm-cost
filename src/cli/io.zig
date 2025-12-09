@@ -3,7 +3,6 @@ const builtin = @import("builtin");
 const posix = std.posix;
 
 /// --- STDIN / STDOUT / STDERR via raw fds (POSIX) or std.io (Windows) ---
-
 fn stdinRead(_: *const anyopaque, buf: []u8) anyerror!usize {
     if (builtin.os.tag == .windows) {
         return std.io.getStdIn().read(buf);
@@ -50,7 +49,6 @@ pub fn getStderrWriter() std.io.AnyWriter {
 }
 
 /// --- Files via std.fs.File (correctly opened with modes) ---
-
 fn fileRead(ctx: *const anyopaque, buf: []u8) anyerror!usize {
     const file: *const std.fs.File = @ptrCast(@alignCast(ctx));
     return file.read(buf);

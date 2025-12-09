@@ -4,15 +4,13 @@ const builtin = @import("builtin");
 comptime {
     // Hard: 0.13.x only. Patch versions allowed, 0.14+ not.
     if (!(builtin.zig_version.major == 0 and builtin.zig_version.minor == 13)) {
-        @compileError("llm-cost v0.3 currently requires Zig 0.13.x; found " ++ builtin.zig_version_string);
+        @compileError("llm-cost v0.4 currently requires Zig 0.13.x; found " ++ builtin.zig_version_string);
     }
 }
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-
-
 
     // Modules
     const lib_mod = b.addModule("llm_cost", .{
@@ -27,6 +25,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .version = .{ .major = 0, .minor = 4, .patch = 0 },
     });
 
     b.installArtifact(exe);
@@ -82,8 +81,6 @@ pub fn build(b: *std.Build) void {
     const parity_step = b.step("test-parity", "Run parity check against corpus");
     parity_step.dependOn(&run_parity.step);
 
-
-
     // Benchmark Tool
     const bench_exe = b.addExecutable(.{
         .name = "benchmark",
@@ -134,4 +131,13 @@ pub fn build(b: *std.Build) void {
     const run_bench_legacy = b.addRunArtifact(bench_legacy_exe);
     const bench_legacy_step = b.step("bench-legacy", "Run Legacy BPE benchmark");
     bench_legacy_step.dependOn(&run_bench_legacy.step);
+    // Golden Tests
+    const golden_tests = b.addTest(.{
+        .root_source_file = b.path("src/test/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const run_golden = b.addRunArtifact(golden_tests);
+    const golden_step = b.step("test-golden", "Run CLI golden tests");
+    golden_step.dependOn(&run_golden.step);
 }

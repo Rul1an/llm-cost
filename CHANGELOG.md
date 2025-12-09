@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [v0.4.0] - 2025-12-08
+## [v0.4.0] - 2025-12-09
 
 ### Added
 - **Registry V2**: Namespaced models (e.g., `openai/gpt-4o`) and aliases (`gpt-4o`).
@@ -11,9 +11,11 @@ All notable changes to this project will be documented in this file.
 - **Pipe Quota**: New CLI flags `--max-tokens N` and `--max-cost N` enforce limits and stop processing when exceeded.
 - **Rich Stats**: Pipe output now tracks input and output tokens separately in summary.
 - **Custom Vocab**: Documentation for converting and using custom Tiktoken files.
+- **Security**: Added `SECURITY.md` policy, pinned GitHub Actions by SHA, and standardized release integrity (SBOM/Signing).
+- **Golden Tests**: New `zig build test-golden` target verifies CLI contract integrity (stdout/stderr/exit codes).
 
 ### Changed
-- **CLI**: Pricing commands now use canonical model names for consistency.
+- **CLI**: Pricing commands now use canonical model names for consistency. `tokens` command enforces strict model existence check (exit code 65).
 - **Pipe**: Forced single-threaded execution when quota limits are active to ensure deterministic containment.
 - **Behavior**: In parallel pipe mode, `--fail-on-error` marks lines as failed but does not abort the stream (best-effort); hard abort is guaranteed only in single-thread mode.
 - **Perf**: Refactored scanner logic to support `AccuracyTier` without performance regression.

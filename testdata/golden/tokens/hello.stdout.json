@@ -1,0 +1,12 @@
+{
+  "model": "openai/gpt-4o",
+  "tokens_input": 3,
+  "tokens_output": 0,
+  "tokens_reasoning": 0,
+  "cost_input_usd": 7.500000000000001e-6,
+  "cost_output_usd": 0e0,
+  "cost_total_usd": 7.500000000000001e-6,
+  "tokenizer": "o200k_base",
+  "accuracy": "exact",
+  "approximate": false
+}

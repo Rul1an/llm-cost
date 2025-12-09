@@ -24,6 +24,8 @@ pub const GlobalOptions = struct {
     max_tokens: usize = 0,
     max_cost: f64 = 0.0,
     show_summary: bool = false,
+    summary_format: OutputFormat = .text,
+    quiet: bool = false,
 };
 
 pub const CliContext = struct {
@@ -45,7 +47,7 @@ pub const CliError = error{
     IoError,
 } || std.mem.Allocator.Error || engine.EngineError; // extend with engine errors
 
-pub fn main(alloc: std.mem.Allocator) !void {
+pub fn main(alloc: std.mem.Allocator) !u8 {
     var args_it = try std.process.argsWithAllocator(alloc);
     defer args_it.deinit();
 
@@ -76,42 +78,70 @@ pub fn main(alloc: std.mem.Allocator) !void {
         } else if (std.mem.eql(u8, arg, "help") or std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
             ctx.subcommand = "help";
         } else if (std.mem.eql(u8, arg, "--model")) {
-             ctx.opts.model = args_it.next();
+            ctx.opts.model = args_it.next();
         } else if (std.mem.eql(u8, arg, "--format") or std.mem.eql(u8, arg, "-f")) {
-             if (args_it.next()) |fmt_str| {
-                 ctx.opts.format = parseFormat(fmt_str);
-             }
+            if (args_it.next()) |fmt_str| {
+                ctx.opts.format = parseFormat(fmt_str);
+            }
         } else if (std.mem.eql(u8, arg, "--tokens-in")) {
-             if (args_it.next()) |n| ctx.tokens_in = std.fmt.parseInt(usize, n, 10) catch 0;
+            if (args_it.next()) |n| ctx.tokens_in = std.fmt.parseInt(usize, n, 10) catch 0;
         } else if (std.mem.eql(u8, arg, "--allow-special-tokens")) {
-             ctx.opts.allow_special_tokens = true;
+            ctx.opts.allow_special_tokens = true;
         } else if (std.mem.eql(u8, arg, "--field")) {
-             if (args_it.next()) |val| ctx.opts.field = val;
+            if (args_it.next()) |val| ctx.opts.field = val;
         } else if (std.mem.eql(u8, arg, "--mode")) {
-             if (args_it.next()) |val| {
-                 if (std.mem.eql(u8, val, "price")) ctx.opts.pipe_mode = .price
-                 else ctx.opts.pipe_mode = .tokens;
-             }
+            if (args_it.next()) |val| {
+                if (std.mem.eql(u8, val, "price")) ctx.opts.pipe_mode = .price else ctx.opts.pipe_mode = .tokens;
+            }
         } else if (std.mem.eql(u8, arg, "--fail-on-error")) {
-             ctx.opts.fail_on_error = true;
+            ctx.opts.fail_on_error = true;
         } else if (std.mem.eql(u8, arg, "--workers")) {
-             if (args_it.next()) |n| ctx.opts.workers = std.fmt.parseInt(usize, n, 10) catch 1;
+            if (args_it.next()) |n| ctx.opts.workers = std.fmt.parseInt(usize, n, 10) catch 1;
         } else if (std.mem.eql(u8, arg, "--max-tokens")) {
-             if (args_it.next()) |n| ctx.opts.max_tokens = std.fmt.parseInt(usize, n, 10) catch 0;
+            if (args_it.next()) |n| ctx.opts.max_tokens = std.fmt.parseInt(usize, n, 10) catch 0;
         } else if (std.mem.eql(u8, arg, "--max-cost")) {
-             if (args_it.next()) |n| ctx.opts.max_cost = std.fmt.parseFloat(f64, n) catch 0.0;
+            if (args_it.next()) |n| ctx.opts.max_cost = std.fmt.parseFloat(f64, n) catch 0.0;
         } else if (std.mem.eql(u8, arg, "--summary")) {
-             ctx.opts.show_summary = true;
+            ctx.opts.show_summary = true;
+        } else if (std.mem.eql(u8, arg, "--summary-format")) {
+            if (args_it.next()) |fmt_str| {
+                ctx.opts.summary_format = parseFormat(fmt_str);
+            }
+        } else if (std.mem.eql(u8, arg, "--quiet") or std.mem.eql(u8, arg, "-q")) {
+            ctx.opts.quiet = true;
         } else if (std.mem.eql(u8, arg, "--tokens-out")) {
-             if (args_it.next()) |n| ctx.tokens_out = std.fmt.parseInt(usize, n, 10) catch 0;
+            if (args_it.next()) |n| ctx.tokens_out = std.fmt.parseInt(usize, n, 10) catch 0;
         } else {
-             if (!std.mem.startsWith(u8, arg, "-")) {
-                 ctx.payload = arg;
-             }
+            if (!std.mem.startsWith(u8, arg, "-")) {
+                ctx.payload = arg;
+            }
         }
     }
 
     // 2. Dispatch
+    const res = dispatch(ctx);
+    if (res) |_| {
+        return ExitCode.OK;
+    } else |err| {
+        const stderr = io.getStderrWriter();
+        // Specific mapping
+        if (err == pipe_cmd.PipeError.QuotaExceeded) {
+            return ExitCode.USAGE;
+        } else if (err == error.ModelNotFound) {
+            stderr.print("Error: Model not found.\n", .{}) catch {};
+            return ExitCode.DATA_ERR;
+        } else if (err == error.UsageError) {
+            // UsageError usually already printed a message
+            return ExitCode.USAGE;
+        } else {
+            // Generic fallback
+            stderr.print("Error: {s}\n", .{@errorName(err)}) catch {};
+            return ExitCode.SOFTWARE;
+        }
+    }
+}
+
+fn dispatch(ctx: CliContext) !void {
     if (std.mem.eql(u8, ctx.subcommand, "tokens")) {
         try runTokens(ctx);
     } else if (std.mem.eql(u8, ctx.subcommand, "pipe")) {
@@ -124,6 +154,15 @@ pub fn main(alloc: std.mem.Allocator) !void {
         try printHelp();
     }
 }
+
+pub const ExitCode = struct {
+    pub const OK = 0;
+    pub const USAGE = 64;
+    pub const DATA_ERR = 65;
+    pub const NO_INPUT = 66;
+    pub const UNAVAILABLE = 69;
+    pub const SOFTWARE = 70;
+};
 
 fn parseFormat(s: []const u8) OutputFormat {
     if (std.mem.eql(u8, s, "json")) return .json;
@@ -172,7 +211,6 @@ fn printHelp() !void {
 // Map model name to encoding spec, or null for generic
 // Helper removed in favor of ModelRegistry.resolve
 
-
 fn readAllInto(reader: anytype, buffer: *std.ArrayList(u8)) !void {
     var read_buf: [4096]u8 = undefined;
     while (true) {
@@ -200,6 +238,15 @@ fn runTokens(ctx: CliContext) !void {
         // If no input, effectively 0 tokens.
     }
 
+    // Explicitly check model existence in pricing DB if provided
+    if (ctx.opts.model) |specified_model| {
+        if (ctx.db.resolveModel(specified_model) == null) {
+            const stderr = io.getStderrWriter();
+            try stderr.print("Error: Model '{s}' not found in pricing database.\n", .{specified_model});
+            return error.ModelNotFound;
+        }
+    }
+
     // Config for engine
     const raw_model_name = ctx.opts.model orelse "generic";
     const spec = model_registry.ModelRegistry.resolve(raw_model_name);
@@ -217,9 +264,9 @@ fn runTokens(ctx: CliContext) !void {
 
     // Optional: try to resolve cost if model is known
     var cost_usd: ?f64 = null;
-     if (ctx.opts.model) |_| {
-         // Use canonical name, not spec.id.name or raw input
-         // We set reasoning=0 for now.
+    if (ctx.opts.model) |_| {
+        // Use canonical name, not spec.id.name or raw input
+        // We set reasoning=0 for now.
         if (engine.estimateCost(ctx.db, model_name, t_res.tokens, 0, 0)) |c| {
             cost_usd = c.cost_total;
         } else |_| {
@@ -231,7 +278,9 @@ fn runTokens(ctx: CliContext) !void {
         .model = model_name,
         .tokens_input = t_res.tokens,
         .tokens_output = 0,
-        .cost_usd = cost_usd,
+        .cost_input_usd = cost_usd, // Simplification: input-only command
+        .cost_output_usd = 0.0,
+        .cost_total_usd = cost_usd,
         .tokenizer = if (spec.encoding) |e| e.name else "whitespace",
         .accuracy = @tagName(spec.accuracy),
         .approximate = (cost_usd == null) or (spec.accuracy != .exact),
@@ -265,18 +314,18 @@ fn runPrice(ctx: CliContext) !void {
             defer f.close();
             try readAllInto(io.getFileReader(&f), &text_input);
         } else {
-             const stdin = io.getStdinReader();
-             try readAllInto(stdin, &text_input);
+            const stdin = io.getStdinReader();
+            try readAllInto(stdin, &text_input);
         }
 
         if (text_input.items.len > 0) {
-             const tk_cfg = engine.TokenizerConfig{
-                 .spec = spec.encoding,
-                 .model_name = model,
-             };
-             const special_mode: engine.SpecialMode = if (ctx.opts.allow_special_tokens) .ordinary else .strict;
-             const t_res = try engine.estimateTokens(ctx.alloc, tk_cfg, text_input.items, special_mode);
-             input_tokens = t_res.tokens;
+            const tk_cfg = engine.TokenizerConfig{
+                .spec = spec.encoding,
+                .model_name = model,
+            };
+            const special_mode: engine.SpecialMode = if (ctx.opts.allow_special_tokens) .ordinary else .strict;
+            const t_res = try engine.estimateTokens(ctx.alloc, tk_cfg, text_input.items, special_mode);
+            input_tokens = t_res.tokens;
         }
     }
 
@@ -284,10 +333,10 @@ fn runPrice(ctx: CliContext) !void {
 
     const cost_res = engine.estimateCost(ctx.db, model, input_tokens, output_tokens, 0) catch |err| {
         if (err == error.ModelNotFound) {
-             // We print explicit error
-             const stderr = io.getStderrWriter();
-             try stderr.print("Error: Model '{s}' not found in pricing database.\n", .{model});
-             return error.ModelNotFound;
+            // We print explicit error
+            const stderr = io.getStderrWriter();
+            try stderr.print("Error: Model '{s}' not found in pricing database.\n", .{model});
+            return error.ModelNotFound;
         }
         return err;
     };
@@ -296,7 +345,9 @@ fn runPrice(ctx: CliContext) !void {
         .model = cost_res.model_name,
         .tokens_input = cost_res.input_tokens,
         .tokens_output = cost_res.output_tokens,
-        .cost_usd = cost_res.cost_total,
+        .cost_input_usd = cost_res.cost_input,
+        .cost_output_usd = cost_res.cost_output,
+        .cost_total_usd = cost_res.cost_total,
         .tokenizer = if (spec.encoding) |e| e.name else "whitespace",
         .accuracy = @tagName(spec.accuracy),
         .approximate = (spec.accuracy != .exact),
@@ -316,10 +367,10 @@ fn runModels(ctx: CliContext) !void {
     try stdout.print("Models in database:\n", .{});
     const root = ctx.db.parsed.value;
     if (root.object.get("models")) |models| {
-         var it = models.object.iterator();
-         while (it.next()) |entry| {
-             try stdout.print("- {s}\n", .{entry.key_ptr.*});
-         }
+        var it = models.object.iterator();
+        while (it.next()) |entry| {
+            try stdout.print("- {s}\n", .{entry.key_ptr.*});
+        }
     }
 }
 
@@ -348,6 +399,7 @@ fn runPipe(ctx: CliContext) !void {
             .max_cost_usd = ctx.opts.max_cost,
         },
         .show_summary = ctx.opts.show_summary,
+        .summary_format = ctx.opts.summary_format,
         .mode = ctx.opts.pipe_mode,
         .fail_on_error = ctx.opts.fail_on_error,
         .special_mode = special_mode,
@@ -356,39 +408,39 @@ fn runPipe(ctx: CliContext) !void {
         .cfg = tk_cfg,
         .db = ctx.db,
         .accuracy = @tagName(spec.accuracy),
+        .quiet = ctx.opts.quiet,
     };
 
     _ = pipe_cmd.run(pipe_opts) catch |err| {
         if (err == pipe_cmd.PipeError.QuotaExceeded) {
-             const stderr = io.getStderrWriter();
+            const stderr = io.getStderrWriter();
 
-             const has_tokens = ctx.opts.max_tokens > 0;
-             const has_cost = ctx.opts.max_cost > 0.0;
+            const has_tokens = ctx.opts.max_tokens > 0;
+            const has_cost = ctx.opts.max_cost > 0.0;
 
-             if (has_tokens and has_cost) {
-                 try stderr.print(
-                     "error: quota exceeded (max_tokens={d}, max_cost={d:.6}).\n",
-                     .{ ctx.opts.max_tokens, ctx.opts.max_cost },
-                 );
-             } else if (has_tokens) {
-                 try stderr.print(
-                     "error: token quota exceeded (max_tokens={d}).\n",
-                     .{ ctx.opts.max_tokens },
-                 );
-             } else if (has_cost) {
-                 try stderr.print(
-                     "error: cost quota exceeded (max_cost={d:.6}).\n",
-                     .{ ctx.opts.max_cost },
-                 );
-             } else {
-                 try stderr.print("error: quota exceeded.\n", .{});
-             }
+            if (has_tokens and has_cost) {
+                try stderr.print(
+                    "error: quota exceeded (max_tokens={d}, max_cost={d:.6}).\n",
+                    .{ ctx.opts.max_tokens, ctx.opts.max_cost },
+                );
+            } else if (has_tokens) {
+                try stderr.print(
+                    "error: token quota exceeded (max_tokens={d}).\n",
+                    .{ctx.opts.max_tokens},
+                );
+            } else if (has_cost) {
+                try stderr.print(
+                    "error: cost quota exceeded (max_cost={d:.6}).\n",
+                    .{ctx.opts.max_cost},
+                );
+            } else {
+                try stderr.print("error: quota exceeded.\n", .{});
+            }
 
-             // In main() we treat this as a non-zero exit eventually due to returning error.
-             // We can return UsageError to signify "user error/limit hit" rather than system crash.
-             return CliError.UsageError;
+            // In main() we treat this as a non-zero exit eventually due to returning error.
+            // We can return UsageError to signify "user error/limit hit" rather than system crash.
+            return CliError.UsageError;
         }
         return err;
     };
 }
-

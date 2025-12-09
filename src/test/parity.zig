@@ -56,8 +56,8 @@ test "parity evil corpus v2" {
 
         // Skip cl100k if not enabled/vocab missing
         const spec = registry.Registry.get(model_name) orelse {
-             std.debug.print("Unknown model: {s}\n", .{model_name});
-             continue;
+            std.debug.print("Unknown model: {s}\n", .{model_name});
+            continue;
         };
 
         if (spec.vocab_data.len == 0) {
@@ -84,7 +84,7 @@ test "parity evil corpus v2" {
 
         // Verify length
         if (encoded_ids.len != expected_ids_val.items.len) {
-            std.debug.print("FAILURE: Model {s} \nText: '{s}'\nExpected Len: {d}, Got: {d}\n", .{model_name, text, expected_ids_val.items.len, encoded_ids.len});
+            std.debug.print("FAILURE: Model {s} \nText: '{s}'\nExpected Len: {d}, Got: {d}\n", .{ model_name, text, expected_ids_val.items.len, encoded_ids.len });
             // Print details
             return error.TestParityFailed;
         }
@@ -102,8 +102,8 @@ test "parity evil corpus v2" {
 
             const expected_id = @as(u32, @intCast(raw));
             if (id != expected_id) {
-                 std.debug.print("FAILURE: Model {s} \nText: '{s}'\nMismatch at index {d}: Expected {d}, Got {d}\n", .{model_name, text, i, expected_id, id});
-                 return error.TestParityFailed;
+                std.debug.print("FAILURE: Model {s} \nText: '{s}'\nMismatch at index {d}: Expected {d}, Got {d}\n", .{ model_name, text, i, expected_id, id });
+                return error.TestParityFailed;
             }
         }
     }

@@ -35,9 +35,9 @@ pub const SafeUtf8Iterator = struct {
     }
 
     pub fn peek(self: *SafeUtf8Iterator) ?u21 {
-         const old_i = self.i;
-         const cp = self.nextCodepoint();
-         self.i = old_i;
-         return cp;
+        const old_i = self.i;
+        const cp = self.nextCodepoint();
+        self.i = old_i;
+        return cp;
     }
 };

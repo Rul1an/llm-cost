@@ -45,21 +45,13 @@ pub fn main() !void {
         defer alloc.free(input);
         var i: usize = 0;
         while (i < input.len) : (i += emoji.len) {
-            @memcpy(input[i..i+emoji.len], emoji);
+            @memcpy(input[i .. i + emoji.len], emoji);
         }
         try measure(alloc, engine, scanner_interface, n, input, "emoji * N", stdout);
     }
 }
 
-fn measure(
-    alloc: std.mem.Allocator,
-    engine: bpe.BpeEngine,
-    scanner: pre_tokenizer.PreTokenizer,
-    logical_len: usize,
-    input: []const u8,
-    name: []const u8,
-    writer: anytype
-) !void {
+fn measure(alloc: std.mem.Allocator, engine: bpe.BpeEngine, scanner: pre_tokenizer.PreTokenizer, logical_len: usize, input: []const u8, name: []const u8, writer: anytype) !void {
     // Warmup
     {
         const pt = try scanner.tokenize(alloc, input);
@@ -81,5 +73,5 @@ fn measure(
     }
     total_ns = timer.read();
     const avg_ns = total_ns / iterations;
-    try writer.print("| {s} (N={d}) | {d} | {d} | {d} | {d} |\n", .{name, logical_len, logical_len, input.len, avg_ns, token_count});
+    try writer.print("| {s} (N={d}) | {d} | {d} | {d} | {d} |\n", .{ name, logical_len, logical_len, input.len, avg_ns, token_count });
 }

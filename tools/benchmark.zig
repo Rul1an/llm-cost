@@ -11,10 +11,7 @@ pub fn main() !void {
     try stdout.print("Initializing Tokenizer (o200k_base)...\n", .{});
 
     // Init tokenizer
-    var tok = try openai.OpenAITokenizer.init(.{
-        .spec = openai.resolveEncoding("gpt-4o").?,
-        .approximate_ok = false
-    });
+    var tok = try openai.OpenAITokenizer.init(.{ .spec = openai.resolveEncoding("gpt-4o").?, .approximate_ok = false });
 
     if (tok.engine == null) {
         try stdout.print("Error: o200k_base engine not loaded via embedFile!\n", .{});
