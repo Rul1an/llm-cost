@@ -36,16 +36,16 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
 
-    // Fuzz target
-    const fuzz_exe = b.addExecutable(.{
-        .name = "llm-cost-fuzz",
+    // Fuzz/Chaos tests
+    // Changed from addExecutable to addTest because src/fuzz_test.zig uses 'test' blocks without 'main'
+    const fuzz_tests = b.addTest(.{
         .root_source_file = b.path("src/fuzz_test.zig"),
         .target = target,
         .optimize = optimize,
     });
-    b.installArtifact(fuzz_exe);
-    const fuzz_step = b.step("fuzz", "Build fuzz test executable");
-    fuzz_step.dependOn(&b.addInstallArtifact(fuzz_exe, .{}).step);
+    const run_fuzz = b.addRunArtifact(fuzz_tests);
+    const fuzz_step = b.step("fuzz", "Run fuzz/chaos tests");
+    fuzz_step.dependOn(&run_fuzz.step);
 
     // Parity tests (vs tiktoken)
     const parity_tests = b.addTest(.{
@@ -67,15 +67,16 @@ pub fn build(b: *std.Build) void {
     const golden_step = b.step("test-golden", "Run golden CLI tests");
     golden_step.dependOn(&run_golden_tests.step);
 
-    // Benchmark
-    const bench_exe = b.addExecutable(.{
-        .name = "llm-cost-bench",
-        .root_source_file = b.path("src/bench.zig"),
-        .target = target,
-        .optimize = .ReleaseFast,
-    });
-    b.installArtifact(bench_exe);
-    const bench_step = b.step("bench", "Build and run benchmarks");
-    const run_bench = b.addRunArtifact(bench_exe);
-    bench_step.dependOn(&run_bench.step);
+    // Benchmark - DISABLED: src/bench.zig does not exist yet
+    // Uncomment when bench.zig is created:
+    // const bench_exe = b.addExecutable(.{
+    //     .name = "llm-cost-bench",
+    //     .root_source_file = b.path("src/bench.zig"),
+    //     .target = target,
+    //     .optimize = .ReleaseFast,
+    // });
+    // b.installArtifact(bench_exe);
+    // const bench_step = b.step("bench", "Build and run benchmarks");
+    // const run_bench = b.addRunArtifact(bench_exe);
+    // bench_step.dependOn(&run_bench.step);
 }

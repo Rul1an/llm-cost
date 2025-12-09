@@ -8,7 +8,7 @@ const model_registry = tokenizer_mod.model_registry;
 fn runChaosForModel(model_name: []const u8, seed: u64) !void {
     const allocator = std.testing.allocator;
 
-    var prng = std.rand.DefaultPrng.init(seed);
+    var prng = std.Random.DefaultPrng.init(seed);
     const rand = prng.random();
 
     const spec = model_registry.ModelRegistry.resolve(model_name);
@@ -59,7 +59,7 @@ test "chaos cl100k (gpt-4)" {
 }
 
 test "registry resolution fuzz" {
-    var prng = std.rand.DefaultPrng.init(0xCAFEBABE);
+    var prng = std.Random.DefaultPrng.init(0xCAFEBABE);
     const rnd = prng.random();
 
     var i: usize = 0;

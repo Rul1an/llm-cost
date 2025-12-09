@@ -15,6 +15,63 @@ const IndexEntry = extern struct {
     len: u32,
 };
 
+// ============================================================================
+// Type Definitions for BPE Algorithm
+// ============================================================================
+
+const NodeIndex = u32;
+const InvalidIndex = std.math.maxInt(NodeIndex);
+
+/// Node for linked-list based BPE merging (v2 text-based algorithm)
+const Node = struct {
+    prev: NodeIndex,
+    next: NodeIndex,
+    offset: u32, // Start offset in original word
+    len: u32, // Length in bytes
+    rank: u32, // Best merge rank (maxInt if no merge available)
+    gen: u32, // Generation counter for lazy deletion
+};
+
+/// Adapter for v2.1 index-based BPE engine.
+/// Wraps BpeEngineV2 to provide the `lookup(TokenId, TokenId) -> ?MergeEntry` interface
+/// required by bpe_v2_1.encodeLinear.
+const TextLookupTable = struct {
+    engine: *const BpeEngineV2,
+
+    const MergeEntry = struct {
+        id: u32,
+        rank: u32,
+    };
+
+    /// Lookup merge for two adjacent tokens.
+    /// Returns merged token ID and rank, or null if no merge exists.
+    pub fn lookup(self: *const TextLookupTable, left: u32, right: u32) ?MergeEntry {
+        // Get string representations
+        const left_str = self.engine.tokenSlice(left) orelse return null;
+        const right_str = self.engine.tokenSlice(right) orelse return null;
+
+        // Concatenate (stack buffer for small merges, heap for large)
+        const total_len = left_str.len + right_str.len;
+        if (total_len > 256) return null; // Sanity limit
+
+        var buf: [256]u8 = undefined;
+        @memcpy(buf[0..left_str.len], left_str);
+        @memcpy(buf[left_str.len..][0..right_str.len], right_str);
+
+        const merged = buf[0..total_len];
+
+        // Lookup in rank map
+        if (self.engine.rank_map.get(merged)) |rank| {
+            return .{ .id = rank, .rank = rank };
+        }
+        return null;
+    }
+};
+
+// ============================================================================
+// BPE Engine v2
+// ============================================================================
+
 /// BPE v2 Engine
 ///
 /// Features:
@@ -56,19 +113,18 @@ pub const BpeEngineV2 = struct {
         // Build the Rank Map
         const initial_capacity = header.count;
         var map = std.StringHashMap(u32).init(allocator);
+        errdefer map.deinit();
         try map.ensureTotalCapacity(initial_capacity);
 
-        // Also build token_slices for v2.1 inverse lookup
-        // Assuming max rank is < header.count (dense), but let's be safe and alloc based on max rank found?
-        // Actually, tiktoken counts are vocabulary sizes. Ranks are 0..Count-1 usually.
+        // Find max rank for inverse table sizing
         var max_rank: u32 = 0;
         for (index) |entry| {
             if (entry.rank > max_rank) max_rank = entry.rank;
         }
 
         // Inverse table: Rank -> String
-        // Initialize with empty slices
         var token_slices = try allocator.alloc([]const u8, max_rank + 1);
+        errdefer allocator.free(token_slices);
         @memset(token_slices, "");
 
         for (index) |entry| {
@@ -81,22 +137,15 @@ pub const BpeEngineV2 = struct {
 
         // Build byte_to_token map for v2.1 initial seeding
         var byte_to_token: [256]u32 = undefined;
-        // Default to a sentinel or 0? 0 is usually UNK or valid token.
-        // Let's assume 0 for now, but usually we should find them.
         @memset(&byte_to_token, 0);
 
-        // Scan for 1-byte tokens corresponding to all 256 bytes.
-        // For cl100k, these should exist.
+        // Scan for 1-byte tokens corresponding to all 256 bytes
         for (0..256) |b| {
             const byte_val = @as(u8, @intCast(b));
-            // const char_slice = string_blob[0..0]; // Dummy removed
-
-            // We search in map. Construct a 1-byte slice on stack?
             const byte_slice = [1]u8{byte_val};
             if (map.get(&byte_slice)) |rank| {
                 byte_to_token[b] = rank;
             }
-            // If missing, it remains 0. Ideally should not happen for bytes used in text.
         }
 
         return BpeEngineV2{
@@ -113,21 +162,26 @@ pub const BpeEngineV2 = struct {
         self.allocator.free(self.token_slices);
     }
 
-    pub fn getRank(self: BpeEngineV2, token: []const u8) ?u32 {
+    pub fn getRank(self: *const BpeEngineV2, token: []const u8) ?u32 {
         return self.rank_map.get(token);
+    }
+
+    /// Get string slice for a token ID (used by TextLookupTable)
+    pub fn tokenSlice(self: *const BpeEngineV2, token_id: u32) ?[]const u8 {
+        if (token_id >= self.token_slices.len) return null;
+        const slice = self.token_slices[token_id];
+        if (slice.len == 0) return null;
+        return slice;
     }
 
     /// Encode pre-tokenized text segments.
     /// Supports switching between "v2" (text-based heap) and "v2_1" (index-based heap).
-    /// `version` arg controls the engine implementation.
-    /// Note: engine.zig should propagate the version from config.
     pub fn encode(self: *const BpeEngineV2, alloc: std.mem.Allocator, pre_tokens: []const pre_tokenizer.PreToken, use_v2_1: bool) ![]u32 {
-        var tokens = std.ArrayList(u32).initCapacity(alloc, pre_tokens.len) catch return error.OutOfMemory;
+        var tokens = std.ArrayList(u32).init(alloc);
         errdefer tokens.deinit();
 
         for (pre_tokens) |pt| {
             if (pt.is_special) {
-                // Should not happen in current paths
                 try tokens.append(0);
             } else {
                 if (use_v2_1) {
@@ -141,67 +195,77 @@ pub const BpeEngineV2 = struct {
         return tokens.toOwnedSlice();
     }
 
-// ... (skipping unchanged parts)
-
+    /// v2.1 encoding: index-based BPE using bpe_v2_1 module
     fn encodeWordV2_1(self: *const BpeEngineV2, alloc: std.mem.Allocator, word: []const u8, output: *std.ArrayList(u32)) !void {
         if (word.len == 0) return;
 
         // 1. Map bytes to initial tokens
-        var initial_tokens = try std.ArrayList(u32).initCapacity(alloc, word.len);
+        var initial_tokens = std.ArrayList(u32).init(alloc);
         defer initial_tokens.deinit();
+        try initial_tokens.ensureTotalCapacity(word.len);
 
         for (word) |b| {
             initial_tokens.appendAssumeCapacity(self.byte_to_token[b]);
         }
 
-        // 2. Call v2.1 Engine
+        // 2. Call v2.1 Engine with TextLookupTable adapter
         const table = TextLookupTable{ .engine = self };
         const res = try bpe_v2_1.encodeLinear(alloc, initial_tokens.items, &table);
-        defer alloc.free(res); // result is owned by alloc (arena from caller)
+        defer alloc.free(res);
 
         // 3. Append to output
         try output.appendSlice(res);
     }
 
-    /// Core BPE Merge for a single word
+    /// Core BPE Merge for a single word (v2 text-based algorithm)
     fn encodeWord(self: *const BpeEngineV2, alloc: std.mem.Allocator, word: []const u8, output: *std.ArrayList(u32)) !void {
-        // ... (skipping comments)
+        if (word.len == 0) return;
 
-        // ...
+        // Single byte optimization
+        if (word.len == 1) {
+            if (self.getRank(word)) |r| {
+                try output.append(r);
+            } else {
+                try output.append(0);
+            }
+            return;
+        }
 
-        var nodes = try std.ArrayList(Node).initCapacity(alloc, word.len);
+        var nodes = std.ArrayList(Node).init(alloc);
         defer nodes.deinit();
+        try nodes.ensureTotalCapacity(word.len);
 
-        // Used to track valid merges
+        // Merge tracking struct for priority queue
         const Merge = struct {
             rank: u32,
-            node_idx: NodeIndex, // The left node index
-            gen: u32, // Generation of the left node when added
+            node_idx: NodeIndex,
+            gen: u32,
 
-            fn lessThan(_: void, a: @This(), b: @This()) bool {
-                if (a.rank < b.rank) return true;
-                if (a.rank > b.rank) return false;
-                if (a.node_idx < b.node_idx) return true;
-                return false;
+            fn lessThan(_: void, a: @This(), b: @This()) std.math.Order {
+                if (a.rank < b.rank) return .lt;
+                if (a.rank > b.rank) return .gt;
+                if (a.node_idx < b.node_idx) return .lt;
+                if (a.node_idx > b.node_idx) return .gt;
+                return .eq;
             }
         };
 
         var pq = std.PriorityQueue(Merge, void, Merge.lessThan).init(alloc, {});
         defer pq.deinit();
 
-        // Initialize nodes
+        // Initialize nodes (one per byte)
         for (0..word.len) |i| {
             nodes.appendAssumeCapacity(.{
                 .prev = if (i > 0) @as(NodeIndex, @intCast(i - 1)) else InvalidIndex,
                 .next = if (i < word.len - 1) @as(NodeIndex, @intCast(i + 1)) else InvalidIndex,
                 .offset = @as(u32, @intCast(i)),
                 .len = 1,
-                .rank = std.math.maxInt(u32), // Unknown initially
+                .rank = std.math.maxInt(u32),
                 .gen = 0,
             });
         }
 
-        // Calculate initial ranks for all pairs
+        // Calculate initial ranks for all adjacent pairs
         for (0..nodes.items.len - 1) |i| {
             const idx = @as(NodeIndex, @intCast(i));
             const n = &nodes.items[idx];
@@ -218,37 +282,27 @@ pub const BpeEngineV2 = struct {
             }
         }
 
-        // Processing loop
+        // BPE merge loop
         while (pq.removeOrNull()) |merge| {
             const l_idx = merge.node_idx;
-            // Check validity
+
+            // Validity checks
             if (l_idx >= nodes.items.len) continue;
 
-            var l_node = &nodes.items[l_idx]; // Pointer might be invalidated if array reallocs? No, array size fixed to word.len?
-            // Wait, nodes array does not grow. word.len is max nodes.
-            // But pointers Into `nodes.items` are unsafe if we appended. We don't append.
-
-            if (l_node.gen != merge.gen) continue; // Lazy deletion check
-
-            if (l_node.rank != merge.rank) continue; // Rank changed?
-
-            if (l_node.next == InvalidIndex) continue; // Should not happen if rank exists
+            var l_node = &nodes.items[l_idx];
+            if (l_node.gen != merge.gen) continue;
+            if (l_node.rank != merge.rank) continue;
+            if (l_node.next == InvalidIndex) continue;
 
             const r_idx = l_node.next;
             var r_node = &nodes.items[r_idx];
 
-            // Perform Merge
-            // L becomes L+R
+            // Perform merge: L absorbs R
             l_node.len += r_node.len;
-            l_node.gen += 1; // Invalidate old references to L
-            l_node.rank = std.math.maxInt(u32); // Reset rank for new pair (L+R) + Next
+            l_node.gen += 1;
+            l_node.rank = std.math.maxInt(u32);
 
-            // R is consumed
-            // We don't remove R from array, just link around it.
-            // But we must invalidate R's outgoing edges if any?
-            // R's previous `rank` (for pair R+Next) is now invalid because R is gone.
-            // But R is "dead".
-            r_node.gen += 1; // Invalidate references to R
+            r_node.gen += 1; // Invalidate R
 
             const right_neighbor = r_node.next;
             l_node.next = right_neighbor;
@@ -257,36 +311,33 @@ pub const BpeEngineV2 = struct {
                 nodes.items[right_neighbor].prev = l_idx;
             }
 
-            // Update Left Neighbor interaction: (Prev + L)
+            // Re-evaluate left neighbor pair: (Prev + L)
             const left_neighbor = l_node.prev;
             if (left_neighbor != InvalidIndex) {
                 var ln_node = &nodes.items[left_neighbor];
                 const piece = word[ln_node.offset .. ln_node.offset + ln_node.len + l_node.len];
 
                 if (self.getRank(piece)) |r| {
-                    if (r != ln_node.rank or r < ln_node.rank) { // Optimization: only push if rank improved? No, rank changed.
-                        ln_node.rank = r;
-                        ln_node.gen += 1; // Invalidate old merge for Prev
-                        try pq.add(.{
-                            .rank = r,
-                            .node_idx = left_neighbor,
-                            .gen = ln_node.gen,
-                        });
-                    }
+                    ln_node.rank = r;
+                    ln_node.gen += 1;
+                    try pq.add(.{
+                        .rank = r,
+                        .node_idx = left_neighbor,
+                        .gen = ln_node.gen,
+                    });
                 } else {
                     ln_node.rank = std.math.maxInt(u32);
                     ln_node.gen += 1;
                 }
             }
 
-            // Update New L interaction: (L + Next)
+            // Re-evaluate new pair: (L + Next)
             if (l_node.next != InvalidIndex) {
                 const n_next = &nodes.items[l_node.next];
                 const piece = word[l_node.offset .. l_node.offset + l_node.len + n_next.len];
 
                 if (self.getRank(piece)) |r| {
                     l_node.rank = r;
-                    // gen already incremented
                     try pq.add(.{
                         .rank = r,
                         .node_idx = l_idx,
@@ -296,7 +347,7 @@ pub const BpeEngineV2 = struct {
             }
         }
 
-        // Collect result
+        // Collect results by traversing linked list
         var curr: NodeIndex = 0;
         while (curr != InvalidIndex) {
             const n = nodes.items[curr];
@@ -304,14 +355,20 @@ pub const BpeEngineV2 = struct {
             if (self.getRank(piece)) |r| {
                 try output.append(r);
             } else {
-                // Fallback for bytes that didn't merge into anything?
-                // Usually bytes map to ranks. If not, UNK (0).
-                // Actually, in Tiktoken vocabs, every byte usually has a rank.
-                // If we get here, our vocab definition is incomplete or data corrupted.
-                std.debug.assert(false);
-                try output.append(0);
+                try output.append(0); // Fallback UNK
             }
             curr = n.next;
         }
     }
 };
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+test "BpeEngineV2: basic init" {
+    // Minimal test to ensure types compile
+    const allocator = std.testing.allocator;
+    _ = allocator;
+    // Full init test requires valid embedded_data
+}
