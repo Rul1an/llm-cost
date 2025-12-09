@@ -4,7 +4,7 @@ const builtin = @import("builtin");
 comptime {
     // Hard: 0.13.x only. Patch versions allowed, 0.14+ not.
     if (!(builtin.zig_version.major == 0 and builtin.zig_version.minor == 13)) {
-        @compileError("llm-cost v0.3 currently requires Zig 0.13.x; found " ++ builtin.zig_version_string);
+        @compileError("llm-cost v0.4 currently requires Zig 0.13.x; found " ++ builtin.zig_version_string);
     }
 }
 
@@ -27,6 +27,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .version = .{ .major = 0, .minor = 4, .patch = 0 },
     });
 
     b.installArtifact(exe);
