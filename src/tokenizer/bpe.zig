@@ -44,7 +44,7 @@ pub const BpeEngine = struct {
         // NOTE: This relies on @embedFile providing aligned data or the allocator being well-behaved.
         // If loading from unknown runtime buffer: use @alignCast but handle potential error or copy.
         const index_ptr: [*]const IndexEntry = @ptrCast(@alignCast(index_bytes.ptr));
-        const index = index_ptr[0 .. header.count];
+        const index = index_ptr[0..header.count];
 
         const strings_start = index_start + index_size;
         if (embedded_data.len < strings_start + header.strings_len) return error.TruncatedStrings;
@@ -71,13 +71,7 @@ pub const BpeEngine = struct {
         const ctx = Context{ .blob = self.string_blob };
 
         // Zero-allocation binary search
-        const idx = std.sort.binarySearch(
-            IndexEntry,
-            token,
-            self.index,
-            ctx,
-            Context.compare
-        );
+        const idx = std.sort.binarySearch(IndexEntry, token, self.index, ctx, Context.compare);
 
         if (idx) |i| {
             return self.index[i].rank;
@@ -101,8 +95,6 @@ pub const BpeEngine = struct {
     }
 
     // --- Encoding Logic ---
-
-
 
     /// Encode pre-tokenized text segments.
     /// Caller owns result slice.
@@ -144,7 +136,7 @@ pub const BpeEngine = struct {
         defer parts.deinit();
 
         for (0..word.len) |i| {
-            try parts.append(word[i..i+1]);
+            try parts.append(word[i .. i + 1]);
         }
 
         // BPE Loop
@@ -154,7 +146,7 @@ pub const BpeEngine = struct {
 
             for (0..parts.items.len - 1) |i| {
                 const p1 = parts.items[i];
-                const p2 = parts.items[i+1];
+                const p2 = parts.items[i + 1];
 
                 // Safety invariant: ps are adjacent slices of the original word.
                 std.debug.assert(@intFromPtr(p1.ptr) + p1.len == @intFromPtr(p2.ptr));
@@ -171,7 +163,7 @@ pub const BpeEngine = struct {
 
             if (best_idx) |idx| {
                 const p1 = parts.items[idx];
-                const p2 = parts.items[idx+1];
+                const p2 = parts.items[idx + 1];
                 parts.items[idx] = p1.ptr[0 .. p1.len + p2.len];
                 _ = parts.orderedRemove(idx + 1);
             } else {
@@ -254,20 +246,13 @@ pub const BpeEngine = struct {
         var i: usize = 0;
         while (i < nodes.items.len - 1) : (i += 1) {
             const l_idx = @as(NodeIndex, @intCast(i));
-            const r_idx = @as(NodeIndex, @intCast(i+1));
+            const r_idx = @as(NodeIndex, @intCast(i + 1));
             const n_left = &nodes.items[l_idx];
             const n_right = &nodes.items[r_idx];
             const merged_slice = word[n_left.offset .. n_left.offset + n_left.len + n_right.len];
 
             if (self.getRank(merged_slice)) |rank| {
-                try pq.add(.{
-                    .rank = rank,
-                    .left = l_idx,
-                    .right = r_idx,
-                    .left_pos = l_idx,
-                    .left_gen = n_left.gen,
-                    .right_gen = n_right.gen
-                });
+                try pq.add(.{ .rank = rank, .left = l_idx, .right = r_idx, .left_pos = l_idx, .left_gen = n_left.gen, .right_gen = n_right.gen });
             }
         }
 
@@ -296,7 +281,7 @@ pub const BpeEngine = struct {
             l_node.next = right_neighbor_idx;
 
             if (right_neighbor_idx != InvalidIndex) {
-                 nodes.items[right_neighbor_idx].prev = l_idx;
+                nodes.items[right_neighbor_idx].prev = l_idx;
             }
 
             // New Edges
@@ -304,34 +289,20 @@ pub const BpeEngine = struct {
             if (left_neighbor_idx != InvalidIndex) {
                 const ln_node = &nodes.items[left_neighbor_idx];
                 if (ln_node.alive) {
-                     const slice = word[ln_node.offset .. ln_node.offset + ln_node.len + l_node.len];
-                     if (self.getRank(slice)) |r| {
-                         try pq.add(.{
-                             .rank = r,
-                             .left = left_neighbor_idx,
-                             .right = l_idx,
-                             .left_pos = left_neighbor_idx,
-                             .left_gen = ln_node.gen,
-                             .right_gen = l_node.gen
-                         });
-                     }
+                    const slice = word[ln_node.offset .. ln_node.offset + ln_node.len + l_node.len];
+                    if (self.getRank(slice)) |r| {
+                        try pq.add(.{ .rank = r, .left = left_neighbor_idx, .right = l_idx, .left_pos = left_neighbor_idx, .left_gen = ln_node.gen, .right_gen = l_node.gen });
+                    }
                 }
             }
 
             if (right_neighbor_idx != InvalidIndex) {
                 const rn_node = &nodes.items[right_neighbor_idx];
                 if (rn_node.alive) {
-                     const slice = word[l_node.offset .. l_node.offset + l_node.len + rn_node.len];
-                     if (self.getRank(slice)) |r| {
-                         try pq.add(.{
-                             .rank = r,
-                             .left = l_idx,
-                             .right = right_neighbor_idx,
-                             .left_pos = l_idx,
-                             .left_gen = l_node.gen,
-                             .right_gen = rn_node.gen
-                         });
-                     }
+                    const slice = word[l_node.offset .. l_node.offset + l_node.len + rn_node.len];
+                    if (self.getRank(slice)) |r| {
+                        try pq.add(.{ .rank = r, .left = l_idx, .right = right_neighbor_idx, .left_pos = l_idx, .left_gen = l_node.gen, .right_gen = rn_node.gen });
+                    }
                 }
             }
         }

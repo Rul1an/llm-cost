@@ -33,12 +33,7 @@ pub const PricingDB = struct {
     parsed: std.json.Parsed(std.json.Value),
 
     pub fn init(allocator: std.mem.Allocator) !PricingDB {
-        const parsed = try std.json.parseFromSlice(
-            std.json.Value,
-            allocator,
-            default_json,
-            .{ .ignore_unknown_fields = true }
-        );
+        const parsed = try std.json.parseFromSlice(std.json.Value, allocator, default_json, .{ .ignore_unknown_fields = true });
         return PricingDB{ .parsed = parsed };
     }
 
@@ -59,60 +54,60 @@ pub const PricingDB = struct {
         // If not found and input has '/', try stripping vendor
         if (target == null) {
             if (std.mem.indexOfScalar(u8, name, '/')) |idx| {
-                 const short_name = name[idx+1..];
-                 if (maybe_alias) |a| target = a.object.get(short_name);
-                 // If alias found for short name, use it.
-                 // If not, maybe short_name IS the key in models?
-                 // We handle that in next step.
-                 if (target == null) resolved_name = short_name;
+                const short_name = name[idx + 1 ..];
+                if (maybe_alias) |a| target = a.object.get(short_name);
+                // If alias found for short name, use it.
+                // If not, maybe short_name IS the key in models?
+                // We handle that in next step.
+                if (target == null) resolved_name = short_name;
             }
         }
 
         if (target) |alias_target| {
-             if (alias_target == .string) {
-                 resolved_name = alias_target.string;
-             }
+            if (alias_target == .string) {
+                resolved_name = alias_target.string;
+            }
         }
 
         // 2. Lookup in models
         if (root.object.get("models")) |models| {
-             if (models.object.get(resolved_name)) |m| {
-                 // Defensively read fields. If input/output price miss, we consider it malformed -> null.
-                 const in_node = m.object.get("input_price") orelse m.object.get("input_price_per_million");
-                 const out_node = m.object.get("output_price") orelse m.object.get("output_price_per_million");
+            if (models.object.get(resolved_name)) |m| {
+                // Defensively read fields. If input/output price miss, we consider it malformed -> null.
+                const in_node = m.object.get("input_price") orelse m.object.get("input_price_per_million");
+                const out_node = m.object.get("output_price") orelse m.object.get("output_price_per_million");
 
-                 // Robust float helpers:
-                 const getFloat = struct {
-                     fn call(val: ?std.json.Value) ?f64 {
-                         const v = val orelse return null;
-                         return switch (v) {
-                             .float => |x| x,
-                             .integer => |x| @as(f64, @floatFromInt(x)),
-                             else => null,
-                         };
-                     }
-                 }.call;
+                // Robust float helpers:
+                const getFloat = struct {
+                    fn call(val: ?std.json.Value) ?f64 {
+                        const v = val orelse return null;
+                        return switch (v) {
+                            .float => |x| x,
+                            .integer => |x| @as(f64, @floatFromInt(x)),
+                            else => null,
+                        };
+                    }
+                }.call;
 
-                 const in_price = getFloat(in_node) orelse return null;
-                 const out_price = getFloat(out_node) orelse return null;
+                const in_price = getFloat(in_node) orelse return null;
+                const out_price = getFloat(out_node) orelse return null;
 
-                 // Optional fields
-                 const reasoning_node = m.object.get("reasoning_price") orelse m.object.get("reasoning_input_price") orelse m.object.get("reasoning_input_price_per_million");
-                 const reasoning_price = getFloat(reasoning_node);
+                // Optional fields
+                const reasoning_node = m.object.get("reasoning_price") orelse m.object.get("reasoning_input_price") orelse m.object.get("reasoning_input_price_per_million");
+                const reasoning_price = getFloat(reasoning_node);
 
-                 var tokenizer: []const u8 = "generic_whitespace";
-                 if (m.object.get("tokenizer")) |t| {
-                     if (t == .string) tokenizer = t.string;
-                 }
+                var tokenizer: []const u8 = "generic_whitespace";
+                if (m.object.get("tokenizer")) |t| {
+                    if (t == .string) tokenizer = t.string;
+                }
 
-                 return PricingModel{
-                     .name = resolved_name,
-                     .input_price_per_million = in_price,
-                     .output_price_per_million = out_price,
-                     .reasoning_price_per_million = reasoning_price,
-                     .tokenizer = tokenizer,
-                 };
-             }
+                return PricingModel{
+                    .name = resolved_name,
+                    .input_price_per_million = in_price,
+                    .output_price_per_million = out_price,
+                    .reasoning_price_per_million = reasoning_price,
+                    .tokenizer = tokenizer,
+                };
+            }
         }
 
         return null;

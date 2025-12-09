@@ -173,4 +173,3 @@ const BufferedWriter = struct {
 fn sortVocab(_: void, a: VocabItem, b: VocabItem) bool {
     return std.mem.lessThan(u8, a.token, b.token);
 }
-

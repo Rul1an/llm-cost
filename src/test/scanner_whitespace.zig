@@ -31,7 +31,7 @@ test "Branch 5 vs Branch 7 Priority" {
 
     try std.testing.expectEqual(@as(usize, 2), tokens.len);
     try std.testing.expectEqualStrings("  \n", tokens[0].text); // Branch 5
-    try std.testing.expectEqualStrings("  ", tokens[1].text);   // Branch 7
+    try std.testing.expectEqualStrings("  ", tokens[1].text); // Branch 7
 }
 
 test "Branch 6: Trailing whitespace EOF" {

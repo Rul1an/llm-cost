@@ -85,8 +85,8 @@ fn findDisallowedSpecial(
         if (isAllowedSpecial(tok.token, mode)) continue;
 
         if (std.mem.indexOfPos(u8, text, 0, tok.token)) |idx| {
-             // Return first occurrence of disallowed token
-             return idx;
+            // Return first occurrence of disallowed token
+            return idx;
         }
     }
     return null;
@@ -217,7 +217,7 @@ test "findDisallowedSpecial logic" {
     }
 
     // Allow list (not allowed): should find it
-    const allowed = [_][]const u8{ "<|special|>" };
+    const allowed = [_][]const u8{"<|special|>"};
     if (findDisallowedSpecial(text, spec, .{ .allow_list = &allowed })) |idx| {
         try std.testing.expectEqual(@as(usize, 6), idx);
     } else {
@@ -225,7 +225,7 @@ test "findDisallowedSpecial logic" {
     }
 
     // Allow list (allowed): should not find it
-    const allowed_eot = [_][]const u8{ "<|endoftext|>" };
+    const allowed_eot = [_][]const u8{"<|endoftext|>"};
     if (findDisallowedSpecial(text, spec, .{ .allow_list = &allowed_eot })) |_| {
         return error.TestExpectedNull;
     }

@@ -54,11 +54,11 @@ pub const OpenAITokenizer = struct {
             // Determine PreTokenizer
             var pt_interface: pre_tokenizer.PreTokenizer = undefined;
             if (std.mem.eql(u8, self.spec.name, "o200k_base")) {
-                 pt_interface = @import("o200k_scanner.zig").O200kScanner.interface();
+                pt_interface = @import("o200k_scanner.zig").O200kScanner.interface();
             } else if (std.mem.eql(u8, self.spec.name, "cl100k_base")) {
-                 pt_interface = @import("cl100k_scanner.zig").Cl100kScanner.interface();
+                pt_interface = @import("cl100k_scanner.zig").Cl100kScanner.interface();
             } else {
-                 pt_interface = pre_tokenizer.LegacyPreTokenizer.interface();
+                pt_interface = pre_tokenizer.LegacyPreTokenizer.interface();
             }
 
             const pre_tokens = try pt_interface.tokenize(alloc, text);
@@ -76,13 +76,13 @@ pub const OpenAITokenizer = struct {
     /// Encode text to IDs (for testing/verification).
     pub fn encode(self: OpenAITokenizer, alloc: std.mem.Allocator, text: []const u8) ![]u32 {
         if (self.engine) |*eng| {
-             var pt_interface: pre_tokenizer.PreTokenizer = undefined;
+            var pt_interface: pre_tokenizer.PreTokenizer = undefined;
             if (std.mem.eql(u8, self.spec.name, "o200k_base")) {
-                 pt_interface = @import("o200k_scanner.zig").O200kScanner.interface();
+                pt_interface = @import("o200k_scanner.zig").O200kScanner.interface();
             } else if (std.mem.eql(u8, self.spec.name, "cl100k_base")) {
-                 pt_interface = @import("cl100k_scanner.zig").Cl100kScanner.interface();
+                pt_interface = @import("cl100k_scanner.zig").Cl100kScanner.interface();
             } else {
-                 pt_interface = pre_tokenizer.LegacyPreTokenizer.interface();
+                pt_interface = pre_tokenizer.LegacyPreTokenizer.interface();
             }
 
             const pre_tokens = try pt_interface.tokenize(alloc, text);

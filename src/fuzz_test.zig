@@ -35,17 +35,17 @@ fn runChaosForModel(model_name: []const u8, seed: u64) !void {
             if (err == error.DisallowedSpecialToken) {
                 // Expected occasionally
             } else if (err == error.TokenizerInternalError) {
-                 // Should ideally not happen if tokenizer is robust, but not UB.
+                // Should ideally not happen if tokenizer is robust, but not UB.
             } else {
-                 std.debug.print("Failed strict at itr {d}, len {d}. Error: {s}\n", .{i, len, @errorName(err)});
-                 return err;
+                std.debug.print("Failed strict at itr {d}, len {d}. Error: {s}\n", .{ i, len, @errorName(err) });
+                return err;
             }
         };
 
         // Test 2: Ordinary
         _ = engine.estimateTokens(allocator, cfg, input, .ordinary) catch |err| {
-             std.debug.print("Failed ordinary at itr {d}, len {d}. Error: {s}\n", .{i, len, @errorName(err)});
-             return err;
+            std.debug.print("Failed ordinary at itr {d}, len {d}. Error: {s}\n", .{ i, len, @errorName(err) });
+            return err;
         };
     }
 }
@@ -69,7 +69,7 @@ test "registry resolution fuzz" {
         var buf: [64]u8 = undefined;
         var j: usize = 0;
         while (j < len) : (j += 1) {
-             buf[j] = rnd.int(u8);
+            buf[j] = rnd.int(u8);
         }
         const input = buf[0..len];
 
@@ -78,8 +78,8 @@ test "registry resolution fuzz" {
 
         // Invariants
         if (spec.accuracy == .exact) {
-             // Exact matches must have encoding
-             if (spec.encoding == null) @panic("Exact accuracy must have encoding");
+            // Exact matches must have encoding
+            if (spec.encoding == null) @panic("Exact accuracy must have encoding");
         }
     }
 }

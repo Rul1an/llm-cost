@@ -7,7 +7,6 @@ const SafeUtf8Iterator = @import("utf8.zig").SafeUtf8Iterator;
 /// Regex (semantisch equivalent aan tiktoken cl100k_base):
 /// `(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+`
 pub const Cl100kScanner = struct {
-
     pub fn tokenize(_: *anyopaque, alloc: std.mem.Allocator, text: []const u8) ![]pre_tokenizer.PreToken {
         var tokens = std.ArrayList(pre_tokenizer.PreToken).init(alloc);
         errdefer tokens.deinit();
@@ -115,7 +114,7 @@ pub const Cl100kScanner = struct {
             // No prefix, and first char is not a Letter -> Fail.
             return null;
         } else {
-             // No prefix, first char IS a letter.
+            // No prefix, first char IS a letter.
         }
 
         // We are inside the body (\p{L}+).
@@ -184,7 +183,7 @@ pub const Cl100kScanner = struct {
         var body_end = it.i;
         var prev_i = it.i;
         while (it.nextCodepoint()) |cp| {
-             if (unicode.isWhitespace(cp) or unicode.isLetter(cp) or unicode.isNumber(cp)) {
+            if (unicode.isWhitespace(cp) or unicode.isLetter(cp) or unicode.isNumber(cp)) {
                 body_end = prev_i; // Backtrack to before this char
                 break;
             }

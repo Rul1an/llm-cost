@@ -2,9 +2,9 @@ const std = @import("std");
 const tokenizer_registry = @import("registry.zig");
 
 pub const AccuracyTier = enum {
-    exact,      // bit-identical to reference tokenizer
-    family,     // same family, but not strictly proven exact parity
-    heuristic,  // generic fallback
+    exact, // bit-identical to reference tokenizer
+    family, // same family, but not strictly proven exact parity
+    heuristic, // generic fallback
 };
 
 pub const Provider = enum {
@@ -107,7 +107,7 @@ pub const ModelRegistry = struct {
         // 1. Namespaced? "openai/gpt-4o"
         if (std.mem.indexOfScalar(u8, name, '/')) |slash_index| {
             const provider_str = name[0..slash_index];
-            const model_str = name[slash_index+1..];
+            const model_str = name[slash_index + 1 ..];
             // Note: model_str isn't actively used for lookup if we match full canonical string below,
             // but conceptually useful if we had per-provider dynamic lookup.
             _ = provider_str;
@@ -188,8 +188,8 @@ fn genericHeuristicSpec(name: []const u8) ModelSpec {
     var short_name = name;
 
     if (std.mem.indexOfScalar(u8, name, '/')) |idx| {
-         const p_str = name[0..idx];
-         short_name = name[idx+1..];
+        const p_str = name[0..idx];
+        short_name = name[idx + 1 ..];
 
         // Heuristics: try to guess family from provider string
         if (std.mem.eql(u8, p_str, "openai")) {
@@ -211,7 +211,7 @@ fn genericHeuristicSpec(name: []const u8) ModelSpec {
         },
         .canonical_name = name,
         .display_name = name,
-        .encoding = null,            // whitespace fallback
+        .encoding = null, // whitespace fallback
         .family = family,
         .accuracy = .heuristic,
         .has_pricing = false,

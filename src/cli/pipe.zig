@@ -243,20 +243,14 @@ fn runSingleThreaded(opts: PipeOptions) PipeError!void {
         if (opts.quota.max_tokens > 0 and summary.total_tokens >= opts.quota.max_tokens) {
             summary.quota_hit = true;
             if (opts.show_summary) {
-                 opts.stderr.print(
-                    "summary (partial, quota exceeded): lines={d} (failed={d}) tokens={d} (in={d} out={d}) cost=${d:.6}\n",
-                    .{ summary.lines_processed, summary.lines_failed, summary.total_tokens, summary.total_tokens_in, summary.total_tokens_out, summary.total_cost_usd }
-                ) catch {};
+                opts.stderr.print("summary (partial, quota exceeded): lines={d} (failed={d}) tokens={d} (in={d} out={d}) cost=${d:.6}\n", .{ summary.lines_processed, summary.lines_failed, summary.total_tokens, summary.total_tokens_in, summary.total_tokens_out, summary.total_cost_usd }) catch {};
             }
             return error.QuotaExceeded;
         }
         if (opts.quota.max_cost_usd > 0.0 and summary.total_cost_usd >= opts.quota.max_cost_usd) {
             summary.quota_hit = true;
             if (opts.show_summary) {
-                 opts.stderr.print(
-                    "summary (partial, quota exceeded): lines={d} (failed={d}) tokens={d} (in={d} out={d}) cost=${d:.6}\n",
-                    .{ summary.lines_processed, summary.lines_failed, summary.total_tokens, summary.total_tokens_in, summary.total_tokens_out, summary.total_cost_usd }
-                ) catch {};
+                opts.stderr.print("summary (partial, quota exceeded): lines={d} (failed={d}) tokens={d} (in={d} out={d}) cost=${d:.6}\n", .{ summary.lines_processed, summary.lines_failed, summary.total_tokens, summary.total_tokens_in, summary.total_tokens_out, summary.total_cost_usd }) catch {};
             }
             return error.QuotaExceeded;
         }
@@ -267,46 +261,43 @@ fn runSingleThreaded(opts: PipeOptions) PipeError!void {
 
     if (opts.show_summary) {
         writeSummary(opts.stderr, summary, opts.summary_format, opts.model, opts.accuracy) catch |err| {
-             logErrorSingleThread(opts.stderr, 0, "failed to write summary", err, opts.quiet);
+            logErrorSingleThread(opts.stderr, 0, "failed to write summary", err, opts.quiet);
         };
     }
 }
 
 fn writeSummary(writer: std.io.AnyWriter, s: PipeSummary, fmt: format_lib.OutputFormat, model: []const u8, accuracy: []const u8) !void {
-     if (fmt == .json or fmt == .ndjson) {
-         const SummaryJson = struct {
-             version: []const u8 = "1",
-             lines_total: usize,
-             lines_failed: usize,
-             tokens_input: usize,
-             tokens_output: usize,
-             cost_input_usd: f64,
-             cost_output_usd: f64,
-             cost_total_usd: f64,
-             model: []const u8,
-             accuracy: []const u8,
-             quota_hit: bool,
-         };
-         const record = SummaryJson{
-             .lines_total = s.lines_processed,
-             .lines_failed = s.lines_failed,
-             .tokens_input = s.total_tokens_in,
-             .tokens_output = s.total_tokens_out,
-             .cost_input_usd = s.total_cost_input_usd,
-             .cost_output_usd = s.total_cost_output_usd,
-             .cost_total_usd = s.total_cost_usd,
-             .model = model,
-             .accuracy = accuracy,
-             .quota_hit = s.quota_hit,
-         };
-         try std.json.stringify(record, .{}, writer);
-         try writer.writeByte('\n');
-     } else {
-        try writer.print(
-            "summary: lines={d} (failed={d}) tokens={d} (in={d} out={d}) cost=${d:.6}\n",
-            .{ s.lines_processed, s.lines_failed, s.total_tokens, s.total_tokens_in, s.total_tokens_out, s.total_cost_usd }
-        );
-     }
+    if (fmt == .json or fmt == .ndjson) {
+        const SummaryJson = struct {
+            version: []const u8 = "1",
+            lines_total: usize,
+            lines_failed: usize,
+            tokens_input: usize,
+            tokens_output: usize,
+            cost_input_usd: f64,
+            cost_output_usd: f64,
+            cost_total_usd: f64,
+            model: []const u8,
+            accuracy: []const u8,
+            quota_hit: bool,
+        };
+        const record = SummaryJson{
+            .lines_total = s.lines_processed,
+            .lines_failed = s.lines_failed,
+            .tokens_input = s.total_tokens_in,
+            .tokens_output = s.total_tokens_out,
+            .cost_input_usd = s.total_cost_input_usd,
+            .cost_output_usd = s.total_cost_output_usd,
+            .cost_total_usd = s.total_cost_usd,
+            .model = model,
+            .accuracy = accuracy,
+            .quota_hit = s.quota_hit,
+        };
+        try std.json.stringify(record, .{}, writer);
+        try writer.writeByte('\n');
+    } else {
+        try writer.print("summary: lines={d} (failed={d}) tokens={d} (in={d} out={d}) cost=${d:.6}\n", .{ s.lines_processed, s.lines_failed, s.total_tokens, s.total_tokens_in, s.total_tokens_out, s.total_cost_usd });
+    }
 }
 
 fn runParallel(opts: PipeOptions) PipeError!void {
@@ -334,7 +325,7 @@ fn runParallel(opts: PipeOptions) PipeError!void {
             .summary = &summary,
             .summary_mutex = &summary_mutex,
         };
-        workers[i] = try std.Thread.spawn(.{}, workerMain, .{ &contexts[i] });
+        workers[i] = try std.Thread.spawn(.{}, workerMain, .{&contexts[i]});
     }
 
     // Producer Loop
@@ -406,11 +397,10 @@ fn runParallel(opts: PipeOptions) PipeError!void {
 
     if (opts.show_summary) {
         writeSummary(opts.stderr, summary, opts.summary_format, opts.model, opts.accuracy) catch |err| {
-             logError(&io, opts.stderr, 0, "failed to write summary", err, opts.quiet);
+            logError(&io, opts.stderr, 0, "failed to write summary", err, opts.quiet);
         };
     }
 }
-
 
 fn workerMain(ctx: *WorkerContext) void {
     var arena = std.heap.ArenaAllocator.init(ctx.opts.allocator);
@@ -439,14 +429,7 @@ fn workerMain(ctx: *WorkerContext) void {
         const out_writer = out_buf.writer();
 
         // Process
-        const res = processLine(
-            ctx.opts.*,
-            arena.allocator(),
-            line,
-            job.line_no,
-            out_writer,
-            ctx.io,
-            true // is_parallel
+        const res = processLine(ctx.opts.*, arena.allocator(), line, job.line_no, out_writer, ctx.io, true // is_parallel
         );
 
         // Update summary
@@ -482,7 +465,7 @@ fn workerMain(ctx: *WorkerContext) void {
                 // In parallel mode, we treat fatal errors as "hard failure for this line",
                 // but we do not abort the entire stream to keep the batch processing active.
                 // --fail-on-error only guarantees abort in single-threaded mode.
-            }
+            },
         }
     }
 }
@@ -501,8 +484,7 @@ fn processLine(
 ) ProcessResult {
     // 1. Parse JSON
     var parsed = std.json.parseFromSlice(std.json.Value, line_alloc, line, .{}) catch |err| {
-        if (is_parallel) logError(io_ctx, opts.stderr, line_number, "invalid JSON", err, opts.quiet)
-        else logErrorSingleThread(io_ctx, line_number, "invalid JSON", err, opts.quiet);
+        if (is_parallel) logError(io_ctx, opts.stderr, line_number, "invalid JSON", err, opts.quiet) else logErrorSingleThread(io_ctx, line_number, "invalid JSON", err, opts.quiet);
 
         if (opts.fail_on_error) return .{ .rc = .fatal };
         return .{ .rc = .skip };
@@ -510,8 +492,7 @@ fn processLine(
     defer parsed.deinit();
 
     if (parsed.value != .object) {
-        if (is_parallel) logError(io_ctx, opts.stderr, line_number, "JSON root is not object", null, opts.quiet)
-        else logErrorSingleThread(io_ctx, line_number, "JSON root is not object", null, opts.quiet);
+        if (is_parallel) logError(io_ctx, opts.stderr, line_number, "JSON root is not object", null, opts.quiet) else logErrorSingleThread(io_ctx, line_number, "JSON root is not object", null, opts.quiet);
 
         if (opts.fail_on_error) return .{ .rc = .fatal };
         return .{ .rc = .skip };
@@ -519,16 +500,14 @@ fn processLine(
 
     // 2. Extract Text Field
     const text_val = parsed.value.object.get(opts.field) orelse {
-        if (is_parallel) logError(io_ctx, opts.stderr, line_number, "missing required field", null, opts.quiet)
-        else logErrorSingleThread(io_ctx, line_number, "missing required field", null, opts.quiet);
+        if (is_parallel) logError(io_ctx, opts.stderr, line_number, "missing required field", null, opts.quiet) else logErrorSingleThread(io_ctx, line_number, "missing required field", null, opts.quiet);
 
         if (opts.fail_on_error) return .{ .rc = .fatal };
         return .{ .rc = .skip };
     };
 
     if (text_val != .string) {
-        if (is_parallel) logError(io_ctx, opts.stderr, line_number, "field is not a string", null, opts.quiet)
-        else logErrorSingleThread(io_ctx, line_number, "field is not a string", null, opts.quiet);
+        if (is_parallel) logError(io_ctx, opts.stderr, line_number, "field is not a string", null, opts.quiet) else logErrorSingleThread(io_ctx, line_number, "field is not a string", null, opts.quiet);
 
         if (opts.fail_on_error) return .{ .rc = .fatal };
         return .{ .rc = .skip };
@@ -542,8 +521,7 @@ fn processLine(
         text,
         opts.special_mode,
     ) catch |err| {
-        if (is_parallel) logError(io_ctx, opts.stderr, line_number, "tokenization failed", err, opts.quiet)
-        else logErrorSingleThread(io_ctx, line_number, "tokenization failed", err, opts.quiet);
+        if (is_parallel) logError(io_ctx, opts.stderr, line_number, "tokenization failed", err, opts.quiet) else logErrorSingleThread(io_ctx, line_number, "tokenization failed", err, opts.quiet);
 
         if (opts.fail_on_error) return .{ .rc = .fatal };
         return .{ .rc = .skip };
@@ -551,8 +529,7 @@ fn processLine(
 
     // 4. Augment JSON
     parsed.value.object.put(opts.field_tokens_in, std.json.Value{ .integer = @intCast(tok_res.tokens) }) catch |err| {
-        if (is_parallel) logError(io_ctx, opts.stderr, line_number, "JSON mutate failed (tokens_in)", err, opts.quiet)
-        else logErrorSingleThread(io_ctx, line_number, "JSON mutate failed (tokens_in)", err, opts.quiet);
+        if (is_parallel) logError(io_ctx, opts.stderr, line_number, "JSON mutate failed (tokens_in)", err, opts.quiet) else logErrorSingleThread(io_ctx, line_number, "JSON mutate failed (tokens_in)", err, opts.quiet);
 
         if (opts.fail_on_error) return .{ .rc = .fatal };
         return .{ .rc = .skip };
@@ -560,11 +537,10 @@ fn processLine(
 
     // Inject accuracy
     parsed.value.object.put(opts.field_accuracy, std.json.Value{ .string = opts.accuracy }) catch |err| {
-         if (is_parallel) logError(io_ctx, opts.stderr, line_number, "JSON mutate failed (accuracy)", err, opts.quiet)
-         else logErrorSingleThread(io_ctx, line_number, "JSON mutate failed (accuracy)", err, opts.quiet);
+        if (is_parallel) logError(io_ctx, opts.stderr, line_number, "JSON mutate failed (accuracy)", err, opts.quiet) else logErrorSingleThread(io_ctx, line_number, "JSON mutate failed (accuracy)", err, opts.quiet);
 
-         if (opts.fail_on_error) return .{ .rc = .fatal };
-         return .{ .rc = .skip };
+        if (opts.fail_on_error) return .{ .rc = .fatal };
+        return .{ .rc = .skip };
     };
 
     var total_tokens_usage: usize = tok_res.tokens;
@@ -584,19 +560,17 @@ fn processLine(
         total_tokens_usage += total_tokens_out;
 
         parsed.value.object.put(opts.field_tokens_out, std.json.Value{ .integer = @intCast(total_tokens_out) }) catch |err| {
-            if (is_parallel) logError(io_ctx, opts.stderr, line_number, "JSON mutate failed (tokens_out)", err, opts.quiet)
-            else logErrorSingleThread(io_ctx, line_number, "JSON mutate failed (tokens_out)", err, opts.quiet);
+            if (is_parallel) logError(io_ctx, opts.stderr, line_number, "JSON mutate failed (tokens_out)", err, opts.quiet) else logErrorSingleThread(io_ctx, line_number, "JSON mutate failed (tokens_out)", err, opts.quiet);
 
             if (opts.fail_on_error) return .{ .rc = .fatal };
             return .{ .rc = .skip };
         };
 
         const cost_res = engine.estimateCost(opts.db, opts.model, total_tokens_in, total_tokens_out, 0) catch |err| {
-             if (is_parallel) logError(io_ctx, opts.stderr, line_number, "pricing failed", err, opts.quiet)
-             else logErrorSingleThread(io_ctx, line_number, "pricing failed", err, opts.quiet);
+            if (is_parallel) logError(io_ctx, opts.stderr, line_number, "pricing failed", err, opts.quiet) else logErrorSingleThread(io_ctx, line_number, "pricing failed", err, opts.quiet);
 
-             if (opts.fail_on_error) return .{ .rc = .fatal };
-             return .{ .rc = .skip };
+            if (opts.fail_on_error) return .{ .rc = .fatal };
+            return .{ .rc = .skip };
         };
         total_cost = cost_res.cost_total;
         total_cost_input = cost_res.cost_input;
@@ -605,8 +579,7 @@ fn processLine(
         parsed.value.object.put("cost_input_usd", std.json.Value{ .float = cost_res.cost_input }) catch {};
         parsed.value.object.put("cost_output_usd", std.json.Value{ .float = cost_res.cost_output }) catch {};
         parsed.value.object.put(opts.field_cost, std.json.Value{ .float = cost_res.cost_total }) catch |err| {
-            if (is_parallel) logError(io_ctx, opts.stderr, line_number, "JSON mutate failed (cost)", err, opts.quiet)
-            else logErrorSingleThread(io_ctx, line_number, "JSON mutate failed (cost)", err, opts.quiet);
+            if (is_parallel) logError(io_ctx, opts.stderr, line_number, "JSON mutate failed (cost)", err, opts.quiet) else logErrorSingleThread(io_ctx, line_number, "JSON mutate failed (cost)", err, opts.quiet);
 
             if (opts.fail_on_error) return .{ .rc = .fatal };
             return .{ .rc = .skip };
@@ -615,8 +588,7 @@ fn processLine(
 
     // 5. Write JSON
     std.json.stringify(parsed.value, .{}, out_stream) catch |err| {
-        if (is_parallel) logError(io_ctx, opts.stderr, line_number, "JSON encode failed", err, opts.quiet)
-        else logErrorSingleThread(io_ctx, line_number, "JSON encode failed", err, opts.quiet);
+        if (is_parallel) logError(io_ctx, opts.stderr, line_number, "JSON encode failed", err, opts.quiet) else logErrorSingleThread(io_ctx, line_number, "JSON encode failed", err, opts.quiet);
 
         if (opts.fail_on_error) return .{ .rc = .fatal };
         return .{ .rc = .skip };
@@ -638,9 +610,9 @@ fn logError(io: *SharedIo, stderr: std.io.AnyWriter, line_number: usize, msg: []
     io.stderr_mutex.lock();
     defer io.stderr_mutex.unlock();
     if (err) |e| {
-        stderr.print("line {d}: error: {s} ({s})\n", .{line_number, msg, @errorName(e)}) catch {};
+        stderr.print("line {d}: error: {s} ({s})\n", .{ line_number, msg, @errorName(e) }) catch {};
     } else {
-        stderr.print("line {d}: error: {s}\n", .{line_number, msg}) catch {};
+        stderr.print("line {d}: error: {s}\n", .{ line_number, msg }) catch {};
     }
 }
 
@@ -648,8 +620,8 @@ fn logError(io: *SharedIo, stderr: std.io.AnyWriter, line_number: usize, msg: []
 fn logErrorSingleThread(stderr: std.io.AnyWriter, line_number: usize, msg: []const u8, err: ?anyerror, quiet: bool) void {
     if (quiet) return;
     if (err) |e| {
-        stderr.print("line {d}: error: {s} ({s})\n", .{line_number, msg, @errorName(e)}) catch {};
+        stderr.print("line {d}: error: {s} ({s})\n", .{ line_number, msg, @errorName(e) }) catch {};
     } else {
-        stderr.print("line {d}: error: {s}\n", .{line_number, msg}) catch {};
+        stderr.print("line {d}: error: {s}\n", .{ line_number, msg }) catch {};
     }
 }

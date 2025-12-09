@@ -42,7 +42,7 @@ pub const BpeEngineV2 = struct {
 
         // Safety: assuming alignment from embedding/tool.
         const index_ptr: [*]const IndexEntry = @ptrCast(@alignCast(index_bytes.ptr));
-        const index = index_ptr[0 .. header.count];
+        const index = index_ptr[0..header.count];
 
         const strings_start = index_start + index_size;
         if (embedded_data.len < strings_start + header.strings_len) return error.TruncatedStrings;
@@ -138,7 +138,7 @@ pub const BpeEngineV2 = struct {
         const Merge = struct {
             rank: u32,
             node_idx: NodeIndex, // The left node index
-            gen: u32,            // Generation of the left node when added
+            gen: u32, // Generation of the left node when added
 
             fn compare(_: void, a: @This(), b: @This()) std.math.Order {
                 if (a.rank < b.rank) return .lt;
@@ -217,7 +217,7 @@ pub const BpeEngineV2 = struct {
             l_node.next = right_neighbor;
 
             if (right_neighbor != InvalidIndex) {
-                 nodes.items[right_neighbor].prev = l_idx;
+                nodes.items[right_neighbor].prev = l_idx;
             }
 
             // Update Left Neighbor interaction: (Prev + L)

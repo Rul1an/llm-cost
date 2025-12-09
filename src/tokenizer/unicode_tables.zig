@@ -3594,4 +3594,3 @@ pub fn isLm(cp: CodePoint) bool {
 pub fn isLo(cp: CodePoint) bool {
     return inRanges(cp, &LO_RANGES);
 }
-

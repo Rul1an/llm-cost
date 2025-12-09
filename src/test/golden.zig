@@ -1,14 +1,16 @@
 const std = @import("std");
 
-pub fn runGolden(case: struct {
-    name: []const u8,
-    argv: []const []const u8,
-    stdout_path: []const u8,
-    stderr_path: []const u8,
-    exitcode_path: []const u8,
-    // Optional input piping
-    stdin_path: ?[]const u8 = null,
-}) !void {
+pub fn runGolden(
+    case: struct {
+        name: []const u8,
+        argv: []const []const u8,
+        stdout_path: []const u8,
+        stderr_path: []const u8,
+        exitcode_path: []const u8,
+        // Optional input piping
+        stdin_path: ?[]const u8 = null,
+    },
+) !void {
     const alloc = std.testing.allocator;
 
     // 1. Run process
@@ -20,11 +22,11 @@ pub fn runGolden(case: struct {
     try child.spawn();
 
     if (case.stdin_path) |path| {
-         const input = try std.fs.cwd().readFileAlloc(alloc, path, 10 * 1024 * 1024);
-         defer alloc.free(input);
-         try child.stdin.?.writer().writeAll(input);
-         child.stdin.?.close();
-         child.stdin = null;
+        const input = try std.fs.cwd().readFileAlloc(alloc, path, 10 * 1024 * 1024);
+        defer alloc.free(input);
+        try child.stdin.?.writer().writeAll(input);
+        child.stdin.?.close();
+        child.stdin = null;
     }
 
     const stdout_bytes = try child.stdout.?.reader().readAllAlloc(alloc, 10 * 1024 * 1024);
@@ -54,18 +56,18 @@ pub fn runGolden(case: struct {
 
     // 3. Compare with explicit failures
     std.testing.expectEqualStrings(golden_stdout, stdout_bytes) catch |err| {
-        std.debug.print("STDOUT MISMATCH: {s}\nEXPECTED:\n{s}\nACTUAL:\n{s}\n", .{case.name, golden_stdout, stdout_bytes});
+        std.debug.print("STDOUT MISMATCH: {s}\nEXPECTED:\n{s}\nACTUAL:\n{s}\n", .{ case.name, golden_stdout, stdout_bytes });
         return err;
     };
 
     std.testing.expectEqualStrings(golden_stderr, stderr_bytes) catch |err| {
-         std.debug.print("STDERR MISMATCH: {s}\nEXPECTED:\n{s}\nACTUAL:\n{s}\n", .{case.name, golden_stderr, stderr_bytes});
-         return err;
+        std.debug.print("STDERR MISMATCH: {s}\nEXPECTED:\n{s}\nACTUAL:\n{s}\n", .{ case.name, golden_stderr, stderr_bytes });
+        return err;
     };
 
     std.testing.expectEqual(golden_exit, got_exit) catch |err| {
-         std.debug.print("EXIT CODE MISMATCH: {s}\nEXPECTED: {d}\nACTUAL: {d}\n", .{case.name, golden_exit, got_exit});
-         return err;
+        std.debug.print("EXIT CODE MISMATCH: {s}\nEXPECTED: {d}\nACTUAL: {d}\n", .{ case.name, golden_exit, got_exit });
+        return err;
     };
 }
 

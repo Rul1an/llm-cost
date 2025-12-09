@@ -12,8 +12,6 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-
-
     // Modules
     const lib_mod = b.addModule("llm_cost", .{
         .root_source_file = b.path("src/lib.zig"),
@@ -82,8 +80,6 @@ pub fn build(b: *std.Build) void {
     const run_parity = b.addRunArtifact(parity_test);
     const parity_step = b.step("test-parity", "Run parity check against corpus");
     parity_step.dependOn(&run_parity.step);
-
-
 
     // Benchmark Tool
     const bench_exe = b.addExecutable(.{

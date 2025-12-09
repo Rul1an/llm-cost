@@ -6,7 +6,6 @@ const SafeUtf8Iterator = @import("utf8.zig").SafeUtf8Iterator;
 /// A specialized pre-tokenizer for 'o200k_base' that mimics the regex logic.
 /// See `docs/o200k_pre_tokenizer.md` for branch definitions.
 pub const O200kScanner = struct {
-
     /// Main tokenization loop matching regex priority.
     pub fn tokenize(_: *anyopaque, alloc: std.mem.Allocator, text: []const u8) ![]pre_tokenizer.PreToken {
         var tokens = std.ArrayList(pre_tokenizer.PreToken).init(alloc);
@@ -20,7 +19,6 @@ pub const O200kScanner = struct {
             // We use standard iterator-like decoding.
 
             // Decode codepoint
-
 
             // Strict Priority Order:
             // 1. Branch 1: Words (Lower suffix)
@@ -36,25 +34,25 @@ pub const O200kScanner = struct {
             // "Hello": H (Upper), ello (Lower+). Matches Branch 1. Prefix empty.
 
             if (tryScanWordBranch1(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i..i+len] });
+                try tokens.append(.{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             if (tryScanWordBranch2(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i..i+len] });
+                try tokens.append(.{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             if (tryScanNumber(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i..i+len] });
+                try tokens.append(.{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             if (tryScanPunctuation(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i..i+len] });
+                try tokens.append(.{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
@@ -67,28 +65,28 @@ pub const O200kScanner = struct {
             // If punctuation fails, try whitespace.
             // 5. Branch 5: Whitespace ending in newline `\s*[\r\n]+`
             if (tryScanWhitespaceBranch5(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i..i+len] });
+                try tokens.append(.{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             // 6. Branch 6: Trailing whitespace `\s+(?!\S)`
             if (tryScanWhitespaceBranch6(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i..i+len] });
+                try tokens.append(.{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             // 7. Branch 7: Generic whitespace `\s+`
             if (tryScanWhitespaceBranch7(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i..i+len] });
+                try tokens.append(.{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             // Fallback: Consume 1 byte.
             // This ensures forward progress on invalid UTF-8 or uncovered chars.
-            try tokens.append(.{ .text = text[i..i+1] });
+            try tokens.append(.{ .text = text[i .. i + 1] });
             i += 1;
         }
 
@@ -130,7 +128,7 @@ pub const O200kScanner = struct {
         var it2 = SafeUtf8Iterator{ .bytes = slice, .i = 0 };
         var cp2 = it2.nextCodepoint() orelse return null;
         if (isPrefixChar(cp2)) {
-             cp2 = it2.nextCodepoint() orelse return null;
+            cp2 = it2.nextCodepoint() orelse return null;
         }
         // `it2.i` is now AFTER cp2. We want `it2.i` BEFORE cp2.
         // No wait, we need `start_body_idx` which is the index of `cp` (the first body char).
@@ -275,7 +273,7 @@ pub const O200kScanner = struct {
 
         // Body: 1+ chars of [^\s\p{L}\p{N}]
         if (unicode.isWhitespace(cp) or unicode.isLetter(cp) or unicode.isNumber(cp)) {
-             return null;
+            return null;
         }
         var end_body = it.i;
 
@@ -439,7 +437,8 @@ pub const O200kScanner = struct {
             // Len 3 candidates: 're, 've, 'll
             if ((c1_lower == 'r' and c2_lower == 'e') or
                 (c1_lower == 'v' and c2_lower == 'e') or
-                (c1_lower == 'l' and c2_lower == 'l')) {
+                (c1_lower == 'l' and c2_lower == 'l'))
+            {
                 return 3;
             }
         }

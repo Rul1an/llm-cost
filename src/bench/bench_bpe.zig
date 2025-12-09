@@ -47,7 +47,7 @@ pub fn main() !void {
 
         var i: usize = 0;
         while (i < input.len) : (i += emoji.len) {
-            @memcpy(input[i..i+emoji.len], emoji);
+            @memcpy(input[i .. i + emoji.len], emoji);
         }
 
         try measure(alloc, &tok, n, input, "emoji * N", stdout);
@@ -78,5 +78,5 @@ fn measure(alloc: std.mem.Allocator, tok: *OpenAITokenizer, logical_len: usize, 
     const avg_ns = total_ns / iterations;
 
     // Columns: Scenario | Logical (N) | Bytes | Time (ns) | Tokens
-    try writer.print("| {s} (N={d}) | {d} | {d} | {d} | {d} |\n", .{name, logical_len, logical_len, input.len, avg_ns, token_count});
+    try writer.print("| {s} (N={d}) | {d} | {d} | {d} | {d} |\n", .{ name, logical_len, logical_len, input.len, avg_ns, token_count });
 }

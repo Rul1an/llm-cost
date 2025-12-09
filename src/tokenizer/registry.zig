@@ -27,11 +27,11 @@ pub const EncodingSpec = struct {
 /// Known encodings registry
 pub const Registry = struct {
     pub const cl100k_specials = [_]EncodingSpec.SpecialToken{
-         .{ .token = "<|endoftext|>", .rank = 100257 },
-         .{ .token = "<|fim_prefix|>", .rank = 100258 },
-         .{ .token = "<|fim_middle|>", .rank = 100259 },
-         .{ .token = "<|fim_suffix|>", .rank = 100260 },
-         .{ .token = "<|endofprompt|>", .rank = 100276 },
+        .{ .token = "<|endoftext|>", .rank = 100257 },
+        .{ .token = "<|fim_prefix|>", .rank = 100258 },
+        .{ .token = "<|fim_middle|>", .rank = 100259 },
+        .{ .token = "<|fim_suffix|>", .rank = 100260 },
+        .{ .token = "<|endofprompt|>", .rank = 100276 },
     };
 
     // Force 4-byte alignment for BPE binary data to avoid runtime @alignCast panic.

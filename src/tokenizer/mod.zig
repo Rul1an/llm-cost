@@ -7,4 +7,3 @@ pub const model_registry = @import("model_registry.zig");
 pub const pre_tokenizer = @import("pre_tokenizer.zig");
 pub const bpe_v2 = @import("bpe_v2.zig");
 pub const bpe_legacy = @import("bpe.zig");
-
