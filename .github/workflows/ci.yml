@@ -15,7 +15,7 @@ jobs:
       - name: Setup Zig
         uses: mlugg/setup-zig@v1 # TODO: Pin SHA
         with:
-          version: 0.15.0
+          version: 0.15.1
 
       - name: Build
         run: zig build
@@ -32,5 +32,5 @@ jobs:
       - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
       - uses: mlugg/setup-zig@v1 # TODO: Pin SHA
         with:
-          version: 0.15.0
+          version: 0.15.1
       - run: zig fmt --check src/
