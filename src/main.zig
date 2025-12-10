@@ -1,13 +1,8 @@
 const std = @import("std");
 
 // Module imports
-pub const tokenizer = struct {
-    pub const bpe_v2 = @import("tokenizer/bpe_v2.zig");
-    pub const bpe_v2_1 = @import("tokenizer/bpe_v2_1.zig");
-    pub const pre_tokenizer = @import("tokenizer/pre_tokenizer.zig");
-    pub const cl100k_scanner = @import("tokenizer/cl100k_scanner.zig");
-    pub const o200k_scanner = @import("tokenizer/o200k_scanner.zig");
-};
+// Module imports
+pub const tokenizer = @import("tokenizer/mod.zig");
 
 /// llm-cost: Token counting and cost estimation for LLM API calls
 ///
@@ -292,6 +287,7 @@ test "tokenizer module imports" {
     _ = tokenizer.pre_tokenizer;
     _ = tokenizer.cl100k_scanner;
     _ = tokenizer.o200k_scanner;
+    _ = tokenizer.vocab_loader;
 }
 
 test "version string format" {

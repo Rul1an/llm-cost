@@ -67,6 +67,22 @@ pub fn build(b: *std.Build) void {
     const golden_step = b.step("test-golden", "Run golden CLI tests");
     golden_step.dependOn(&run_golden_tests.step);
 
+    // Tools: Vocabulary Converter
+    const convert_vocab_exe = b.addExecutable(.{
+        .name = "convert-vocab",
+        .root_source_file = b.path("tools/convert_vocab.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    b.installArtifact(convert_vocab_exe);
+
+    const run_convert_vocab = b.addRunArtifact(convert_vocab_exe);
+    if (b.args) |args| {
+        run_convert_vocab.addArgs(args);
+    }
+    const convert_step = b.step("run-convert-vocab", "Run vocabulary converter");
+    convert_step.dependOn(&run_convert_vocab.step);
+
     // Benchmark - DISABLED: src/bench.zig does not exist yet
     // Uncomment when bench.zig is created:
     // const bench_exe = b.addExecutable(.{

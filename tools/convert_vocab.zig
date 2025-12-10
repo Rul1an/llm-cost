@@ -1,43 +1,22 @@
 const std = @import("std");
+const Sha256 = std.crypto.hash.sha2.Sha256;
 
-// --- Output Binary Format ---
-// Layout:
-// [Header]
-// [IndexEntry * count]         (Sorted by token bytes)
-// [String Data Blob]
+/// Vocabulary Binary Format v2
+/// See docs/vocab-format-v2.md for specification
 
-const MAGIC: u32 = 0xAABBCCDD;
+const MAGIC = "BPE2".*;
+const VERSION: u32 = 2;
+const HEADER_SIZE: usize = 64;
 
-const Header = extern struct {
-    magic: u32,
-    count: u32,
-    strings_len: u32,
-    // data_offset calculated implicitly as sizeof(Header) + count * sizeof(IndexEntry) (+ alignment padding if any)
-};
-
-const IndexEntry = extern struct {
-    offset: u32,
-    rank: u32,
-    len: u16,
-    // 10 bytes packed.
-    // We might want alignment, but packed is fine for disk format if we read carefully.
-    // Actually for mmap/embed usage, aligned structs are better.
-    // Let's use u32 for everything to be safe and C-like cache friendly (AES).
-    // offset(4), rank(4), len(4) = 12 bytes. Nice stride.
-};
-
-const IndexEntryAligned = extern struct {
-    offset: u32,
-    rank: u32,
-    len: u32,
-};
-
-// --- Intermediate representation for sorting ---
-const VocabItem = struct {
-    token: []const u8,
-    rank: u32,
-};
-
+/// Convert a .tiktoken file to binary format
+///
+/// Usage:
+///   zig build run-convert-vocab -- cl100k_base.tiktoken cl100k_base.bin
+///
+/// The .tiktoken format is simply:
+///   <base64-token-bytes> <rank>\n
+///
+/// We convert this to a compact binary format for @embedFile usage.
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -47,129 +26,195 @@ pub fn main() !void {
     defer std.process.argsFree(alloc, args);
 
     if (args.len != 3) {
-        std.debug.print("Usage: {s} <input.tiktoken> <output.bin>\n", .{args[0]});
-        return;
+        const stderr = std.io.getStdErr().writer();
+        try stderr.print("Usage: {s} <input.tiktoken> <output.bin>\n", .{args[0]});
+        try stderr.print("\nConverts OpenAI tiktoken vocabulary to binary format.\n", .{});
+        try stderr.print("Download .tiktoken files from:\n", .{});
+        try stderr.print("  https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken\n", .{});
+        try stderr.print("  https://openaipublic.blob.core.windows.net/encodings/o200k_base.tiktoken\n", .{});
+        std.process.exit(1);
     }
 
-    const in_path = args[1];
-    const out_path = args[2];
+    const input_path = args[1];
+    const output_path = args[2];
 
-    std.debug.print("Reading {s}...\n", .{in_path});
+    try convertVocab(alloc, input_path, output_path);
 
-    // 1. Read all items
-    var items = try std.ArrayList(VocabItem).initCapacity(alloc, 200500);
-    defer items.deinit();
-
-    // We need an arena for the token strings we decode
-    var string_arena = std.heap.ArenaAllocator.init(alloc);
-    defer string_arena.deinit();
-    const str_alloc = string_arena.allocator();
-
-    const in_file = try std.fs.cwd().openFile(in_path, .{});
-    defer in_file.close();
-
-    const file_content = try in_file.readToEndAlloc(alloc, 20_000_000);
-    defer alloc.free(file_content);
-
-    var count: usize = 0;
-    var line_it = std.mem.splitScalar(u8, file_content, '\n');
-
-    while (line_it.next()) |line| {
-        if (line.len == 0) continue;
-
-        // Line format: <base64_token> <space> <rank>
-        var it = std.mem.splitScalar(u8, line, ' ');
-        const b64 = it.next() orelse continue;
-        const rank_str = it.next() orelse continue;
-
-        const rank = std.fmt.parseInt(u32, rank_str, 10) catch continue;
-
-        // Decode base64
-        const decoded_len = try std.base64.standard.Decoder.calcSizeForSlice(b64);
-        const decoded = try str_alloc.alloc(u8, decoded_len);
-        try std.base64.standard.Decoder.decode(decoded, b64);
-
-        try items.append(VocabItem{ .token = decoded, .rank = rank });
-        count += 1;
-    }
-    std.debug.print("Loaded {d} items. Sorting...\n", .{items.items.len});
-
-    // 2. Sort by token content (for binary search)
-    std.mem.sort(VocabItem, items.items, {}, sortVocab);
-
-    // 3. Write binary (Header -> Index -> Strings)
-    const out_file = try std.fs.cwd().createFile(out_path, .{});
-    defer out_file.close();
-
-    var writer = BufferedWriter.init(out_file);
-
-    var strings_len: u32 = 0;
-    for (items.items) |item| {
-        strings_len += @as(u32, @intCast(item.token.len));
-    }
-
-    const header = Header{
-        .magic = MAGIC,
-        .count = @as(u32, @intCast(items.items.len)),
-        .strings_len = strings_len,
-    };
-
-    try writer.writeAll(std.mem.asBytes(&header));
-
-    // Write Index
-    var current_offset: u32 = 0;
-    for (items.items) |item| {
-        const entry = IndexEntryAligned{
-            .offset = current_offset,
-            .rank = item.rank,
-            .len = @as(u32, @intCast(item.token.len)),
-        };
-        try writer.writeAll(std.mem.asBytes(&entry));
-        current_offset += entry.len;
-    }
-
-    // Write Strings
-    for (items.items) |item| {
-        try writer.writeAll(item.token);
-    }
-
-    try writer.flush();
-    std.debug.print("Done. Wrote to {s}\n", .{out_path});
+    const stdout = std.io.getStdOut().writer();
+    try stdout.print("✓ Converted {s} → {s}\n", .{ input_path, output_path });
 }
 
-const BufferedWriter = struct {
-    file: std.fs.File,
-    buf: [65536]u8 = undefined,
-    index: usize = 0,
+fn convertVocab(alloc: std.mem.Allocator, input_path: []const u8, output_path: []const u8) !void {
+    // 1. Read source file
+    const source_bytes = try std.fs.cwd().readFileAlloc(alloc, input_path, 50 * 1024 * 1024);
+    defer alloc.free(source_bytes);
 
-    pub fn init(file: std.fs.File) BufferedWriter {
-        return .{ .file = file };
+    // 2. Compute source hash for verification
+    var source_hash: [32]u8 = undefined;
+    Sha256.hash(source_bytes, &source_hash, .{});
+
+    // 3. Parse .tiktoken format
+    var tokens = std.ArrayList(Token).init(alloc);
+    defer tokens.deinit();
+    defer for (tokens.items) |t| alloc.free(t.bytes);
+
+    var max_rank: u32 = 0;
+    var max_token_len: u32 = 0;
+
+    var lines = std.mem.splitScalar(u8, source_bytes, '\n');
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+
+        // Parse: <base64> <rank>
+        var parts = std.mem.splitScalar(u8, line, ' ');
+        const b64_part = parts.next() orelse continue;
+        const rank_part = parts.next() orelse continue;
+
+        const rank = try std.fmt.parseInt(u32, rank_part, 10);
+
+        // Decode base64
+        const decoded_len = try std.base64.standard.Decoder.calcSizeForSlice(b64_part);
+        const decoded = try alloc.alloc(u8, decoded_len);
+        errdefer alloc.free(decoded);
+
+        try std.base64.standard.Decoder.decode(decoded, b64_part);
+
+        try tokens.append(.{
+            .rank = rank,
+            .bytes = decoded,
+        });
+
+        if (rank > max_rank) max_rank = rank;
+        if (decoded.len > max_token_len) max_token_len = @intCast(decoded.len);
     }
 
-    pub fn writeAll(self: *BufferedWriter, data: []const u8) !void {
-        var data_idx: usize = 0;
-        while (data_idx < data.len) {
-            const space = self.buf.len - self.index;
-            const copylen = @min(space, data.len - data_idx);
+    const stdout = std.io.getStdOut().writer();
+    try stdout.print("  Parsed {d} tokens (max rank: {d}, max len: {d})\n", .{
+        tokens.items.len,
+        max_rank,
+        max_token_len,
+    });
 
-            @memcpy(self.buf[self.index..][0..copylen], data[data_idx..][0..copylen]);
-            self.index += copylen;
-            data_idx += copylen;
-
-            if (self.index == self.buf.len) {
-                try self.flush();
-            }
+    // 4. Sort by rank (ensures token_table[rank] = token)
+    std.mem.sort(Token, tokens.items, {}, struct {
+        fn lessThan(_: void, a: Token, b: Token) bool {
+            return a.rank < b.rank;
         }
+    }.lessThan);
+
+    // 5. Verify ranks are contiguous (0, 1, 2, ...)
+    // Note: Some vocabs may have gaps, so we'll handle that
+    const token_count: u32 = max_rank + 1;
+
+    // 6. Build output buffer
+    var output = std.ArrayList(u8).init(alloc);
+    defer output.deinit();
+
+    // Reserve header
+    try output.appendNTimes(0, HEADER_SIZE);
+
+    // Build token table and blob
+    var token_table = try alloc.alloc(TokenEntry, token_count);
+    defer alloc.free(token_table);
+    @memset(token_table, .{ .offset = 0, .length = 0 }); // Empty tokens have len 0
+
+    var blob = std.ArrayList(u8).init(alloc);
+    defer blob.deinit();
+
+    for (tokens.items) |t| {
+        const offset: u32 = @intCast(blob.items.len);
+        const length: u32 = @intCast(t.bytes.len);
+
+        token_table[t.rank] = .{
+            .offset = offset,
+            .length = length,
+        };
+
+        try blob.appendSlice(t.bytes);
     }
 
-    pub fn flush(self: *BufferedWriter) !void {
-        if (self.index > 0) {
-            try self.file.writeAll(self.buf[0..self.index]);
-            self.index = 0;
-        }
+    const blob_size: u32 = @intCast(blob.items.len);
+
+    // Write token table
+    for (token_table) |entry| {
+        try output.writer().writeInt(u32, entry.offset, .little);
+        try output.writer().writeInt(u32, entry.length, .little);
     }
+
+    // Write blob
+    try output.appendSlice(blob.items);
+
+    // 7. Write header (at position 0)
+    var header_buf: [HEADER_SIZE]u8 = undefined;
+    @memset(&header_buf, 0);
+
+    // Magic
+    @memcpy(header_buf[0..4], &MAGIC);
+
+    // Version (u32 little-endian at offset 4)
+    std.mem.writeInt(u32, header_buf[4..8], VERSION, .little);
+
+    // Token count (u32 at offset 8)
+    std.mem.writeInt(u32, header_buf[8..12], token_count, .little);
+
+    // Max token length (u32 at offset 12)
+    std.mem.writeInt(u32, header_buf[12..16], max_token_len, .little);
+
+    // Blob size (u32 at offset 16)
+    std.mem.writeInt(u32, header_buf[16..20], blob_size, .little);
+
+    // Source hash (32 bytes at offset 20)
+    @memcpy(header_buf[20..52], &source_hash);
+
+    // Reserved (12 bytes at offset 52-63) - already zeroed
+
+    // Overwrite header in output
+    @memcpy(output.items[0..HEADER_SIZE], &header_buf);
+
+    // 8. Write to file
+    const file = try std.fs.cwd().createFile(output_path, .{});
+    defer file.close();
+    try file.writeAll(output.items);
+
+    try stdout.print("  Output: {d} bytes ({d:.2} MB)\n", .{
+        output.items.len,
+        @as(f64, @floatFromInt(output.items.len)) / (1024.0 * 1024.0),
+    });
+
+    // 9. Print verification info
+    try stdout.print("  Source SHA256: ", .{});
+    for (source_hash) |b| {
+        try stdout.print("{x:0>2}", .{b});
+    }
+    try stdout.print("\n", .{});
+}
+
+const Token = struct {
+    rank: u32,
+    bytes: []u8,
 };
 
-fn sortVocab(_: void, a: VocabItem, b: VocabItem) bool {
-    return std.mem.lessThan(u8, a.token, b.token);
+const TokenEntry = struct {
+    offset: u32,
+    length: u32,
+};
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+test "base64 decode" {
+    const alloc = std.testing.allocator;
+
+    // "IQ==" decodes to "!"
+    const decoded_len = try std.base64.standard.Decoder.calcSizeForSlice("IQ==");
+    const decoded = try alloc.alloc(u8, decoded_len);
+    defer alloc.free(decoded);
+
+    try std.base64.standard.Decoder.decode(decoded, "IQ==");
+    try std.testing.expectEqualStrings("!", decoded);
+}
+
+test "header size" {
+    try std.testing.expectEqual(@as(usize, 64), HEADER_SIZE);
 }
