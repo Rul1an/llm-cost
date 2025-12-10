@@ -33,8 +33,6 @@ pub fn main() !void {
     // We try to init both cl100k and o200k. If vocab missing, we skip tests needing them.
     var cl100k_tok: ?openai.OpenAITokenizer = null;
     var o200k_tok: ?openai.OpenAITokenizer = null;
-    defer if (cl100k_tok) |*t| t.deinit(allocator);
-    defer if (o200k_tok) |*t| t.deinit(allocator);
     // Initialize cl100k_base
     if (openai.OpenAITokenizer.init(allocator, .{
         .spec = registry.Registry.cl100k_base,
@@ -45,6 +43,7 @@ pub fn main() !void {
     } else |err| {
         try stdout.print("WARN: Failed to init cl100k_base: {}\n", .{err});
     }
+    defer if (cl100k_tok) |*t| t.deinit(allocator);
 
     // Initialize o200k_base
     if (openai.OpenAITokenizer.init(allocator, .{
@@ -56,6 +55,7 @@ pub fn main() !void {
     } else |err| {
         try stdout.print("WARN: Failed to init o200k_base: {}\n", .{err});
     }
+    defer if (o200k_tok) |*t| t.deinit(allocator);
 
     // 3. Open Corpus
     const file = std.fs.cwd().openFile(corpus_path, .{}) catch |err| {

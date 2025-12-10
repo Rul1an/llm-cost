@@ -124,7 +124,7 @@ fn countHeuristic(text: []const u8) usize {
     }
 
     // If >30% CJK, use character counting
-    if (total_codepoints > 0 and cjk_count * 100 / total_codepoints > 30) {
+    if (total_codepoints > 0 and (cjk_count * 100) / total_codepoints > 30) {
         return countCodepoints(text);
     } else {
         return countWhitespaceSeparated(text);

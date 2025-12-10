@@ -115,8 +115,8 @@ def generate_golden(output_path: Path):
     for encoding_name in ENCODINGS:
         try:
             enc = tiktoken.get_encoding(encoding_name)
-        except Exception as e:
-            print(f"Error loading encoding {encoding_name}: {e}")
+        except Exception:
+            print(f"WARN: Encoding {encoding_name} not found, skipping...")
             continue
 
         for category, texts in TEST_CASES.items():
