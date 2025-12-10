@@ -23,7 +23,7 @@ When in doubt, upgrade to the latest released version before filing a report.
 
 ## Reporting a Vulnerability
 
-Please report vulnerabilities via email to `security@example.com` (Replace with actual if available) or open a simpler GitHub Advisory.
+Please report vulnerabilities via email to `info@logvault.eu` or open a simpler GitHub Advisory.
 
 ## Supply Chain & Releases
 
