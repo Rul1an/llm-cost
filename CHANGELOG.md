@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.6.2] - 2025-12-10
+### Fixed
+- **CI**: Fixed `release.yml` workflow failure by using correct SHA-pinned references for `actions/upload-artifact` (v4) and `actions/download-artifact` (v4).
+- **Security**: Enforced SHA-pinning for all GitHub Actions in release workflow to comply with security policy.
+
 All notable changes to this project will be documented in this file.
 
 ## [0.6.1] - 2025-12-10
