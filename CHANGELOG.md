@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.1] - 2025-12-10
+
+### Hardening & Compatibility
+- **Zig 0.14.0**: Downgraded codebase to Zig 0.14.0 (stable) to ensure stability and avoid 0.15.x dev churn.
+- **BPE v2.1**: Integrated optimized BPE v2.1 logic.
+- **Memory Safety**: Fixed initialization memory leaks in `BpeEngineV2` and `TokenBuffer`.
+- **Restoration**: Restored missing `unicode_tables.zig` and `golden_test.zig` (fixed runtime compatibility).
+- **Verification**: Full test suite (`test`, `test-golden`, `fuzz`) verified green on native Zig 0.14.0.
+
 ## [v0.4.0] - 2025-12-09
 
 ### Added
