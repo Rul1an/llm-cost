@@ -33,13 +33,13 @@ pub const ReportProcessor = struct {
         if (tokenizer.loader) |l| {
             vocab_size = l.token_count;
         } else {
-             // Fallback based on model name if loader is missing (approx mode)
-             if (std.mem.startsWith(u8, config.model_name, "gpt-4")) {
-                 vocab_size = 100_300; // cl100k approx
-             }
-             if (std.mem.startsWith(u8, config.model_name, "gpt-4o")) {
-                 vocab_size = 200_020; // o200k approx
-             }
+            // Fallback based on model name if loader is missing (approx mode)
+            if (std.mem.startsWith(u8, config.model_name, "gpt-4")) {
+                vocab_size = 100_300; // cl100k approx
+            }
+            if (std.mem.startsWith(u8, config.model_name, "gpt-4o")) {
+                vocab_size = 200_020; // o200k approx
+            }
         }
 
         const freq = try allocator.alloc(u64, vocab_size);
@@ -90,20 +90,20 @@ pub const ReportProcessor = struct {
 
             if (self.config.input_mode != .Raw) {
                 // Try Parse JSON
-                 if (std.json.parseFromSlice(std.json.Value, arena, line.?, .{})) |parsed| {
+                if (std.json.parseFromSlice(std.json.Value, arena, line.?, .{})) |parsed| {
                     if (parsed.value == .object) {
                         if (parsed.value.object.get(self.config.json_field)) |val| {
-                             if (val == .string) {
+                            if (val == .string) {
                                 text_to_count = val.string;
                             }
                         }
                     }
                 } else |_| {
-                     if (self.config.input_mode == .JsonField) {
-                         // Strict mode: skip or error? Let's skip invalid lines in report mode
-                         // to avoid failing a huge job on one bad line.
-                         continue;
-                     }
+                    if (self.config.input_mode == .JsonField) {
+                        // Strict mode: skip or error? Let's skip invalid lines in report mode
+                        // to avoid failing a huge job on one bad line.
+                        continue;
+                    }
                 }
             }
 
@@ -137,7 +137,7 @@ pub const ReportProcessor = struct {
         }
 
         const vocab_utilization = if (self.vocab_size > 0)
-             @as(f64, @floatFromInt(unique_tokens)) / @as(f64, @floatFromInt(self.vocab_size))
+            @as(f64, @floatFromInt(unique_tokens)) / @as(f64, @floatFromInt(self.vocab_size))
         else
             0.0;
 
@@ -201,16 +201,16 @@ pub const ReportProcessor = struct {
                     // Let's assume valid UTF-8 for now or use std.fmt.fmtSliceEscapeLower
                     // Actually, let's use a heuristic: if valid utf8, use string. Else hex.
                     if (std.unicode.utf8ValidateSlice(bytes)) {
-                         try entry.put("repr", std.json.Value{ .string = bytes });
+                        try entry.put("repr", std.json.Value{ .string = bytes });
                     } else {
-                         // Hex repr for binary
-                         // We need to allocate a string for this
-                         const hex = try std.fmt.allocPrint(self.allocator, "0x{s}", .{std.fmt.fmtSliceHexLower(bytes)});
-                         try entry.put("repr", std.json.Value{ .string = hex });
+                        // Hex repr for binary
+                        // We need to allocate a string for this
+                        const hex = try std.fmt.allocPrint(self.allocator, "0x{s}", .{std.fmt.fmtSliceHexLower(bytes)});
+                        try entry.put("repr", std.json.Value{ .string = hex });
                     }
                 }
             } else {
-                 try entry.put("repr", std.json.Value{ .string = "?" });
+                try entry.put("repr", std.json.Value{ .string = "?" });
             }
 
             try rare_list.append(std.json.Value{ .object = entry });

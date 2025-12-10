@@ -218,7 +218,6 @@ pub const StreamProcessor = struct {
             \\Tokens: {d}
             \\Cost: ${d:.6}
             \\
-            , .{ self.stats.lines, self.stats.tokens_total, self.stats.cost_total }
-        ) catch {};
+        , .{ self.stats.lines, self.stats.tokens_total, self.stats.cost_total }) catch {};
     }
 };

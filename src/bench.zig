@@ -35,9 +35,8 @@ pub fn main() !void {
     defer tokenizer.deinit(allocator);
 
     // Header
-    try stdout.print("{s:<25} {s:<10} {s:<12} {s:<12} {s:<12} {s:<10}\n",
-        .{ "Scenario", "Size", "Time(ms)", "MB/s", "Tok/s", "Ratio" });
-    try stdout.print("{s}\n", .{ "-" ** 90 });
+    try stdout.print("{s:<25} {s:<10} {s:<12} {s:<12} {s:<12} {s:<10}\n", .{ "Scenario", "Size", "Time(ms)", "MB/s", "Tok/s", "Ratio" });
+    try stdout.print("{s}\n", .{"-" ** 90});
 
     // 3. Micro Benchmarks (Synthetic)
 
@@ -84,14 +83,7 @@ pub fn main() !void {
 
 // --- Runner Logic ---
 
-fn runScenario(
-    alloc: std.mem.Allocator,
-    writer: anytype,
-    tok: Tokenizer,
-    name: []const u8,
-    input: []const u8,
-    baseline_ns: ?u64
-) !u64 { // Returns avg_ns for ratio calc
+fn runScenario(alloc: std.mem.Allocator, writer: anytype, tok: Tokenizer, name: []const u8, input: []const u8, baseline_ns: ?u64) !u64 { // Returns avg_ns for ratio calc
     // Warmup
     for (0..WARMUP_ITERS) |_| {
         // count function might need allocator?
@@ -129,8 +121,7 @@ fn runScenario(
         ratio_slice = try std.fmt.bufPrint(&ratio_buf, "{d:.1}x", .{r});
     }
 
-    try writer.print("{s:<25} {d:<10} {d:<12.3} {d:<12.2} {d:<12.0} {s:<10}\n",
-        .{ name, input.len, avg_ms, mb_per_sec, tokens_per_sec, ratio_slice });
+    try writer.print("{s:<25} {d:<10} {d:<12.3} {d:<12.2} {d:<12.0} {s:<10}\n", .{ name, input.len, avg_ms, mb_per_sec, tokens_per_sec, ratio_slice });
 
     return avg_ns;
 }
@@ -156,7 +147,7 @@ fn generateEmoji(alloc: std.mem.Allocator, size: usize) ![]u8 {
     const emoji = "\xF0\x9F\x99\x96"; // 🤖 (4 bytes)
     const buf = try alloc.alloc(u8, size);
     var i: usize = 0;
-    while (i + 4 <= size) : (i += 4) @memcpy(buf[i..i+4], emoji);
+    while (i + 4 <= size) : (i += 4) @memcpy(buf[i .. i + 4], emoji);
     if (i < size) @memset(buf[i..], ' ');
     return buf;
 }

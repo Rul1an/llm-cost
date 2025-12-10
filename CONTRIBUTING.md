@@ -7,24 +7,32 @@ Thank you for your interest in contributing! We value clean, performant, and rel
 - **Zig 0.14.0** (strictly pinned).
 - Python 3 + `tiktoken` (optional, only for *re-generating* the golden corpus).
 
+## Setup
+1. Run `./scripts/setup_hooks.sh` to install git hooks (enforces formatting).
+
 ## Workflow
 
-1.  **Fork & Branch**: Create a feature branch.
-2.  **Develop**: Make your changes.
-3.  **Verify**: Run the verification suite locally.
+**Rule #1: Never push to `main`. Always use a Feature Branch & PR.**
+
+1.  **Branch**: `git checkout -b feat/your-feature` or `fix/your-bug`.
+2.  **Develop**: Write clean, panic-free code.
+3.  **Format**: `zig fmt build.zig src/` (Automated by pre-push hook).
+4.  **Verify**:
     ```bash
     zig build test        # Unit tests
     zig build fuzz        # Fuzzing sanity check
-    zig build test-golden # Parity check (runs against committed jsonl)
+    zig build test-golden # Parity check
+    zig build test-parity # Tokenizer compliance
     ```
-4.  **PR**: Submit a Pull Request targeting `main`.
+5.  **Commit**: Use conventional commits (e.g. `feat: ...`, `fix: ...`).
+6.  **PR**: Push to origin and open a Pull Request.
 
 ## Code Style
 
-- **No Panics**: Library code (`src/core`, `src/tokenizer`) should never panic. Use Zig's error sets to bubble up failures.
+- **No Panics**: Library code (`src/core`, `src/tokenizer`) should never panic. Use Zig's error sets.
 - **Explicit Memory**: Pass allocators explicitly.
-- **Minimal Dependencies**: We avoid external Zig dependencies where possible.
-- **Formatting**: Run `zig fmt` before committing.
+- **Minimal Dependencies**: We avoid external Zig dependencies.
+- **Strict Formatting**: CI will fail if `zig fmt` has not been run.
 
 ## Adding a New Model
 

@@ -65,7 +65,7 @@ pub fn main() !void {
         try runEstimate(allocator, args[2..]);
         return;
     }
-// ...
+    // ...
     if (std.mem.eql(u8, command, "models")) {
         try runModels();
         return;
@@ -521,7 +521,7 @@ fn runReport(allocator: std.mem.Allocator, args: []const []const u8) !void {
             json_field = args[i];
             input_mode = .JsonField;
         } else if (std.mem.eql(u8, arg, "--top-k")) {
-             i += 1;
+            i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --top-k requires a value\n", .{});
                 std.process.exit(2);
