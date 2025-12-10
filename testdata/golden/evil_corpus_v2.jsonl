@@ -1,0 +1,30 @@
+{"model": "gpt-4", "encoding": "cl100k_base", "text": "Hello world", "tokens": [9906, 1917], "count": 2}
+{"model": "gpt-4o", "encoding": "o200k_base", "text": "Hello world", "tokens": [13225, 2375], "count": 2}
+{"model": "gpt-4", "encoding": "cl100k_base", "text": "", "tokens": [], "count": 0}
+{"model": "gpt-4o", "encoding": "o200k_base", "text": "", "tokens": [], "count": 0}
+{"model": "gpt-4", "encoding": "cl100k_base", "text": "   ", "tokens": [262], "count": 1}
+{"model": "gpt-4o", "encoding": "o200k_base", "text": "   ", "tokens": [271], "count": 1}
+{"model": "gpt-4", "encoding": "cl100k_base", "text": "こんにちは世界", "tokens": [90115, 3574, 244, 98220], "count": 4}
+{"model": "gpt-4o", "encoding": "o200k_base", "text": "こんにちは世界", "tokens": [95839, 28428], "count": 2}
+{"model": "gpt-4", "encoding": "cl100k_base", "text": "Hello 🌍 world", "tokens": [9906, 11410, 234, 235, 1917], "count": 5}
+{"model": "gpt-4o", "encoding": "o200k_base", "text": "Hello 🌍 world", "tokens": [13225, 130321, 235, 2375], "count": 4}
+{"model": "gpt-4", "encoding": "cl100k_base", "text": "👍🏽", "tokens": [9468, 239, 235, 9468, 237, 121], "count": 6}
+{"model": "gpt-4o", "encoding": "o200k_base", "text": "👍🏽", "tokens": [82514, 52622, 121], "count": 3}
+{"model": "gpt-4", "encoding": "cl100k_base", "text": "café", "tokens": [936, 59958], "count": 2}
+{"model": "gpt-4o", "encoding": "o200k_base", "text": "café", "tokens": [66, 103112], "count": 2}
+{"model": "gpt-4", "encoding": "cl100k_base", "text": "café", "tokens": [936, 1897, 54939], "count": 3}
+{"model": "gpt-4o", "encoding": "o200k_base", "text": "café", "tokens": [66, 6903, 13430], "count": 3}
+{"model": "gpt-4", "encoding": "cl100k_base", "text": "  hello  \n  world  ", "tokens": [220, 24748, 2355, 220, 1917, 256], "count": 6}
+{"model": "gpt-4o", "encoding": "o200k_base", "text": "  hello  \n  world  ", "tokens": [220, 40617, 4066, 220, 2375, 256], "count": 6}
+{"model": "gpt-4", "encoding": "cl100k_base", "text": "\t\t\t", "tokens": [573], "count": 1}
+{"model": "gpt-4o", "encoding": "o200k_base", "text": "\t\t\t", "tokens": [833], "count": 1}
+{"model": "gpt-4", "encoding": "cl100k_base", "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "tokens": [70540, 70540, 70540, 70540, 70540, 70540, 70540, 70540, 70540, 70540, 70540, 70540, 29558], "count": 13}
+{"model": "gpt-4o", "encoding": "o200k_base", "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "tokens": [117525, 117525, 117525, 117525, 117525, 117525, 117525, 117525, 117525, 117525, 117525, 117525, 45037], "count": 13}
+{"model": "gpt-4", "encoding": "cl100k_base", "text": "ð©", "tokens": [68800, 126, 253, 76251, 20644], "count": 5}
+{"model": "gpt-4o", "encoding": "o200k_base", "text": "ð©", "tokens": [707, 126, 253, 132147, 19742], "count": 5}
+{"model": "gpt-4", "encoding": "cl100k_base", "text": "fn main() { println!(\"Hello\"); }", "tokens": [8998, 1925, 368, 314, 14069, 17667, 9906, 5146, 335], "count": 9}
+{"model": "gpt-4o", "encoding": "o200k_base", "text": "fn main() { println!(\"Hello\"); }", "tokens": [13682, 2758, 416, 354, 30266, 33966, 13225, 9835, 388], "count": 9}
+{"model": "gpt-4", "encoding": "cl100k_base", "text": "<|endoftext|>", "tokens": [27, 91, 8862, 728, 428, 91, 29], "count": 7}
+{"model": "gpt-4o", "encoding": "o200k_base", "text": "<|endoftext|>", "tokens": [27, 91, 419, 1440, 919, 91, 29], "count": 7}
+{"model": "gpt-4", "encoding": "cl100k_base", "text": "User: Hello<|endoftext|>", "tokens": [1502, 25, 22691, 27, 91, 8862, 728, 428, 91, 29], "count": 10}
+{"model": "gpt-4o", "encoding": "o200k_base", "text": "User: Hello<|endoftext|>", "tokens": [1844, 25, 32949, 27, 91, 419, 1440, 919, 91, 29], "count": 10}

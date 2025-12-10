@@ -1,7 +1,85 @@
 const std = @import("std");
 const testing = std.testing;
+const tokenizer = @import("tokenizer/mod.zig");
+const engine = @import("core/engine.zig");
 
-/// Golden Tests for CLI Contract (R2)
+// =============================================================================
+// Data Structures
+// =============================================================================
+
+const GoldenRecord = struct {
+    model: []const u8,
+    encoding: []const u8,
+    text: []const u8,
+    tokens: []const u32,
+    count: usize,
+};
+
+// =============================================================================
+// Test Logic
+// =============================================================================
+
+test "golden: parity with evil_corpus_v2" {
+    const allocator = testing.allocator;
+
+    // We assume the test is run from project root or we can find the file relative to it.
+    // Try to open the golden file.
+    const file_path = "testdata/golden/evil_corpus_v2.jsonl";
+    const file = std.fs.cwd().openFile(file_path, .{}) catch |err| {
+        std.debug.print("\n[WARN] Skipping golden test: could not open {s}: {}\n", .{file_path, err});
+        return; // Skip if file not generated (e.g. CI without python)
+    };
+    defer file.close();
+
+    var buffered = std.io.bufferedReader(file.reader());
+    const reader = buffered.reader();
+
+    var buf: [65536]u8 = undefined; // 64KB line buffer
+    var line_no: usize = 0;
+
+    while (try reader.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+        line_no += 1;
+        if (line.len == 0) continue;
+
+        // Parse JSON
+        const parsed = try std.json.parseFromSlice(GoldenRecord, allocator, line, .{ .ignore_unknown_fields = true });
+        defer parsed.deinit();
+
+        const record = parsed.value;
+
+        // Verify we support this encoding
+        const spec = tokenizer.registry.Registry.get(record.encoding);
+        if (spec == null) {
+            std.debug.print("Skipping unknown encoding {s} at line {d}\n", .{record.encoding, line_no});
+            continue;
+        }
+
+        // Initialize Tokenizer
+        // Note: For Golden Tests we expect exact parity for "ordinary" encoding (no special tokens handled)
+        // logic mirrors engine.estimateTokens(.ordinary) which uses OpenAITokenizer
+
+        var tok = try tokenizer.openai.OpenAITokenizer.init(allocator, .{
+            .spec = spec.?,
+            .approximate_ok = false, // Must be exact
+            .bpe_version = .v2_1,
+        });
+        defer tok.deinit(allocator);
+
+        // Encode
+        const actual_ids = try tok.encode(allocator, record.text);
+        defer allocator.free(actual_ids);
+
+        // Verify
+        testing.expectEqualSlices(u32, record.tokens, actual_ids) catch |err| {
+            std.debug.print("\nFAIL: Line {d} | Model: {s}\n", .{line_no, record.model});
+            std.debug.print("Text: '{s}'\n", .{record.text});
+            std.debug.print("Expected: {any}\n", .{record.tokens});
+            std.debug.print("Actual:   {any}\n", .{actual_ids});
+            return err;
+        };
+    }
+}
+
 ///
 /// These tests verify that the CLI interface remains stable and backwards-compatible.
 /// Each test case represents a "golden" expected output that must not change

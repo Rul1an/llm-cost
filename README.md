@@ -1,112 +1,95 @@
 # llm-cost
 
-[![Release](https://img.shields.io/github/v/release/Rul1an/llm-cost)](https://github.com/Rul1an/llm-cost/releases)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/Rul1an/llm-cost/release.yml?branch=main)](https://github.com/Rul1an/llm-cost/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+Offline CLI tool for token counting and cost estimation for LLMs (GPT-4, GPT-4o), ensuring *bit-for-bit* parity with official `tiktoken` tokenizers.
 
-**Offline, exact token counting & cost estimation for OpenAI-style LLMs.**
+## Status
 
-`llm-cost` is a high-performance, single-binary CLI written in [Zig](https://ziglang.org). It provides production-grade token counting (perfect parity with `tiktoken`) and offline cost estimation.
-
-- **Features**: `o200k_base` (GPT-4o) & `cl100k_base` support, 100% offline, cross-platform binaries.
-- **Why not just tiktoken?**: Single binary (no Python required), built-in pricing DB, batch processing (`pipe`), and strict memory safety.
-- **Privacy & Safety**: **No data leaves your machine.** All tokenization and pricing logic runs 100% locally.
-- **Supported Models**: `gpt-4o`, `gpt-4`, `gpt-3.5-turbo`, and accurate pricing for all major OpenAI endpoints.
-
-## Who is this for?
-
-- **ML Engineers**: Estimate costs for evaluation pipelines and RAG prompts.
-- **Data Teams**: Process JSONL logs in batch to reconstruct historical token usage.
-- **FinOps / Platform**: Add "budget guards" (`--max-cost`) to CI/CD pipelines to prevent accidental overspending.
-
-## Documentation
-
-- **[Installation & Usage](#installation)**: Getting started.
-- **[Architecture](docs/architecture.md)**: High-level design and data flow.
-- **[Performance](docs/perf.md)**: Benchmarks and O(N log N) BPE implementation.
-- **[Verification](docs/evil_corpus.md)**: How we verify parity with OpenAI.
+- **Zig**: 0.14.0
+- **Supported Encodings**:
+  - `cl100k_base` (e.g. `gpt-4`, `gpt-3.5-turbo`, `text-embedding-3`)
+  - `o200k_base` (e.g. `gpt-4o`, `o1`)
+- **Verification**: 30 "evil" edge cases verified against `tiktoken` in CI.
 
 ## Installation
 
-Download the latest binary from the [Releases Page](https://github.com/Rul1an/llm-cost/releases).
+### From Source
 
-**Linux / macOS / Windows**:
+Requirements:
+- Zig 0.14.0
+- Git
+
 ```bash
-# Example for Linux x86_64
-wget https://github.com/Rul1an/llm-cost/releases/latest/download/llm-cost-linux-x86_64.zip
-unzip llm-cost-linux-x86_64.zip
-chmod +x llm-cost
-sudo mv llm-cost /usr/local/bin/
+git clone https://github.com/Rul1an/llm-cost.git
+cd llm-cost
+zig build -Doptimize=ReleaseFast
+# Binary output: zig-out/bin/llm-cost
 ```
 
-*See [Releases](https://github.com/Rul1an/llm-cost/releases) for signatures and SHA256 hashes.*
+Optional install to system path:
+```bash
+zig build install -Doptimize=ReleaseFast
+```
 
 ## Usage
 
-### Token Counting & Pricing
+### 1. Token Counting
+
+Count tokens for a string:
 
 ```bash
-# Count tokens (defaults to o200k_base for gpt-4o)
-echo "Hello AI" | llm-cost tokens --model gpt-4o
-
-# Estimate price for a file
-llm-cost price --model gpt-4o prompt.txt
+llm-cost count --model gpt-4o --text "Hello, world"
 ```
 
-### Pipe Mode (Batch / Agent)
-
-Process JSONL streams efficiently. Useful for adding token counts to logs or enforcing quotas in agent loops.
+Or with explicit encoding:
 
 ```bash
-cat data.jsonl | llm-cost pipe --model gpt-4o --summary --max-cost 5.00
+llm-cost count --encoding o200k_base --text "Hello, world"
 ```
 
-See `llm-cost help` for full options.
+JSON output:
 
-## Contributing
+```bash
+llm-cost count --model gpt-4o --text "Hello" --format json
+```
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions and guidelines.
+### 2. Stdin / Pipe
 
-By participating in this project, you agree to abide by the [Code of Conduct](CODE_OF_CONDUCT.md).
+Read from stdin:
+```bash
+echo 'Hello' | llm-cost count --model gpt-4o
+```
 
-## Security & Compliance
+### 3. Cost Estimation
 
-llm-cost is ontworpen als een **offline** CLI-tool met een sterke focus op supply chain veiligheid en voorspelbaar gedrag.
+Estimate cost using embedded pricing DB:
 
-- 🔒 **Offline by design**
-  llm-cost maakt geen netwerkverbindingen, slaat geen secrets op en leest alleen van stdin of expliciete bestanden.
+```bash
+llm-cost estimate \
+  --model gpt-4o \
+  --input-tokens 1000 \
+  --output-tokens 500
+```
 
-- 🧾 **Signed releases + SBOM**
-  Alle officiële releases bevatten:
-  - ondertekende binaries (`.sig` + `.crt`),
-  - een CycloneDX SBOM (`.cdx.json`),
-  - SLSA Level 2 provenance voor build-herkomst.
+## Parity & Verification
 
-- 🧱 **Reproducible CI pipeline**
-  - Zig 0.13.x gepind.
-  - GitHub Actions gepind op SHA.
-  - Release workflow draait `zig build test`, `zig build test-golden`, `zig build fuzz`, `zig build test-parity` voordat binaries worden gebouwd en gesigned.
+Tokenization is guaranteed to be identical to `tiktoken` for supported encodings.
 
-- ✅ **Supported versions & disclosure policy**
-  Zie [`SECURITY.md`](./SECURITY.md) voor:
-  - ondersteunde versies (support matrix),
-  - responsible disclosure proces,
-  - response targets (72h ack / 90d fix).
+**Guarantees:**
+- **Vocab**: Vocabulary and merge tables are exported from `tiktoken` and embedded as binary blobs.
+- **Golden Data**: `scripts/generate_golden.py` builds `evil_corpus_v2.jsonl` with 30 edge cases (whitespace, unicode).
+- **CI**: `src/golden_test.zig` validates `llm-cost` against this corpus.
 
-- 🔍 **Security & verification guide**
-  Zie [`docs/security.md`](./docs/security.md) voor:
-  - stap-voor-stap verificatie van signatures & SLSA provenance,
-  - SBOM-verificatie,
-  - voorbeeld-commando’s voor enterprise omgevingen.
+**Run checks:**
+```bash
+zig build test          # Unit tests
+zig build test-golden   # Parity verification
+zig build fuzz          # Stability fuzzing
+```
 
-- 📊 **Performance & regression testing**
-  Zie [`docs/benchmarks.md`](./docs/benchmarks.md) voor:
-  - benchmark-scripts,
-  - interpretatie van resultaten,
-  - hoe regressies gedetecteerd worden voordat een release live gaat.
-
-Als je llm-cost wilt inzetten in een streng gereguleerde omgeving (financieel, zorg, overheid) en extra informatie nodig hebt, start dan bij [`SECURITY.md`](./SECURITY.md) en [`docs/security.md`](./docs/security.md).
+**Known Limitations**:
+- Pricing data is updated as of December 2025.
+- Requires Zig 0.14.0 exact version.
 
 ## License
 
-MIT
+See [LICENSE](LICENSE) and [NOTICE](NOTICE).

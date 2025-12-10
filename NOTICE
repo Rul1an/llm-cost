@@ -1,0 +1,12 @@
+llm-cost
+
+This product includes data and code derived from third-party projects:
+
+- tiktoken (OpenAI)
+  - License: MIT
+  - Source: https://github.com/openai/tiktoken
+  - Usage: Tokenization vocabularies and merge tables for encodings
+    (cl100k_base, o200k_base) are exported from tiktoken and
+    embedded in this binary format.
+
+See the LICENSE files in the respective upstream projects for details.

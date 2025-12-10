@@ -1,8 +1,9 @@
 const std = @import("std");
 
 // Module imports
-// Module imports
 pub const tokenizer = @import("tokenizer/mod.zig");
+pub const pricing = @import("pricing.zig");
+pub const engine = @import("core/engine.zig");
 
 /// llm-cost: Token counting and cost estimation for LLM API calls
 ///
@@ -19,7 +20,8 @@ pub const tokenizer = @import("tokenizer/mod.zig");
 ///   version   Show version information
 ///
 /// For more information: https://github.com/your-org/llm-cost
-const version = "0.1.0-dev";
+
+const version_str = "0.1.0-dev";
 
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
@@ -70,7 +72,7 @@ pub fn main() !void {
 
 fn printVersion() !void {
     const stdout = std.io.getStdOut().writer();
-    try stdout.print("llm-cost {s}\n", .{version});
+    try stdout.print("llm-cost {s}\n", .{version_str});
 }
 
 fn printUsage() !void {
@@ -172,21 +174,51 @@ fn runCount(allocator: std.mem.Allocator, args: []const []const u8) !void {
     }
     defer if (needs_free) allocator.free(input_text);
 
-    // TODO: Actual tokenization
-    // For now, estimate based on bytes (roughly 4 chars per token)
-    const estimated_tokens = @max(1, input_text.len / 4);
+    // Resolve encoding for model
+    const spec = tokenizer.registry.Registry.getEncodingForModel(model.?);
+    var is_approximate = false;
+
+    // Count tokens using engine
+    const result = engine.estimateTokens(allocator, .{
+        .spec = spec,
+        .model_name = model.?,
+        .bpe_version = .v2_1,
+    }, input_text, .ordinary) catch |err| {
+        // Fallback to approximate count on error
+        is_approximate = true;
+        const approx_tokens = @max(1, input_text.len / 4);
+        const stdout = std.io.getStdOut().writer();
+
+        if (std.mem.eql(u8, format, "json")) {
+            try stdout.print("{{\"model\":\"{s}\",\"tokens\":{d},\"bytes\":{d},\"approximate\":true,\"error\":\"{}\"}}\n", .{
+                model.?,
+                approx_tokens,
+                input_text.len,
+                err,
+            });
+        } else {
+            try stdout.print("Model: {s}\n", .{model.?});
+            try stdout.print("Tokens: {d} (approximate, error: {})\n", .{ approx_tokens, err });
+            try stdout.print("Bytes: {d}\n", .{input_text.len});
+        }
+        return;
+    };
 
     const stdout = std.io.getStdOut().writer();
 
     if (std.mem.eql(u8, format, "json")) {
-        try stdout.print("{{\"model\":\"{s}\",\"tokens\":{d},\"bytes\":{d}}}\n", .{
+        try stdout.print("{{\"model\":\"{s}\",\"tokens\":{d},\"bytes\":{d},\"approximate\":{}}}\n", .{
             model.?,
-            estimated_tokens,
+            result.tokens,
             input_text.len,
+            is_approximate,
         });
     } else {
         try stdout.print("Model: {s}\n", .{model.?});
-        try stdout.print("Tokens: {d} (estimated)\n", .{estimated_tokens});
+        if (spec != null) {
+            try stdout.print("Encoding: {s}\n", .{spec.?.name});
+        }
+        try stdout.print("Tokens: {d}\n", .{result.tokens});
         try stdout.print("Bytes: {d}\n", .{input_text.len});
     }
 }
@@ -197,6 +229,7 @@ fn runEstimate(allocator: std.mem.Allocator, args: []const []const u8) !void {
     var model: ?[]const u8 = null;
     var input_tokens: ?u64 = null;
     var output_tokens: ?u64 = null;
+    var reasoning_tokens: u64 = 0;
 
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
@@ -228,6 +261,16 @@ fn runEstimate(allocator: std.mem.Allocator, args: []const []const u8) !void {
                 std.debug.print("Error: Invalid number for --output-tokens\n", .{});
                 std.process.exit(2);
             };
+        } else if (std.mem.eql(u8, arg, "--reasoning-tokens")) {
+            i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --reasoning-tokens requires a value\n", .{});
+                std.process.exit(2);
+            }
+            reasoning_tokens = std.fmt.parseInt(u64, args[i], 10) catch {
+                std.debug.print("Error: Invalid number for --reasoning-tokens\n", .{});
+                std.process.exit(2);
+            };
         }
     }
 
@@ -239,17 +282,31 @@ fn runEstimate(allocator: std.mem.Allocator, args: []const []const u8) !void {
     const in_tok = input_tokens orelse 0;
     const out_tok = output_tokens orelse 0;
 
-    // TODO: Look up actual pricing from pricing table
-    // Placeholder: GPT-4 pricing ($0.03/$0.06 per 1K tokens)
-    const input_cost = @as(f64, @floatFromInt(in_tok)) * 0.03 / 1000.0;
-    const output_cost = @as(f64, @floatFromInt(out_tok)) * 0.06 / 1000.0;
-    const total_cost = input_cost + output_cost;
+    // Use pricing database
+    const db = &pricing.DEFAULT_PRICING;
+    const result = engine.estimateCost(db, model.?, in_tok, out_tok, reasoning_tokens) catch |err| {
+        std.debug.print("Error: {}\n", .{err});
+        if (err == engine.EngineError.ModelNotFound) {
+            std.debug.print("Unknown model: {s}\n", .{model.?});
+            std.debug.print("Run 'llm-cost models' to see supported models.\n", .{});
+        }
+        std.process.exit(1);
+    };
 
     const stdout = std.io.getStdOut().writer();
-    try stdout.print("Model: {s}\n", .{model.?});
-    try stdout.print("Input tokens: {d}\n", .{in_tok});
-    try stdout.print("Output tokens: {d}\n", .{out_tok});
-    try stdout.print("Estimated cost: ${d:.6}\n", .{total_cost});
+    try stdout.print("Model: {s}\n", .{result.model_name});
+    try stdout.print("Input tokens: {d}\n", .{result.input_tokens});
+    try stdout.print("Output tokens: {d}\n", .{result.output_tokens});
+    if (result.reasoning_tokens > 0) {
+        try stdout.print("Reasoning tokens: {d}\n", .{result.reasoning_tokens});
+    }
+    try stdout.print("\n", .{});
+    try stdout.print("Input cost:  ${d:.6}\n", .{result.cost_input});
+    try stdout.print("Output cost: ${d:.6}\n", .{result.cost_output});
+    if (result.cost_reasoning > 0) {
+        try stdout.print("Reasoning cost: ${d:.6}\n", .{result.cost_reasoning});
+    }
+    try stdout.print("Total cost:  ${d:.6}\n", .{result.cost_total});
 }
 
 fn runModels() !void {
@@ -257,21 +314,35 @@ fn runModels() !void {
     try stdout.writeAll(
         \\Supported models:
         \\
-        \\OpenAI:
-        \\  gpt-4, gpt-4-turbo, gpt-4o, gpt-4o-mini
-        \\  gpt-3.5-turbo
-        \\  text-embedding-3-small, text-embedding-3-large
+        \\OpenAI GPT-4o:
+        \\  gpt-4o              $2.50/$10.00 per 1M tokens (o200k_base)
+        \\  gpt-4o-mini         $0.15/$0.60 per 1M tokens (o200k_base)
         \\
-        \\Anthropic:
-        \\  claude-3-opus, claude-3-sonnet, claude-3-haiku
-        \\  claude-3.5-sonnet
+        \\OpenAI GPT-4:
+        \\  gpt-4-turbo         $10.00/$30.00 per 1M tokens (cl100k_base)
+        \\  gpt-4               $30.00/$60.00 per 1M tokens (cl100k_base)
         \\
-        \\Google:
-        \\  gemini-pro, gemini-1.5-pro, gemini-1.5-flash
+        \\OpenAI GPT-3.5:
+        \\  gpt-3.5-turbo       $0.50/$1.50 per 1M tokens (cl100k_base)
+        \\
+        \\OpenAI Reasoning:
+        \\  o1                  $15.00/$60.00 per 1M tokens (o200k_base)
+        \\  o1-mini             $3.00/$12.00 per 1M tokens (o200k_base)
+        \\  o3-mini             $1.10/$4.40 per 1M tokens (o200k_base)
+        \\
+        \\OpenAI Embeddings:
+        \\  text-embedding-3-small  $0.02 per 1M tokens (cl100k_base)
+        \\  text-embedding-3-large  $0.13 per 1M tokens (cl100k_base)
+        \\
+        \\Anthropic Claude:
+        \\  claude-3-5-sonnet   $3.00/$15.00 per 1M tokens
+        \\  claude-3-opus       $15.00/$75.00 per 1M tokens
+        \\  claude-3-sonnet     $3.00/$15.00 per 1M tokens
+        \\  claude-3-haiku      $0.25/$1.25 per 1M tokens
         \\
         \\Encodings:
-        \\  cl100k_base (GPT-4, GPT-3.5)
-        \\  o200k_base (GPT-4o)
+        \\  cl100k_base - GPT-4, GPT-3.5, embeddings
+        \\  o200k_base  - GPT-4o, o1/o3 reasoning models
         \\
     );
 }
@@ -282,17 +353,23 @@ fn runModels() !void {
 
 test "tokenizer module imports" {
     // Verify all tokenizer modules compile
-    _ = tokenizer.bpe_v2;
     _ = tokenizer.bpe_v2_1;
-    _ = tokenizer.pre_tokenizer;
-    _ = tokenizer.cl100k_scanner;
-    _ = tokenizer.o200k_scanner;
-    _ = tokenizer.vocab_loader;
+    _ = tokenizer.registry;
+    _ = tokenizer.openai;
+}
+
+test "pricing module imports" {
+    _ = pricing.DEFAULT_PRICING;
+}
+
+test "engine module imports" {
+    _ = engine.estimateTokens;
+    _ = engine.estimateCost;
 }
 
 test "version string format" {
     // Version should be semver-ish
-    const v = version;
+    const v = version_str;
     try std.testing.expect(v.len > 0);
     try std.testing.expect(std.mem.indexOf(u8, v, ".") != null);
 }

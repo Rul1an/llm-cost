@@ -234,9 +234,52 @@ pub const Cl100kScanner = struct {
             ws_end = it.i;
         }
 
-        // Must reach EOF
-        if (ws_end < slice.len) return null;
-        return ws_end;
+        // ws_end is the end of the whitespace run.
+        // Check lookahead character (the one that stopped the loop, or EOF).
+
+        // If we reached EOF (ws_end == slice.len), then lookahead is "EOF" (which is not \S).
+        // So the condition (?!\S) is satisfied for the full run.
+        if (ws_end == slice.len) return ws_end;
+
+        // If we stopped because of a non-whitespace character,
+        // then the full run is followed by \S (Fail).
+        // But the run of length (ws_end - 1) is followed by the last whitespace char,
+        // which matches (?!\S).
+        // So we yield (ws_end - <last_char_len>).
+        // Since we know the last char was whitespace, we can backtrack one codepoint.
+        // Or simply: find the start of the last character.
+
+        // Simpler way:
+        // We know slice[0..ws_end] is all whitespace.
+        // slice[ws_end] is start of non-whitespace.
+
+        // If ws_end matches the end of the first char (ws_end == cp1 length),
+        // then len-1 would be 0. Return null.
+
+        // We need to backtrack one char from ws_end.
+        // Since we are iterating forward, let's track previous index.
+        // Re-scan or track? Re-scanning last char is cheap?
+        // Actually SafeUtf8Iterator maintains `i`.
+        // Let's iterate and track `prev_i`.
+
+        var i: usize = 0;
+        var prev_i: usize = 0;
+        var iter = SafeUtf8Iterator{ .bytes = slice, .i = 0 };
+        while (iter.nextCodepoint()) |cp| {
+            if (!unicode.isWhitespace(cp)) break;
+            prev_i = i;
+            i = iter.i;
+        }
+
+        // logic: 'i' is the end of whitespace run.
+        // if i == slice.len (EOF), return i.
+        // if i < slice.len (stopped at non-ws), return prev_i (backtrack 1 char).
+        // If prev_i is 0 (only 1 whitespace char matched), returns 0 -> null.
+
+        if (i == slice.len) return i;
+        if (prev_i > 0) return prev_i;
+
+        return null;
     }
 
     /// Branch 7: Generic whitespace `\s+`

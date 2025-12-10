@@ -272,15 +272,60 @@ pub const O200kScanner = struct {
         const cp1 = it.nextCodepoint() orelse return null;
         if (!unicode.isWhitespace(cp1)) return null;
 
-        var ws_end = it.i;
-        while (it.nextCodepoint()) |cp| {
-            if (!unicode.isWhitespace(cp)) break;
-            ws_end = it.i;
+        var i: usize = 0;
+        var prev_i: usize = 0;
+
+        // Loop until non-whitespace or EOF
+        while (true) {
+            i = it.i;
+            const cp = it.nextCodepoint() orelse break; // EOF
+            if (!unicode.isWhitespace(cp)) {
+                // Stopped at non-whitespace
+                break;
+            }
+            prev_i = i;
         }
 
-        if (ws_end < slice.len) return null;
+        // 'i' is end of whitespace run (or EOF position).
+        // If we reached EOF (it.i == slice.len and loop finished via break),
+        // we can check i.
 
-        return ws_end;
+        // Re-check EOF condition carefully.
+        // If loop broke due to 'orelse break', it.i is slice.len.
+        // If loop broke due to '!isWhitespace', it.i is AFTER the non-char.
+        // Wait, loop logic above:
+        // i starts at 0.
+        // nextCodepoint consumes cp1. i becomes len(cp1).
+        // inner loop: `i = it.i`. `nextCodepoint()`.
+
+        // Let's rewrite loop cleanly.
+        var iter = SafeUtf8Iterator{ .bytes = slice, .i = 0 };
+        var ws_end: usize = 0;
+        var last_ws_end: usize = 0;
+
+        while (iter.nextCodepoint()) |cp| {
+            if (unicode.isWhitespace(cp)) {
+                last_ws_end = ws_end;
+                ws_end = iter.i;
+            } else {
+                break;
+            }
+        }
+
+        // iter.i points after the non-whitespace char (or is EOF).
+        // ws_end points to end of whitespace run.
+
+        if (ws_end == slice.len) return ws_end;
+
+        // Followed by non-whitespace.
+        // Return ws_end - 1 char (which is last_ws_end).
+        if (last_ws_end > 0) return last_ws_end;
+
+        // Note: if first char was whitespace but followed by non-ws immediately,
+        // then ws_end = len(cp1), last_ws_end = 0.
+        // We return null. (Matches behavior: single space followed by non-space fails (?!\S)).
+
+        return null;
     }
 
     /// Branch 7: `\s+`

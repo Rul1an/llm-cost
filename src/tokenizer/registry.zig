@@ -35,8 +35,8 @@ pub const Registry = struct {
     };
 
     // Force 4-byte alignment for BPE binary data to avoid runtime @alignCast panic.
-    const cl100k_data align(4) = @embedFile("../data/cl100k_base.bin").*;
-    const o200k_data align(4) = @embedFile("../data/o200k_base.bin").*;
+    const cl100k_data align(4) = @embedFile("../vocab/cl100k_base.bin").*;
+    const o200k_data align(4) = @embedFile("../vocab/o200k_base.bin").*;
 
     pub const cl100k_base = EncodingSpec{
         .name = "cl100k_base",
@@ -61,6 +61,22 @@ pub const Registry = struct {
     pub fn get(name: []const u8) ?EncodingSpec {
         if (std.mem.eql(u8, name, "cl100k_base")) return cl100k_base;
         if (std.mem.eql(u8, name, "o200k_base")) return o200k_base;
+        return null;
+    }
+
+    pub fn getEncodingForModel(model: []const u8) ?EncodingSpec {
+        // o200k_base models
+        if (std.mem.startsWith(u8, model, "gpt-4o")) return o200k_base;
+        if (std.mem.startsWith(u8, model, "gpt-4o")) return o200k_base; // Catch-all alias? Redundant but safe.
+        if (std.mem.startsWith(u8, model, "o1")) return o200k_base;
+        if (std.mem.startsWith(u8, model, "o3")) return o200k_base;
+
+        // cl100k_base models
+        if (std.mem.startsWith(u8, model, "gpt-4")) return cl100k_base;
+        if (std.mem.startsWith(u8, model, "gpt-3.5")) return cl100k_base;
+        if (std.mem.startsWith(u8, model, "text-embedding")) return cl100k_base;
+        if (std.mem.startsWith(u8, model, "claude")) return cl100k_base; // Approx
+
         return null;
     }
 };

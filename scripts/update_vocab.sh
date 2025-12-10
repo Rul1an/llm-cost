@@ -15,7 +15,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-VOCAB_DIR="$PROJECT_ROOT/vocab"
+VOCAB_DIR="$PROJECT_ROOT/src/vocab"
 CACHE_DIR="$PROJECT_ROOT/.vocab-cache"
 
 # Vocabulary definitions

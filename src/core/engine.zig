@@ -13,11 +13,11 @@ pub const EngineError = error{
 };
 
 pub const SpecialMode = union(enum) {
-    /// Default: behave like tiktoken’s `encode`:
+    /// Default: behave like tiktoken's `encode`:
     /// any occurrence of a special token in text is an error.
     strict,
 
-    /// Treat all specials as ordinary text, like tiktoken’s `encode_ordinary`.
+    /// Treat all specials as ordinary text, like tiktoken's `encode_ordinary`.
     ordinary,
 
     /// Only these special token names are allowed; others cause an error.
@@ -118,7 +118,7 @@ pub fn estimateTokens(
             .approximate_ok = true,
             .bpe_version = cfg.bpe_version,
         }) catch return EngineError.TokenizerInternalError;
-        defer tok.deinit();
+        defer tok.deinit(alloc);
 
         const res = tok.count(alloc, text) catch return EngineError.TokenizerInternalError;
         return .{ .tokens = res.tokens };
@@ -149,7 +149,7 @@ fn simpleWordLikeCount(text: []const u8) usize {
 /// Cost calculation based on pricing database.
 /// Price fields interpreted as "per million tokens".
 pub fn estimateCost(
-    db: *pricing.PricingDB,
+    db: *const pricing.PricingDB,
     model_name: []const u8,
     input_tokens: usize,
     output_tokens: usize,
@@ -179,10 +179,6 @@ pub fn estimateCost(
         }
         cost_reasoning = @as(f64, @floatFromInt(reasoning_tokens)) * (p / 1_000_000.0);
     }
-
-    // Explicitly use tokenizer from model metadata inside cost result if available,
-    // or keep it generic. Actually engine doesn't decide tokenizer kind here,
-    // but we return cost result. The user asked for clean engine.
 
     return CostResult{
         .model_name = model.name, // normalized name
