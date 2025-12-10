@@ -83,16 +83,26 @@ pub fn build(b: *std.Build) void {
     const convert_step = b.step("run-convert-vocab", "Run vocabulary converter");
     convert_step.dependOn(&run_convert_vocab.step);
 
-    // Benchmark - DISABLED: src/bench.zig does not exist yet
-    // Uncomment when bench.zig is created:
-    // const bench_exe = b.addExecutable(.{
-    //     .name = "llm-cost-bench",
-    //     .root_source_file = b.path("src/bench.zig"),
-    //     .target = target,
-    //     .optimize = .ReleaseFast,
-    // });
-    // b.installArtifact(bench_exe);
-    // const bench_step = b.step("bench", "Build and run benchmarks");
-    // const run_bench = b.addRunArtifact(bench_exe);
-    // bench_step.dependOn(&run_bench.step);
+    // Benchmark
+    const bench_exe = b.addExecutable(.{
+        .name = "llm-cost-bench",
+        .root_source_file = b.path("src/bench.zig"),
+        .target = target,
+        .optimize = .ReleaseFast, // Always optimize for benchmarks
+    });
+
+    // Provide access to tokenizer modules
+    // Add module imports if tokenizer/mod.zig depends on others (it uses local imports, so should be fine if paths are relative to mod.zig)
+
+    b.installArtifact(bench_exe);
+
+    const bench_step = b.step("bench", "Run performance benchmarks");
+    const run_bench = b.addRunArtifact(bench_exe);
+
+    // Pass args to benchmark runner
+    if (b.args) |args| {
+        run_bench.addArgs(args);
+    }
+
+    bench_step.dependOn(&run_bench.step);
 }

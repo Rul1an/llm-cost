@@ -4,6 +4,8 @@ const std = @import("std");
 pub const tokenizer = @import("tokenizer/mod.zig");
 pub const pricing = @import("pricing.zig");
 pub const engine = @import("core/engine.zig");
+pub const pipe = @import("pipe.zig");
+pub const report = @import("report.zig");
 
 /// llm-cost: Token counting and cost estimation for LLM API calls
 ///
@@ -20,7 +22,7 @@ pub const engine = @import("core/engine.zig");
 ///   version   Show version information
 ///
 /// For more information: https://github.com/your-org/llm-cost
-const version_str = "0.1.0-dev";
+const version_str = "0.6.0";
 
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
@@ -44,6 +46,16 @@ pub fn main() !void {
         return;
     }
 
+    if (std.mem.eql(u8, command, "pipe")) {
+        try runPipe(allocator, args[2..]);
+        return;
+    }
+
+    if (std.mem.eql(u8, command, "tokenizer-report")) {
+        try runReport(allocator, args[2..]);
+        return;
+    }
+
     if (std.mem.eql(u8, command, "count")) {
         try runCount(allocator, args[2..]);
         return;
@@ -53,7 +65,7 @@ pub fn main() !void {
         try runEstimate(allocator, args[2..]);
         return;
     }
-
+// ...
     if (std.mem.eql(u8, command, "models")) {
         try runModels();
         return;
@@ -81,6 +93,8 @@ fn printUsage() !void {
         \\
         \\Commands:
         \\  count      Count tokens in text
+        \\  pipe       Stream from stdin (NDJSON/Text)
+        \\  tokenizer-report  Generate analytics report
         \\  estimate   Estimate cost for token counts
         \\  models     List supported models
         \\  version    Show version information
@@ -350,11 +364,244 @@ fn runModels() !void {
 // Tests
 // =============================================================================
 
+fn runPipe(allocator: std.mem.Allocator, args: []const []const u8) !void {
+    var model: ?[]const u8 = null;
+    var json_field: []const u8 = "content";
+    var input_mode: pipe.InputMode = .Auto;
+    // Actually better to cast or use the public definition.
+    // pipe.PipeConfig.input_mode is an enum.
+
+    // Let's use var config = pipe.PipeConfig{...} pattern
+    var max_tokens: ?u64 = null;
+    var max_cost: ?f64 = null;
+    const output_format: pipe.OutputFormat = .NdJson;
+    var fail_on_error: bool = false;
+    var summary: bool = false;
+
+    var i: usize = 0;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        if (std.mem.eql(u8, arg, "--model") or std.mem.eql(u8, arg, "-m")) {
+            i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --model requires a value\n", .{});
+                std.process.exit(2);
+            }
+            model = args[i];
+        } else if (std.mem.eql(u8, arg, "--field")) {
+            i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --field requires a value\n", .{});
+                std.process.exit(2);
+            }
+            json_field = args[i];
+            input_mode = .JsonField;
+        } else if (std.mem.eql(u8, arg, "--raw")) {
+            input_mode = .Raw;
+        } else if (std.mem.eql(u8, arg, "--max-tokens")) {
+            i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --max-tokens requires a value\n", .{});
+                std.process.exit(2);
+            }
+            max_tokens = std.fmt.parseInt(u64, args[i], 10) catch {
+                std.debug.print("Error: Invalid number for --max-tokens\n", .{});
+                std.process.exit(2);
+            };
+        } else if (std.mem.eql(u8, arg, "--max-cost")) {
+            i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --max-cost requires a value\n", .{});
+                std.process.exit(2);
+            }
+            max_cost = std.fmt.parseFloat(f64, args[i]) catch {
+                std.debug.print("Error: Invalid number for --max-cost\n", .{});
+                std.process.exit(2);
+            };
+        } else if (std.mem.eql(u8, arg, "--summary")) {
+            summary = true;
+        } else if (std.mem.eql(u8, arg, "--fail-fast")) {
+            fail_on_error = true;
+        }
+    }
+
+    if (model == null) {
+        std.debug.print("Error: --model is required\n", .{});
+        std.process.exit(1);
+    }
+
+    // Initialize config
+    const config = pipe.PipeConfig{
+        .input_mode = input_mode,
+        .json_field = json_field,
+        .output_format = output_format,
+        .max_tokens = max_tokens,
+        .max_cost = max_cost,
+        .fail_on_error = fail_on_error,
+        .summary = summary,
+        .model_name = model.?,
+    };
+
+    // Initialize Tokenizer
+    const spec = tokenizer.registry.Registry.getEncodingForModel(model.?);
+    if (spec == null) {
+        std.debug.print("Error: Unknown model '{s}'\n", .{model.?});
+        std.process.exit(1);
+    }
+
+    // Use engine's OpenAI tokenizer logic.
+    // We need to allow approximate_ok=true because BPE v2.
+    // The TokenizerWrapper expects an initialized OpenAITokenizer impl.
+    // But OpenAITokenizer is in `tokenizer.openai`.
+    var tok_impl = try tokenizer.openai.OpenAITokenizer.init(allocator, .{
+        .spec = spec.?,
+        .approximate_ok = true,
+        .bpe_version = .v2_1,
+    });
+    // We do NOT defer tok_impl.deinit() here because StreamProcessor might take ownership?
+    // StreamProcessor takes TokenizerWrapper by value, which has copy of impl?
+    // OpenAITokenizer struct has pointers to map. We should keep it alive.
+    // We can define it here and pass it.
+    defer tok_impl.deinit(allocator);
+
+    // Setup Wrapper
+    const wrapper = pipe.TokenizerWrapper{
+        .impl = tok_impl,
+        .allocator = allocator,
+        .pricing_db = &pricing.DEFAULT_PRICING,
+    };
+
+    // Process Pipe
+    var processor = pipe.StreamProcessor.init(allocator, wrapper, config);
+
+    // Run
+    const stdin = std.io.getStdIn().reader();
+    const stdout = std.io.getStdOut().writer();
+
+    processor.process(stdin, stdout) catch |err| {
+        if (err == error.QuotaExceeded) {
+            std.process.exit(64);
+        }
+        std.debug.print("Stream Error: {}\n", .{err});
+        std.process.exit(1);
+    };
+}
+
+fn runReport(allocator: std.mem.Allocator, args: []const []const u8) !void {
+    var model: ?[]const u8 = null;
+    var file_path: ?[]const u8 = null;
+    var json_field: []const u8 = "content";
+    var input_mode: pipe.InputMode = .Auto;
+    var top_k: usize = 10;
+    var format: []const u8 = "json"; // Only json supported for now per spec, keeping arg for future
+
+    var i: usize = 0;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        if (std.mem.eql(u8, arg, "--model") or std.mem.eql(u8, arg, "-m")) {
+            i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --model requires a value\n", .{});
+                std.process.exit(2);
+            }
+            model = args[i];
+        } else if (std.mem.eql(u8, arg, "--file") or std.mem.eql(u8, arg, "-f")) {
+            i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --file requires a value\n", .{});
+                std.process.exit(2);
+            }
+            file_path = args[i];
+        } else if (std.mem.eql(u8, arg, "--field")) {
+            i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --field requires a value\n", .{});
+                std.process.exit(2);
+            }
+            json_field = args[i];
+            input_mode = .JsonField;
+        } else if (std.mem.eql(u8, arg, "--top-k")) {
+             i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --top-k requires a value\n", .{});
+                std.process.exit(2);
+            }
+            top_k = std.fmt.parseInt(usize, args[i], 10) catch {
+                std.debug.print("Error: Invalid number for --top-k\n", .{});
+                std.process.exit(2);
+            };
+        } else if (std.mem.eql(u8, arg, "--format")) {
+            i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --format requires a value\n", .{});
+                std.process.exit(2);
+            }
+            format = args[i];
+        } else if (std.mem.eql(u8, arg, "--stdin")) {
+            // Explicit stdin (default behavior if no --file, but good to have)
+            file_path = null;
+        }
+    }
+
+    if (model == null) {
+        std.debug.print("Error: --model is required\n", .{});
+        std.process.exit(1);
+    }
+
+    // Config
+    const config = report.ReportConfig{
+        .input_mode = input_mode,
+        .json_field = json_field,
+        .model_name = model.?,
+        .top_k = top_k,
+    };
+
+    // Initialize Tokenizer
+    const spec = tokenizer.registry.Registry.getEncodingForModel(model.?);
+    if (spec == null) {
+        std.debug.print("Error: Unknown model '{s}'\n", .{model.?});
+        std.process.exit(1);
+    }
+
+    // Init Tokenizer
+    // We try to load vocab data if available, allowing approximation if not found (though report is analytics, better be precise?)
+    // User didn't specify strict mode for report, but usually analytics implies precise.
+    // However, keeping consistent with pipe/count defaults.
+    var tok_impl = try tokenizer.openai.OpenAITokenizer.init(allocator, .{
+        .spec = spec.?,
+        .approximate_ok = true,
+        .bpe_version = .v2_1,
+    });
+    defer tok_impl.deinit(allocator);
+
+    // Init Processor
+    var processor = try report.ReportProcessor.init(allocator, tok_impl, config);
+    defer processor.deinit();
+
+    // Run
+    if (file_path) |path| {
+        const file = std.fs.cwd().openFile(path, .{}) catch |err| {
+            std.debug.print("Error: Could not open file {s}: {}\n", .{ path, err });
+            std.process.exit(3);
+        };
+        defer file.close();
+        try processor.processStream(file.reader());
+    } else {
+        const stdin = std.io.getStdIn().reader();
+        try processor.processStream(stdin);
+    }
+
+    // Finalize
+    const stdout = std.io.getStdOut().writer();
+    try processor.printReport(stdout);
+}
+
 test "tokenizer module imports" {
     // Verify all tokenizer modules compile
     _ = tokenizer.bpe_v2_1;
     _ = tokenizer.registry;
     _ = tokenizer.openai;
+    _ = report.ReportProcessor;
 }
 
 test "pricing module imports" {
