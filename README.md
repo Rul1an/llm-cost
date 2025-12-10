@@ -14,6 +14,14 @@ llm-cost estimate \
   --output-tokens 500
 ```
 
+```
+
+## Performance
+
+- **Throughput**: ~10 MB/s (Single-threaded, Apple Silicon).
+- **Scale**: O(N) complexity verified against pathological inputs.
+- **Details**: See [Benchmarks](docs/reference/benchmarks.md).
+
 ## Parity & Verification
 
 Tokenization is guaranteed to be identical to `tiktoken` for supported encodings.

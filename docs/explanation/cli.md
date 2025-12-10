@@ -134,7 +134,7 @@ llm-cost models
 ## Exit Codes
 `llm-cost` uses BSD-style exit codes for reliable scripting:
 *   `0`: Success.
-*   `1`: General error (missing arguments, calculation error).
-*   `2`: Usage error (invalid flags).
-*   `3`: I/O error (file not found).
-*   `64`: Quota exceeded (used with `pipe --max-cost`).
+*   `64`: Usage error (invalid flags) or Quota exceeded.
+*   `65`: Data error (invalid input format).
+*   `66`: No input (file not found).
+*   `70`: Internal software error.

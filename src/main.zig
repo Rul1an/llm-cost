@@ -32,7 +32,7 @@ pub fn main() !void {
 
     if (args.len < 2) {
         try printUsage();
-        std.process.exit(2);
+        std.process.exit(64);
     }
 
     const command = args[1];
@@ -84,7 +84,7 @@ pub fn main() !void {
 
     std.debug.print("Unknown command: {s}\n", .{command});
     std.debug.print("Run 'llm-cost --help' for usage.\n", .{});
-    std.process.exit(2);
+    std.process.exit(64);
 }
 
 fn printVersion() !void {
@@ -133,21 +133,21 @@ fn runFairnessAnalysis(allocator: std.mem.Allocator, args: []const []const u8) !
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --corpus requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             corpus_path = args[i];
         } else if (std.mem.eql(u8, arg, "--model") or std.mem.eql(u8, arg, "-m")) {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --model requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             model = args[i];
         } else if (std.mem.eql(u8, arg, "--format")) {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --format requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             format = args[i];
         }
@@ -156,7 +156,7 @@ fn runFairnessAnalysis(allocator: std.mem.Allocator, args: []const []const u8) !
     if (corpus_path == null) {
         std.debug.print("Error: --corpus is required\n", .{});
         std.debug.print("Usage: llm-cost analyze-fairness --corpus corpus.json --model gpt-4o\n", .{});
-        std.process.exit(1);
+        std.process.exit(64);
     }
 
     if (model == null) {
@@ -185,28 +185,28 @@ fn runCount(allocator: std.mem.Allocator, args: []const []const u8) !void {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --model requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             model = args[i];
         } else if (std.mem.eql(u8, arg, "--text") or std.mem.eql(u8, arg, "-t")) {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --text requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             text = args[i];
         } else if (std.mem.eql(u8, arg, "--file") or std.mem.eql(u8, arg, "-f")) {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --file requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             file_path = args[i];
         } else if (std.mem.eql(u8, arg, "--format")) {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --format requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             format = args[i];
         }
@@ -214,7 +214,7 @@ fn runCount(allocator: std.mem.Allocator, args: []const []const u8) !void {
 
     if (model == null) {
         std.debug.print("Error: --model is required\n", .{});
-        std.process.exit(1);
+        std.process.exit(64);
     }
 
     // Get input text
@@ -226,12 +226,12 @@ fn runCount(allocator: std.mem.Allocator, args: []const []const u8) !void {
     } else if (file_path) |path| {
         const file = std.fs.cwd().openFile(path, .{}) catch |err| {
             std.debug.print("Error: Could not open file {s}: {}\n", .{ path, err });
-            std.process.exit(3);
+            std.process.exit(66);
         };
         defer file.close();
         input_text = file.readToEndAlloc(allocator, 1024 * 1024 * 10) catch |err| {
             std.debug.print("Error: Could not read file: {}\n", .{err});
-            std.process.exit(3);
+            std.process.exit(65);
         };
         needs_free = true;
     } else {
@@ -239,7 +239,7 @@ fn runCount(allocator: std.mem.Allocator, args: []const []const u8) !void {
         const stdin = std.io.getStdIn();
         input_text = stdin.readToEndAlloc(allocator, 1024 * 1024 * 10) catch |err| {
             std.debug.print("Error: Could not read stdin: {}\n", .{err});
-            std.process.exit(3);
+            std.process.exit(65);
         };
         needs_free = true;
     }
@@ -309,45 +309,45 @@ fn runEstimate(allocator: std.mem.Allocator, args: []const []const u8) !void {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --model requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             model = args[i];
         } else if (std.mem.eql(u8, arg, "--input-tokens")) {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --input-tokens requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             input_tokens = std.fmt.parseInt(u64, args[i], 10) catch {
                 std.debug.print("Error: Invalid number for --input-tokens\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             };
         } else if (std.mem.eql(u8, arg, "--output-tokens")) {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --output-tokens requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             output_tokens = std.fmt.parseInt(u64, args[i], 10) catch {
                 std.debug.print("Error: Invalid number for --output-tokens\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             };
         } else if (std.mem.eql(u8, arg, "--reasoning-tokens")) {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --reasoning-tokens requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             reasoning_tokens = std.fmt.parseInt(u64, args[i], 10) catch {
                 std.debug.print("Error: Invalid number for --reasoning-tokens\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             };
         }
     }
 
     if (model == null) {
         std.debug.print("Error: --model is required\n", .{});
-        std.process.exit(1);
+        std.process.exit(64);
     }
 
     const in_tok = input_tokens orelse 0;
@@ -361,7 +361,7 @@ fn runEstimate(allocator: std.mem.Allocator, args: []const []const u8) !void {
             std.debug.print("Unknown model: {s}\n", .{model.?});
             std.debug.print("Run 'llm-cost models' to see supported models.\n", .{});
         }
-        std.process.exit(1);
+        std.process.exit(64);
     };
 
     const stdout = std.io.getStdOut().writer();
@@ -443,14 +443,14 @@ fn runPipe(allocator: std.mem.Allocator, args: []const []const u8) !void {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --model requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             model = args[i];
         } else if (std.mem.eql(u8, arg, "--field")) {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --field requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             json_field = args[i];
             input_mode = .JsonField;
@@ -460,21 +460,21 @@ fn runPipe(allocator: std.mem.Allocator, args: []const []const u8) !void {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --max-tokens requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             max_tokens = std.fmt.parseInt(u64, args[i], 10) catch {
                 std.debug.print("Error: Invalid number for --max-tokens\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             };
         } else if (std.mem.eql(u8, arg, "--max-cost")) {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --max-cost requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             max_cost = std.fmt.parseFloat(f64, args[i]) catch {
                 std.debug.print("Error: Invalid number for --max-cost\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             };
         } else if (std.mem.eql(u8, arg, "--summary")) {
             summary = true;
@@ -485,7 +485,7 @@ fn runPipe(allocator: std.mem.Allocator, args: []const []const u8) !void {
 
     if (model == null) {
         std.debug.print("Error: --model is required\n", .{});
-        std.process.exit(1);
+        std.process.exit(64);
     }
 
     // Initialize config
@@ -504,7 +504,7 @@ fn runPipe(allocator: std.mem.Allocator, args: []const []const u8) !void {
     const spec = tokenizer.registry.Registry.getEncodingForModel(model.?);
     if (spec == null) {
         std.debug.print("Error: Unknown model '{s}'\n", .{model.?});
-        std.process.exit(1);
+        std.process.exit(64);
     }
 
     // Use engine's OpenAI tokenizer logic.
@@ -541,7 +541,7 @@ fn runPipe(allocator: std.mem.Allocator, args: []const []const u8) !void {
             std.process.exit(64);
         }
         std.debug.print("Stream Error: {}\n", .{err});
-        std.process.exit(1);
+        std.process.exit(70);
     };
 }
 
@@ -560,21 +560,21 @@ fn runReport(allocator: std.mem.Allocator, args: []const []const u8) !void {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --model requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             model = args[i];
         } else if (std.mem.eql(u8, arg, "--file") or std.mem.eql(u8, arg, "-f")) {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --file requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             file_path = args[i];
         } else if (std.mem.eql(u8, arg, "--field")) {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --field requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             json_field = args[i];
             input_mode = .JsonField;
@@ -582,17 +582,17 @@ fn runReport(allocator: std.mem.Allocator, args: []const []const u8) !void {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --top-k requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             top_k = std.fmt.parseInt(usize, args[i], 10) catch {
                 std.debug.print("Error: Invalid number for --top-k\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             };
         } else if (std.mem.eql(u8, arg, "--format")) {
             i += 1;
             if (i >= args.len) {
                 std.debug.print("Error: --format requires a value\n", .{});
-                std.process.exit(2);
+                std.process.exit(64);
             }
             format = args[i];
         } else if (std.mem.eql(u8, arg, "--stdin")) {
@@ -603,7 +603,7 @@ fn runReport(allocator: std.mem.Allocator, args: []const []const u8) !void {
 
     if (model == null) {
         std.debug.print("Error: --model is required\n", .{});
-        std.process.exit(1);
+        std.process.exit(64);
     }
 
     // Config
@@ -618,7 +618,7 @@ fn runReport(allocator: std.mem.Allocator, args: []const []const u8) !void {
     const spec = tokenizer.registry.Registry.getEncodingForModel(model.?);
     if (spec == null) {
         std.debug.print("Error: Unknown model '{s}'\n", .{model.?});
-        std.process.exit(1);
+        std.process.exit(64);
     }
 
     // Init Tokenizer
@@ -640,7 +640,7 @@ fn runReport(allocator: std.mem.Allocator, args: []const []const u8) !void {
     if (file_path) |path| {
         const file = std.fs.cwd().openFile(path, .{}) catch |err| {
             std.debug.print("Error: Could not open file {s}: {}\n", .{ path, err });
-            std.process.exit(3);
+            std.process.exit(66);
         };
         defer file.close();
         try processor.processStream(file.reader());
