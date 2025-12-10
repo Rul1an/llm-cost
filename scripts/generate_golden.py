@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import json
-import tiktoken
 import sys
 
 # Best practices 2025: Use explicit encoding retrieval and handle special tokens safely.
