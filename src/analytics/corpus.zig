@@ -127,7 +127,8 @@ pub fn parseCorpusJson(allocator: Allocator, json_text: []const u8) !CorpusConfi
             }
             // If we fail after allocating name, we must clean it up.
             // But our main defer handles map loop. This entry is not in map yet.
-            // So we need errdefer here.
+            // So we need errdefer here: this protects against allocation failures in the path parsing block below,
+            // ensuring name is freed if path allocation fails.
             errdefer allocator.free(lang_config.name);
 
             // Parse path

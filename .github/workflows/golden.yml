@@ -22,7 +22,7 @@ jobs:
       - name: Generate golden data
         run: python scripts/generate_golden.py
 
-      - name: Verified generated format
+      - name: Verify generated format
         run: head -n 5 test/golden/corpus_v2.jsonl
 
       - name: Upload golden corpus

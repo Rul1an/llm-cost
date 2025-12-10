@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.7.0] - 2025-12-10
+### Added
+- **Fairness Analyzer**: New `analyze-fairness` command to evaluate tokenization parity metrics (Fertility, Gini, etc.).
+- **Golden Tests**: Full parity verification suite against `tiktoken` (140+ test cases).
+- **Core**: Integrated C++ style analytics module (`src/analytics/`) for performance.
+
+### Fixed
+- **CI**: Fixed `release.yml` smoke test (replaced invalid `tokens` command with `count`).
+- **Memory**: Resolved leaks in corpus parsing and test runners.
+
 ## [v0.6.2] - 2025-12-10
 ### Fixed
 - **CI**: Fixed `release.yml` workflow failure by using correct SHA-pinned references for `actions/upload-artifact` (v4) and `actions/download-artifact` (v4).
