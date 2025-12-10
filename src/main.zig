@@ -20,7 +20,6 @@ pub const engine = @import("core/engine.zig");
 ///   version   Show version information
 ///
 /// For more information: https://github.com/your-org/llm-cost
-
 const version_str = "0.1.0-dev";
 
 pub fn main() !void {

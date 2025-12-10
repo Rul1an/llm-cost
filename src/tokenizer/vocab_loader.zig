@@ -9,7 +9,6 @@ const std = @import("std");
 ///   const cl100k_data = @embedFile("vocab/cl100k_base.bin");
 ///   var vocab = try VocabLoader.load(allocator, cl100k_data);
 ///   defer vocab.deinit(allocator);
-
 pub const VocabLoader = struct {
     // Runtime structures (heap-allocated)
     rank_map: std.StringHashMap(u32),

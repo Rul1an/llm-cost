@@ -26,7 +26,7 @@ test "golden: parity with evil_corpus_v2" {
     // Try to open the golden file.
     const file_path = "testdata/golden/evil_corpus_v2.jsonl";
     const file = std.fs.cwd().openFile(file_path, .{}) catch |err| {
-        std.debug.print("\n[WARN] Skipping golden test: could not open {s}: {}\n", .{file_path, err});
+        std.debug.print("\n[WARN] Skipping golden test: could not open {s}: {}\n", .{ file_path, err });
         return; // Skip if file not generated (e.g. CI without python)
     };
     defer file.close();
@@ -50,7 +50,7 @@ test "golden: parity with evil_corpus_v2" {
         // Verify we support this encoding
         const spec = tokenizer.registry.Registry.get(record.encoding);
         if (spec == null) {
-            std.debug.print("Skipping unknown encoding {s} at line {d}\n", .{record.encoding, line_no});
+            std.debug.print("Skipping unknown encoding {s} at line {d}\n", .{ record.encoding, line_no });
             continue;
         }
 
@@ -71,7 +71,7 @@ test "golden: parity with evil_corpus_v2" {
 
         // Verify
         testing.expectEqualSlices(u32, record.tokens, actual_ids) catch |err| {
-            std.debug.print("\nFAIL: Line {d} | Model: {s}\n", .{line_no, record.model});
+            std.debug.print("\nFAIL: Line {d} | Model: {s}\n", .{ line_no, record.model });
             std.debug.print("Text: '{s}'\n", .{record.text});
             std.debug.print("Expected: {any}\n", .{record.tokens});
             std.debug.print("Actual:   {any}\n", .{actual_ids});

@@ -3,7 +3,6 @@ const Sha256 = std.crypto.hash.sha2.Sha256;
 
 /// Vocabulary Binary Format v2
 /// See docs/vocab-format-v2.md for specification
-
 const MAGIC = "BPE2".*;
 const VERSION: u32 = 2;
 const HEADER_SIZE: usize = 64;
