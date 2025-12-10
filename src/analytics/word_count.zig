@@ -71,7 +71,7 @@ fn countCodepoints(text: []const u8) usize {
 /// Helper to decode UTF-8 codepoint from slice (manual implementation)
 fn decodeUtf8Codepoint(bytes: []const u8, len: usize) !u21 {
     if (bytes.len < len) return error.InvalidUtf8;
-    
+
     return switch (len) {
         1 => @as(u21, bytes[0]),
         2 => blk: {
@@ -106,20 +106,20 @@ fn countHeuristic(text: []const u8) usize {
     // First pass: analyze content
     while (i < text.len) {
         const len = unicode.utf8ByteSequenceLength(text[i]) catch 1;
-        
+
         if (i + len <= text.len) {
             // Decode UTF-8 codepoint
             const codepoint = decodeUtf8Codepoint(text[i..], len) catch {
                 i += 1;
                 continue;
             };
-            
+
             total_codepoints += 1;
             if (isCjkCodepoint(codepoint)) {
                 cjk_count += 1;
             }
         }
-        
+
         i += len;
     }
 
@@ -147,7 +147,7 @@ fn isCjkCodepoint(cp: u21) bool {
     if (cp >= 0x30A0 and cp <= 0x30FF) return true;
     // Hangul Syllables
     if (cp >= 0xAC00 and cp <= 0xD7AF) return true;
-    
+
     return false;
 }
 

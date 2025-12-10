@@ -85,7 +85,7 @@ pub fn main() !void {
 
         // Verify JSON validity
         const parsed = json.parseFromSlice(json.Value, allocator, line, .{}) catch |err| {
-            try stdout.print("SKIP [Line {d}]: JSON parse error: {}\n", .{line_num, err});
+            try stdout.print("SKIP [Line {d}]: JSON parse error: {}\n", .{ line_num, err });
             skipped += 1;
             continue;
         };
@@ -102,7 +102,8 @@ pub fn main() !void {
             if (cl100k_tok) |*t| t else null
         else if (std.mem.eql(u8, encoding, "o200k_base"))
             if (o200k_tok) |*t| t else null
-        else null;
+        else
+            null;
 
         if (tok_ptr == null) {
             // Cannot test this encoding (missing or unloadable)
@@ -112,7 +113,7 @@ pub fn main() !void {
 
         // Encode
         const actual_tokens = tok_ptr.?.encode(allocator, text) catch |err| {
-            try stdout.print("FAIL [{s}]: encode error: {}\n", .{case_id, err});
+            try stdout.print("FAIL [{s}]: encode error: {}\n", .{ case_id, err });
             failed += 1;
             continue;
         };
@@ -182,7 +183,7 @@ fn printTokensPrefix(writer: anytype, items: []const json.Value, prefix_len: usi
     for (0..n) |i| {
         if (i > 0) writer.writeAll(", ") catch {};
         const val = items[i];
-         switch (val) {
+        switch (val) {
             .integer => |v| writer.print("{d}", .{v}) catch {},
             else => {},
         }

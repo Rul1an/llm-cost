@@ -29,7 +29,7 @@ pub fn calculateGini(values: []const f64) f64 {
         sum += v;
     }
     const mean = sum / @as(f64, @floatFromInt(n));
-    
+
     if (mean == 0.0) return 0.0;
 
     // Calculate sum of absolute differences
