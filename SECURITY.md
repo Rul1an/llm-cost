@@ -28,12 +28,12 @@ open a public GitHub issue.
 
 Instead, use one of the following channels:
 
-1. **GitHub Security Advisory (preferred)**  
-   - Go to the repository's **"Security" → "Advisories"** tab.  
-   - Click **"Report a vulnerability"**.  
+1. **GitHub Security Advisory (preferred)**
+   - Go to the repository's **"Security" → "Advisories"** tab.
+   - Click **"Report a vulnerability"**.
    - Provide a minimal, reproducible example if possible.
 
-2. **Private Contact (optional)**  
+2. **Private Contact (optional)**
    If you prefer email, please use the contact method referenced in the
    repository description or project website (for example, a dedicated
    `security@…` address).
@@ -70,7 +70,7 @@ same channel.
 To reduce supply chain risk, llm-cost uses:
 
 - **Pinned GitHub Actions by SHA** in CI and release workflows
-- **Reproducible Zig builds** with a pinned Zig version (currently `0.13.x`)
+- **Reproducible Zig builds** with a pinned Zig version (currently `0.14.0`)
 - **Release artifacts built in CI** from tagged commits
 - **Signed binaries and SBOMs** for release assets (via the cross-compile
   workflow and SBOM/signing steps)
@@ -96,6 +96,8 @@ Defensive measures include:
 - **Token and cost quotas** (`--max-tokens`, `--max-cost`) to avoid runaway
   processing
 - **Fuzz tests and golden tests** to catch crashes and contract regressions
+
+*(Note: Pipe mode is temporarily disabled in v0.5.0 for refactoring, but likely to return in v0.6.0 with these protections.)*
 
 If you discover a case where llm-cost violates these expectations, please
 treat it as a potential security bug and report it via the process above.
