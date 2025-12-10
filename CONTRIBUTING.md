@@ -4,8 +4,8 @@ Thank you for your interest in contributing! We value clean, performant, and rel
 
 ## Prerequisites
 
-- **Zig 0.13.0** (strictly pinned).
-- Python 3 + `tiktoken` (only for running parity checks validation).
+- **Zig 0.14.0** (strictly pinned).
+- Python 3 + `tiktoken` (optional, only for *re-generating* the golden corpus).
 
 ## Workflow
 
@@ -15,8 +15,7 @@ Thank you for your interest in contributing! We value clean, performant, and rel
     ```bash
     zig build test        # Unit tests
     zig build fuzz        # Fuzzing sanity check
-    zig build test-parity # Parity check (requires python env)
-    zig build bench-bpe   # Performance check
+    zig build test-golden # Parity check (runs against committed jsonl)
     ```
 4.  **PR**: Submit a Pull Request targeting `main`.
 
