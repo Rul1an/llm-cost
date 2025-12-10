@@ -23,7 +23,16 @@ When in doubt, upgrade to the latest released version before filing a report.
 
 ## Reporting a Vulnerability
 
-Please report vulnerabilities via email to `info@logvault.eu` or open a simpler GitHub Advisory.
+
+Please report vulnerabilities via email to `info@logvault.eu`.
+
+We encourage you to encrypt sensitive information. Please include:
+- A description of the vulnerability.
+- Steps to reproduce the issue (including any relevant input files).
+- The version of llm-cost affected.
+- Any potential impact or exploitation scenarios.
+
+We aim to acknowledge reports within **48 hours** and provide regular updates on our remediation progress.
 
 ## Supply Chain & Releases
 
