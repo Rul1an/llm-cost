@@ -1,6 +1,6 @@
 
 Settings:
-- System: Linux x86_64 (Simulated/MacOS actual)
+- System: macOS x86_64 (via Rosetta) / Apple Silicon (Actual)
 - Zig: 0.14.0
 - Optimization: ReleaseFast
 - Date: 2025-12-10
