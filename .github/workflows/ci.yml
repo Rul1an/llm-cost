@@ -33,4 +33,4 @@ jobs:
       - uses: mlugg/setup-zig@v1 # TODO: Pin SHA
         with:
           version: 0.14.0
-      - run: zig fmt --check src/
+      - run: zig fmt --check build.zig src/
