@@ -7,12 +7,16 @@ zig-out/
 *~
 tools/unicode_data/
 zig-0.13.0/
-testdata/bench_realistic.jsonl
 
-# Phase 1.5 Internal Docs
-docs/roadmap-1.5.md
-docs/tdd-1.5.md
-docs/implementation-plan-1.5.md
-docs/adr-0001-phase-1.5-design-decisions.md
+# Data
+testdata/bench_realistic.jsonl
+data/bench/
+.vocab-cache/
+
+# Validation cache
+benchmark_results.txt
+benchmark_results.json
+comparison.txt
+comparison.json
 
 
