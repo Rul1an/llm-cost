@@ -42,7 +42,7 @@ jobs:
       - name: BPE Microbenchmark (sanity)
         # Run to ensure no crashes in bench code, though timing is flaky on CI
         # Optimization level is handled by build.zig
-        run: zig build bench-bpe
+        run: zig build bench
 
   build-matrix:
     needs: verify
