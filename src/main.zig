@@ -162,13 +162,13 @@ fn runFairnessAnalysis(allocator: std.mem.Allocator, args: []const []const u8) !
     if (model == null) {
         std.debug.print("Error: --model is required\n", .{});
         std.debug.print("Usage: llm-cost analyze-fairness --corpus corpus.json --model gpt-4o\n", .{});
-        std.process.exit(1);
+        std.process.exit(64);
     }
 
     // Run fairness analysis via module
     analytics.runFairnessAnalysis(allocator, corpus_path.?, model.?, format) catch |err| {
         std.debug.print("Error during fairness analysis: {}\n", .{err});
-        std.process.exit(1);
+        std.process.exit(70);
     };
 }
 
