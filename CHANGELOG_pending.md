@@ -1,10 +1,10 @@
-Feature: Fairness Analyzer & Verification
+Feature: SLSA Security Hardening
 
 ## Added
-- **Fairness Analyzer**: New `analyze-fairness` command to evaluate tokenization parity across languages.
-- **Golden Tests**: Comprehensive test suite enforcing strict parity with OpenAI's `tiktoken`.
-- **Golden Corpus**: `test/golden/corpus_v2.jsonl` covering Basic, Unicode, Code, and Edge cases.
+- **Pinned Actions**: All GitHub Actions workflows now use pinned versions for improved security.
+- **Provenance Attestation**: Workflows generate provenance attestations to ensure build integrity.
+- **Verification Workflows**: Added verification workflows to validate provenance and artifact authenticity.
 
 ## Fixed
-- **CI**: Fixed `release.yml` smoke test failing on unknown `tokens` command (replaced with `count`).
-- **Memory Safety**: Fixed leaks in `corpus.zig` and test runners.
+- **CI**: Improved workflow reliability and security by enforcing SLSA requirements.
+- **Docs**: Corrected `SECURITY.md` contact and added `VERIFICATION.md`.

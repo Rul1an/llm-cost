@@ -2,7 +2,7 @@
 
 This guide explains how to verify the authenticity and integrity of `llm-cost` releases using GitHub Attestations and Sigstore.
 
-## Prerequisities
+## Prerequisites
 
 - [GitHub CLI](https://cli.github.com/) (`gh` v2.49.0+)
 
@@ -55,7 +55,7 @@ To verify `llm-cost` in your own GitHub Workflows:
 ```yaml
 steps:
   - name: Download llm-cost
-    uses: dsaltares/fetch-gh-release-asset@v1
+    uses: dsaltares/fetch-gh-release-asset@d65c814173d12d457636979204040924036e5797 # v1.1.2
     with:
       repo: 'Rul1an/llm-cost'
       version: 'tags/v0.7.0'
