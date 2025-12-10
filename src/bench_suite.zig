@@ -191,7 +191,7 @@ fn runTextBenchmarks(
         \\╚══════════════════════════════════════════════════════════════╝
         \\
         \\System:  {s}
-        \\Date:    {s}
+        \\Date:    {d}
         \\Mode:    {s}
         \\
         \\
@@ -368,7 +368,7 @@ fn runJsonBenchmarks(
     try writer.print(
         \\  "meta": {{
         \\    "version": "{s}",
-        \\    "timestamp": "{s}",
+        \\    "timestamp": {d},
         \\    "system": "{s}",
         \\    "mode": "{s}"
         \\  }},
@@ -463,7 +463,7 @@ fn runMarkdownBenchmarks(
         \\## 📊 llm-cost Benchmark Results
         \\
         \\**Version:** v{s}
-        \\**Date:** {s}
+        \\**Date:** {d}
         \\**Mode:** {s}
         \\
         \\### Throughput
@@ -639,6 +639,12 @@ fn calculateStdDev(values: []const u64, mean: u64) u64 {
     return std.math.sqrt(variance);
 }
 
-fn getTimestamp() []const u8 {
-    return "2025-12-10T21:05:00Z";
+const builtin = @import("builtin");
+
+fn getTimestamp() i64 {
+    return std.time.timestamp();
+}
+
+pub fn getDynamicSystemInfo() []const u8 {
+    return @tagName(builtin.os.tag) ++ " " ++ @tagName(builtin.cpu.arch);
 }

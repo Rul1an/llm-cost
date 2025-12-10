@@ -233,24 +233,32 @@ fn calculateStdDev(values: []const u64, mean: u64) u64 {
     return std.math.sqrt(variance);
 }
 
+const builtin = @import("builtin");
+
 /// Get current process RSS in bytes
 pub fn getCurrentRSS() !u64 {
     // Linux: read from /proc/self/statm
-    const file = std.fs.openFileAbsolute("/proc/self/statm", .{}) catch {
-        // Not on Linux, return 0
-        return 0;
-    };
-    defer file.close();
+    if (builtin.os.tag == .linux) {
+        const file = std.fs.openFileAbsolute("/proc/self/statm", .{}) catch return 0;
+        defer file.close();
 
-    var buf: [256]u8 = undefined;
-    const bytes_read = try file.read(&buf);
+        var buf: [256]u8 = undefined;
+        const bytes_read = try file.read(&buf);
 
-    var iter = std.mem.splitScalar(u8, buf[0..bytes_read], ' ');
-    _ = iter.next(); // Skip VmSize
+        var iter = std.mem.splitScalar(u8, buf[0..bytes_read], ' ');
+        _ = iter.next(); // Skip VmSize
 
-    if (iter.next()) |rss_pages| {
-        const pages = std.fmt.parseInt(u64, std.mem.trim(u8, rss_pages, &std.ascii.whitespace), 10) catch return 0;
-        return pages * 4096; // Assuming 4KB pages
+        if (iter.next()) |rss_pages| {
+            const pages = std.fmt.parseInt(u64, std.mem.trim(u8, rss_pages, &std.ascii.whitespace), 10) catch return 0;
+            return pages * 4096; // Assuming 4KB pages
+        }
+    } else if (builtin.os.tag == .macos or builtin.os.tag == .freebsd) {
+        // POSIX getrusage in Zig 0.14 returns the struct by value.
+        // RUSAGE_SELF is 0.
+        // maxrss is in Kilobytes (on both Linux and macOS usually, though historical confusion exists).
+        // We multiply by 1024 to get Bytes.
+        const usage = std.posix.getrusage(0);
+        return @as(u64, @intCast(usage.maxrss)) * 1024;
     }
 
     return 0;
