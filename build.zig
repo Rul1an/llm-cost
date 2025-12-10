@@ -58,14 +58,22 @@ pub fn build(b: *std.Build) void {
     parity_step.dependOn(&run_parity_tests.step);
 
     // Golden tests (CLI contract)
-    const golden_tests = b.addTest(.{
+    // Golden tests (Streaming Parity Runner)
+    const golden_exe = b.addExecutable(.{
+        .name = "golden-test",
         .root_source_file = b.path("src/golden_test.zig"),
         .target = target,
         .optimize = optimize,
     });
-    const run_golden_tests = b.addRunArtifact(golden_tests);
-    const golden_step = b.step("test-golden", "Run golden CLI tests");
-    golden_step.dependOn(&run_golden_tests.step);
+    b.installArtifact(golden_exe);
+
+    const run_golden = b.addRunArtifact(golden_exe);
+    if (b.args) |args| {
+        run_golden.addArgs(args);
+    }
+
+    const golden_step = b.step("test-golden", "Run golden parity tests against tiktoken");
+    golden_step.dependOn(&run_golden.step);
 
     // Tools: Vocabulary Converter
     const convert_vocab_exe = b.addExecutable(.{
