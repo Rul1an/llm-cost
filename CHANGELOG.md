@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.7.1] - 2025-12-10
+### Added
+- **Documentation**: Complete overhaul of documentation structure (Diátaxis framework).
+- **CLI Reference**: New `docs/explanation/cli.md` guide.
+- **Man Page**: Unix-standard man page at `docs/reference/llm-cost.1`.
+
+### Fixed
+- **Benchmarks**: Improved dynamic system detection (macOS/Linux) and real-time timestamping.
+- **Build**: Resolved Zig 0.15.0 compatibility issues (reverted to 0.14.0 stable API).
+
 ## [v0.7.0] - 2025-12-10
 ### Added
 - **Fairness Analyzer**: New `analyze-fairness` command to evaluate tokenization parity metrics (Fertility, Gini, etc.).
