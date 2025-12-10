@@ -6,6 +6,7 @@ pub const pricing = @import("pricing.zig");
 pub const engine = @import("core/engine.zig");
 pub const pipe = @import("pipe.zig");
 pub const report = @import("report.zig");
+pub const analytics = @import("analytics/mod.zig");
 
 /// llm-cost: Token counting and cost estimation for LLM API calls
 ///
@@ -56,6 +57,11 @@ pub fn main() !void {
         return;
     }
 
+    if (std.mem.eql(u8, command, "analyze-fairness")) {
+        try runFairnessAnalysis(allocator, args[2..]);
+        return;
+    }
+
     if (std.mem.eql(u8, command, "count")) {
         try runCount(allocator, args[2..]);
         return;
@@ -95,6 +101,7 @@ fn printUsage() !void {
         \\  count      Count tokens in text
         \\  pipe       Stream from stdin (NDJSON/Text)
         \\  tokenizer-report  Generate analytics report
+        \\  analyze-fairness  Run fairness/token-tax analysis
         \\  estimate   Estimate cost for token counts
         \\  models     List supported models
         \\  version    Show version information
@@ -112,6 +119,57 @@ fn printUsage() !void {
         \\For more information: https://github.com/your-org/llm-cost
         \\
     );
+}
+
+fn runFairnessAnalysis(allocator: std.mem.Allocator, args: []const []const u8) !void {
+    var corpus_path: ?[]const u8 = null;
+    var model: ?[]const u8 = null;
+    var format: []const u8 = "text";
+
+    var i: usize = 0;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        if (std.mem.eql(u8, arg, "--corpus") or std.mem.eql(u8, arg, "-c")) {
+            i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --corpus requires a value\n", .{});
+                std.process.exit(2);
+            }
+            corpus_path = args[i];
+        } else if (std.mem.eql(u8, arg, "--model") or std.mem.eql(u8, arg, "-m")) {
+            i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --model requires a value\n", .{});
+                std.process.exit(2);
+            }
+            model = args[i];
+        } else if (std.mem.eql(u8, arg, "--format")) {
+            i += 1;
+            if (i >= args.len) {
+                std.debug.print("Error: --format requires a value\n", .{});
+                std.process.exit(2);
+            }
+            format = args[i];
+        }
+    }
+
+    if (corpus_path == null) {
+        std.debug.print("Error: --corpus is required\n", .{});
+        std.debug.print("Usage: llm-cost analyze-fairness --corpus corpus.json --model gpt-4o\n", .{});
+        std.process.exit(1);
+    }
+
+    if (model == null) {
+        std.debug.print("Error: --model is required\n", .{});
+        std.debug.print("Usage: llm-cost analyze-fairness --corpus corpus.json --model gpt-4o\n", .{});
+        std.process.exit(1);
+    }
+
+    // Run fairness analysis via module
+    analytics.runFairnessAnalysis(allocator, corpus_path.?, model.?, format) catch |err| {
+        std.debug.print("Error during fairness analysis: {}\n", .{err});
+        std.process.exit(1);
+    };
 }
 
 fn runCount(allocator: std.mem.Allocator, args: []const []const u8) !void {
@@ -602,6 +660,7 @@ test "tokenizer module imports" {
     _ = tokenizer.registry;
     _ = tokenizer.openai;
     _ = report.ReportProcessor;
+    _ = analytics; // Ensure analytics tests are compiled
 }
 
 test "pricing module imports" {

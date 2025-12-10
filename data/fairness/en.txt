@@ -1,0 +1,5 @@
+The quick brown fox jumps over the lazy dog. This is a sample text for testing tokenization efficiency across different languages. Machine learning models process text by breaking it into smaller units called tokens. The number of tokens required to represent the same semantic content varies significantly across languages, creating what researchers call the "token tax" for non-English speakers.
+
+Natural language processing has made remarkable progress in recent years. Large language models can now understand and generate human-like text in many languages. However, the tokenization efficiency varies greatly depending on the language. English text typically requires fewer tokens per word compared to other languages.
+
+This sample contains approximately one hundred words of English text. The vocabulary used here represents common everyday language that would be typical of web content, documentation, and general communication. Testing tokenization on such samples helps identify disparities in how different languages are processed.

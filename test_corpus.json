@@ -1,0 +1,27 @@
+{
+  "config": {
+    "baseline_lang": "en"
+  },
+  "languages": {
+    "en": {
+      "name": "English",
+      "path": "data/fairness/en.txt",
+      "mode": "whitespace"
+    },
+    "fr": {
+      "name": "French",
+      "path": "data/fairness/fr.txt",
+      "mode": "whitespace"
+    },
+    "zh": {
+      "name": "Chinese",
+      "path": "data/fairness/zh.txt",
+      "mode": "character"
+    },
+    "ar": {
+      "name": "Arabic",
+      "path": "data/fairness/ar.txt",
+      "mode": "whitespace"
+    }
+  }
+}

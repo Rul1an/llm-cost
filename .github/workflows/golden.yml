@@ -1,0 +1,62 @@
+name: Golden Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  generate-golden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install tiktoken
+        run: pip install tiktoken
+
+      - name: Generate golden data
+        run: python scripts/generate_golden.py
+
+      - name: Verified generated format
+        run: head -n 5 test/golden/corpus_v2.jsonl
+
+      - name: Upload golden corpus
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-corpus
+          path: test/golden/corpus_v2.jsonl
+
+  test-parity:
+    needs: generate-golden
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download golden corpus
+        uses: actions/download-artifact@v4
+        with:
+          name: golden-corpus
+          path: test/golden/
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.14.0
+
+      - name: Download vocabularies
+        run: chmod +x scripts/update_vocab.sh && ./scripts/update_vocab.sh
+
+      - name: Run golden tests
+        run: zig build test-golden
+
+      - name: Upload results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-failures
+          path: test/golden/failures.log
