@@ -96,7 +96,7 @@ pub fn build(b: *std.Build) void {
     // Benchmark
     const bench_exe = b.addExecutable(.{
         .name = "llm-cost-bench",
-        .root_source_file = b.path("src/bench.zig"),
+        .root_source_file = b.path("src/bench_suite.zig"),
         .target = target,
         .optimize = .ReleaseFast, // Always optimize for benchmarks
     });

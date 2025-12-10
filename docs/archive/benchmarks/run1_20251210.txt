@@ -1,0 +1,21 @@
+
+Settings:
+- System: Linux x86_64 (Simulated/MacOS actual)
+- Zig: 0.14.0
+- Optimization: ReleaseFast
+- Date: 2025-12-10
+
+# cl100k_base
+- Small (100B): 2.45 MB/s, p99: 0.168 ms
+- Medium (10KB): 8.86 MB/s, p99: 3.792 ms
+- Large (1MB): 8.02 MB/s, p99: 229.703 ms
+- Peak Throughput: 8.86 MB/s
+
+# o200k_base
+- Small (100B): 2.63 MB/s
+- Trend suggests similar performance profile.
+
+Target Check:
+- Goal: 10-15 MB/s
+- Actual: ~9 MB/s
+- Status: Close to target. Optimizations (e.g., arena allocation per run, better cache usage) could push it over 10 MB/s.
