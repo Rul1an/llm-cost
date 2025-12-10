@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.1] - 2025-12-10
+
+### Fixed
+- **CI**: Corrected invalid `bench-bpe` step name in `release.yml` workflow (renamed to `bench`).
+- **Process**: Enforced `zig fmt` checks in CI (`build.zig` + `src/`) and added `pre-push` git hooks.
+
 ## [0.6.0] - 2025-12-10
 
 ### Added

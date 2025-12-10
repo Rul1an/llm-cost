@@ -22,7 +22,7 @@ pub const report = @import("report.zig");
 ///   version   Show version information
 ///
 /// For more information: https://github.com/your-org/llm-cost
-const version_str = "0.6.0";
+const version_str = "0.6.1";
 
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
