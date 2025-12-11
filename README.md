@@ -1,61 +1,5 @@
 # llm-cost
 
-Offline CLI tool for token counting and cost estimation for LLMs (GPT-4, GPT-4o), ensuring *bit-for-bit* parity with official `tiktoken` tokenizers.
-
-## Status
-
-- **Zig**: 0.14.0
-- **Supported Encodings**:
-  - `cl100k_base` (e.g. `gpt-4`, `gpt-3.5-turbo`, `text-embedding-3`)
-  - `o200k_base` (e.g. `gpt-4o`, `o1`)
-- **Verification**: 30 "evil" edge cases verified against `tiktoken` in CI.
-
-## Installation
-
-### From Source
-
-Requirements:
-- Zig 0.14.0
-- Git
-
-```bash
-git clone https://github.com/Rul1an/llm-cost.git
-cd llm-cost
-zig build -Doptimize=ReleaseFast
-# Binary output: zig-out/bin/llm-cost
-```
-
-Optional install to system path:
-```bash
-zig build install -Doptimize=ReleaseFast
-```
-
-## Usage
-
-### 1. Token Counting
-
-Count tokens for a string:
-
-```bash
-llm-cost count --model gpt-4o --text "Hello, world"
-```
-
-Or with explicit encoding:
-
-```bash
-llm-cost count --encoding o200k_base --text "Hello, world"
-```
-
-JSON output:
-
-```bash
-llm-cost count --model gpt-4o --text "Hello" --format json
-```
-
-### 2. Stdin / Pipe
-
-Read from stdin:
-```bash
 echo 'Hello' | llm-cost count --model gpt-4o
 ```
 
@@ -69,6 +13,14 @@ llm-cost estimate \
   --input-tokens 1000 \
   --output-tokens 500
 ```
+
+```
+
+## Performance
+
+- **Throughput**: ~10 MB/s (Single-threaded, Apple Silicon).
+- **Scale**: O(N) complexity verified against pathological inputs.
+- **Details**: See [Benchmarks](docs/reference/benchmarks.md).
 
 ## Parity & Verification
 

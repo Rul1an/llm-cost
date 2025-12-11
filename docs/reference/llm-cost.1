@@ -1,0 +1,64 @@
+.Dd December 10, 2025
+.Dt LLM-COST 1
+.Os
+.Sh NAME
+.Nm llm-cost
+.Nd Offline CLI for estimating LLM token costs
+.Sh SYNOPSIS
+.Nm
+.Ar COMMAND
+.Op Ar FLAGS
+.Sh DESCRIPTION
+.Nm
+is a high-performance, offline CLI tool for calculating token counts and estimating costs for Large Language Model (LLM) prompts. It supports OpenAI-compatible encodings (cl100k_base, o200k_base) and runs without network dependencies.
+.Sh COMMANDS
+.Bl -tag -width "analyze-fairness"
+.It Cm pipe
+Read text or JSON from stdin, calculate tokens/costs, and output to stdout. Designed for ETL pipelines.
+.It Cm count
+Simple file or stdin token counting. Returns raw integer count.
+.It Cm estimate
+Estimate cost for a given model and input file/text.
+.It Cm analyze-fairness
+Analyze tokenization efficiency across different languages (Gini coefficient, parity ratio).
+.It Cm tokenizer-report
+Generate a detailed report on tokenization overhead for a file.
+.It Cm fuzzy
+Run fuzz testing on the tokenizer (typically for dev).
+.El
+.Sh OPTIONS
+.Bl -tag -width "--summary-format"
+.It Fl -model Ar ID
+Specify model ID (e.g., gpt-4o, gpt-3.5-turbo).
+.It Fl -encoding Ar NAME
+Explicitly specify encoding (cl100k_base, o200k_base).
+.It Fl -format Ar FMT
+Output format: text, json, or markdown (depending on command).
+.It Fl -summary
+Print summary statistics to stderr (lines processed, total cost).
+.It Fl -quiet
+Suppress non-error stderr output.
+.El
+.Sh EXIT STATUS
+.Bl -tag -width "65"
+.It 0
+Success.
+.It 1
+Generic error.
+.It 2
+Invalid usage.
+.It 64
+Quota exceeded (max-cost or max-tokens).
+.It 65
+Partial success (some lines failed in pipe mode).
+.El
+.Sh EXAMPLES
+.Bd -literal
+# Count tokens in a file
+llm-cost count input.txt
+
+# Pipe logs and estimate cost
+cat logs.jsonl | llm-cost pipe --model gpt-4o --format json > costs.jsonl
+.Ed
+.Sh AUTHORS
+Maintained by the LogVault team.

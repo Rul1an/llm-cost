@@ -58,8 +58,8 @@
 
 ### CLI (`src/cli/`)
 Parses arguments and dispatches to subcommands.
-- **`tokens`**: Simple token counting.
-- **`price`**: Cost estimation.
+- **`count`**: Simple token counting.
+- **`estimate`**: Cost estimation.
 - **`pipe`**: Batch processing of JSONL streams.
 
 ### ModelRegistry (`src/tokenizer/model_registry.zig`)
@@ -74,7 +74,8 @@ The orchestration layer.
 
 ### Tokenizer (`src/tokenizer/`)
 Implements the BPE logic.
-- **`bpe.zig`**: A heap-based BPE merge engine (O(N log N)) suitable for worst-case inputs.
+- **`bpe_v2_1.zig`**: Current default engine. Uses Index-based Token Buffer + Min-Heap Merge Queue + Arena Allocator.
+- **`bpe_v2.zig`**: Legacy pointer-based implementation (retained for reference).
 - **Scanners**: Hand-written regex-equivalent scanners (`o200k_scanner.zig`, `cl100k_scanner.zig`) that match OpenAI's logic exactly.
 - **Parity**: Verified against `tiktoken` using the "Evil Corpus" test suite.
 
@@ -85,6 +86,6 @@ Contains an embedded snapshot of model pricing.
 
 ### Pipe Runner (`src/cli/pipe.zig`)
 Handles streaming I/O for `llm-cost pipe`.
-- **Concurrency**: Supports parallel processing (`--workers N`) for pure data enrichment.
-- **Quotas**: Enforces strict budgets (`--max-tokens`, `--max-cost`) by switching to single-threaded mode for deterministic containment.
+- **Processing**: Single-threaded stream processing with 64KB read buffers.
+- **Quotas**: Enforces strict budgets (`--max-tokens`, `--max-cost`) deterministically.
 - **Summary**: Tracks aggregate usage and failures.

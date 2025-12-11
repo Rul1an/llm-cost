@@ -14,7 +14,7 @@ const Tokenizer = @import("tokenizer/mod.zig").OpenAITokenizer;
 const Registry = @import("tokenizer/registry.zig").Registry;
 const OpenAIConfig = @import("tokenizer/openai.zig").Config;
 
-const VERSION = "0.7.0";
+const VERSION = "0.7.1";
 
 const ENCODINGS = [_][]const u8{ "cl100k_base", "o200k_base" };
 

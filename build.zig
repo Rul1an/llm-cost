@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // Main executable
-    const version = std.SemanticVersion{ .major = 0, .minor = 7, .patch = 0 };
+    const version = std.SemanticVersion{ .major = 0, .minor = 7, .patch = 1 };
     const exe = b.addExecutable(.{
         .name = "llm-cost",
         .root_source_file = b.path("src/main.zig"),
@@ -18,6 +18,15 @@ pub fn build(b: *std.Build) void {
         .version = version,
     });
     b.installArtifact(exe);
+
+    // Documentation generation
+    const install_docs = b.addInstallDirectory(.{
+        .source_dir = exe.getEmittedDocs(),
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+    });
+    const docs_step = b.step("docs", "Generate documentation");
+    docs_step.dependOn(&install_docs.step);
 
     // Run command
     const run_cmd = b.addRunArtifact(exe);
