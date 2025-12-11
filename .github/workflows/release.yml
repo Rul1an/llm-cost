@@ -113,6 +113,8 @@ jobs:
           use_cache: true
           sbom: false # Using anchore/sbom-action instead
           sign: false # Using manual cosign step
+      - name: Create Dist Directory
+        run: mkdir -p dist
 
       - name: Generate SBOM
         if: matrix.do_sbom == true
