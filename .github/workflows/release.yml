@@ -102,7 +102,7 @@ jobs:
         with:
           cosign-release: 'v2.2.4'
 
-      - name: Build + SBOM + Sign
+      - name: Build
         uses: Rul1an/zig-cross-compile-action@66076af8e44f186b08e2d05b5a1aa7c91c8042d6
         with:
           version: "0.14.0"
@@ -111,11 +111,25 @@ jobs:
           project-type: zig
           cmd: "-Doptimize=ReleaseFast"
           use_cache: true
-          sbom: ${{ matrix.do_sbom }}
-          sbom_target: "zig-out/bin/${{ matrix.binary }}"
-          sbom_output: "dist/llm-cost-${{ matrix.suffix }}.cdx.json"
-          sign: ${{ matrix.do_sign }}
-          sign_artifact: "zig-out/bin/${{ matrix.binary }}"
+          sbom: false # Using anchore/sbom-action instead
+          sign: false # Using manual cosign step
+
+      - name: Generate SBOM
+        if: matrix.do_sbom == true
+        uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5 # v0.17.9
+        with:
+          path: zig-out/bin/${{ matrix.binary }}
+          artifact-name: llm-cost-${{ matrix.suffix }}.cdx.json
+          format: cyclonedx-json
+          output-file: dist/llm-cost-${{ matrix.suffix }}.cdx.json
+
+      - name: Sign Artifact
+        if: matrix.do_sign == true
+        run: |
+          cosign sign-blob --yes \
+            --output-certificate dist/llm-cost-${{ matrix.suffix }}.crt \
+            --output-signature dist/llm-cost-${{ matrix.suffix }}.sig \
+            zig-out/bin/${{ matrix.binary }}
 
       - name: Attest Build Provenance
         uses: actions/attest-build-provenance@92c65d2898f1f53cfdc910b962cecff86e7f8fcc # v1
