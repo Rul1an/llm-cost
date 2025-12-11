@@ -96,6 +96,12 @@ jobs:
         with:
           version: 0.14.0
 
+      - name: Install Cosign
+        if: matrix.do_sign == true
+        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 # v3.5.0
+        with:
+          cosign-release: 'v2.2.4'
+
       - name: Build + SBOM + Sign
         uses: Rul1an/zig-cross-compile-action@66076af8e44f186b08e2d05b5a1aa7c91c8042d6
         with:
