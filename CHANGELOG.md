@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.9.0] - Secure Updates & Governance
+### Added
+- **Secure Updates**: `llm-cost update-db` command downloads and verifies pricing database via Minisign (Client-Side).
+- **Governance**: `llm-cost check` command enforces budgets and policies in CI/CD pipelines.
+- **Manifest**: Support for `llm-cost.toml` to define max budget and allowed models.
+- **Caching**: Hybrid initialization loads pricing DB from `~/.cache/llm-cost/` if available and verified.
+
+### Changed
+- **Pricing Core**: Exposed verification logic for reuse.
+- **Engine**: Improved error handling for missing models in strict mode.
+
 ## [v0.8.0] - 2025-12-11
 ### Security (Hardening)
 - **Secure Boot**: Implemented Minisign verification for the Pricing Registry. The CLI now verifies:

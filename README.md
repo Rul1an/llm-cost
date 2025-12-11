@@ -15,6 +15,7 @@
 - **Portable**: Static binary distribution for Linux, macOS, and Windows.
 - **Parity**: Validated against `tiktoken` using edge-case corpora (Unicode, Whitespace).
 - **Control**: Enforce cost limits via pipe mode.
+- **Governance**: Policy and budget enforcement for CI/CD (`llm-cost check`).
 
 ## Installation
 
@@ -56,6 +57,15 @@ llm-cost report --model gpt-4o --json my_corpus.txt
 ```bash
 # Fail if cost exceeds $1.00
 cat logs.jsonl | llm-cost pipe --model gpt-4o --max-cost 1.00
+
+# CI/CD Governance (Check inputs against llm-cost.toml)
+llm-cost check prompts/*.txt
+```
+
+**Maintenance**
+```bash
+# Update pricing database securely
+llm-cost update-db
 ```
 
 ## Documentation

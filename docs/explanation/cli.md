@@ -123,7 +123,46 @@ llm-cost report --model <model> [file]
 *   `--file, -f`: Input file path (or use `--stdin`).
 *   `--top-k`: Number of top tokens to show (default: 10).
 
-### 6. `models`
+### 6. `check`
+Enforces budget and policy usage against an `llm-cost.toml` configuration. Ideal for CI/CD pipelines to prevent cost overruns or unauthorized model usage.
+
+**Usage:**
+```bash
+llm-cost check [--model <model>] [files...]
+```
+
+**Arguments:**
+*   `--model, -m`: (Optional) Override model for cost estimation (default: `gpt-4o` or as defined in manifest).
+*   `[files]`: List of prompt files to scan.
+
+**Exit Codes:**
+*   `0`: Success (Within budget/policy).
+*   `2`: Budget Exceeded.
+*   `3`: Policy Violation (Forbidden Model).
+
+**Configuration (`llm-cost.toml`):**
+```toml
+[budget]
+max_cost_usd = 5.00
+
+[policy]
+allowed_models = ["gpt-4o-mini", "claude-3-haiku"]
+```
+
+### 7. `update-db`
+Securely updates the pricing database from the official registry.
+
+**Usage:**
+```bash
+llm-cost update-db
+```
+
+**Mechanics:**
+1.  Downloads `pricing_db.json` and `pricing_db.json.minisig`.
+2.  Verifies the Ed25519 signature against the embedded public key.
+3.  Atomically upgrades the local cache (`~/.cache/llm-cost/` or equivalent).
+
+### 8. `models`
 Lists all supported models and their current pricing rates (embedded in the binary).
 
 **Usage:**

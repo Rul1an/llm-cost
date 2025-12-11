@@ -6,8 +6,10 @@ const engine = @import("core/engine.zig");
 const pipe = @import("pipe.zig");
 const report = @import("report.zig");
 const analytics = @import("analytics/mod.zig");
+const update = @import("update.zig");
+const check = @import("check.zig");
 
-pub const version_str = "0.8.0";
+pub const version_str = "0.9.0";
 
 // --- CLI State (Now Public) ---
 pub const GlobalState = struct {
@@ -73,6 +75,11 @@ pub fn main() !void {
         try runReport(state, args[2..]);
     } else if (std.mem.eql(u8, command, "analyze-fairness")) {
         try runFairnessAnalysis(state, args[2..]);
+    } else if (std.mem.eql(u8, command, "update-db")) {
+        try update.run(state.allocator, args[2..]);
+    } else if (std.mem.eql(u8, command, "check")) {
+        const exit_code = try check.run(state.allocator, args[2..], state.registry, state.stdout, state.stderr);
+        if (exit_code != 0) std.process.exit(exit_code);
     } else {
         try stderr.print("Error: Unknown command '{s}'\n\n", .{command});
         try printUsage(stderr);
@@ -301,8 +308,10 @@ fn printUsage(w: anytype) !void {
         \\  llm-cost tokens --model [ID] [FILE]    Count tokens in a file or stdin
         \\  llm-cost price  --model [ID] [FILE]    Estimate cost for a file or stdin
         \\  llm-cost models [--json]               List supported models and prices
+        \\  llm-cost check  [FILES...]             Check budget/policy (llm-cost.toml)
         \\  llm-cost pipe   [OPTIONS]              Batch process JSONL from stdin
         \\  llm-cost report [OPTIONS]              Analyze usage logs
+        \\  llm-cost update-db                     Update pricing database
         \\  llm-cost version                       Show version
         \\
         \\Examples:

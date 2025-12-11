@@ -175,3 +175,93 @@ test "Contract: 'price' estimate uses Registry" {
     // 1000 * $5.00 / 1M = $0.005
     try std.testing.expectApproxEqAbs(@as(f64, 0.005), cost, 0.0000001);
 }
+
+// --- Governance / Check Tests ---
+
+test "Governance: Policy Violation (Forbidden Model)" {
+    var mock = try MockState.init(std.testing.allocator);
+    defer mock.deinit();
+
+    // 1. Maak tijdelijke config (Policy: Alleen gpt-4o-mini)
+    const config_content =
+        \\[policy]
+        \\allowed_models = ["gpt-4o-mini"]
+    ;
+    // We write to CWD because check.run looks for "llm-cost.toml" in CWD
+    try std.fs.cwd().writeFile(.{ .sub_path = "llm-cost.toml", .data = config_content });
+    defer std.fs.cwd().deleteFile("llm-cost.toml") catch {};
+
+    // 2. Run Check met een VERBODEN model (gpt-4o)
+    const args = [_][]const u8{ "--model", "gpt-4o", "dummy.txt" };
+
+    // Fake file
+    try std.fs.cwd().writeFile(.{ .sub_path = "dummy.txt", .data = "content" });
+    defer std.fs.cwd().deleteFile("dummy.txt") catch {};
+
+    const check_cmd = @import("check.zig");
+    const exit_code = try check_cmd.run(mock.allocator, &args, mock.registry, mock.stdout_buf.writer().any(), mock.stderr_buf.writer().any());
+
+    // 3. Verificatie
+    // Exit Code 3 = Policy Violation
+    try std.testing.expectEqual(@intFromEnum(check_cmd.ExitCode.PolicyViolation), exit_code);
+
+    // Check Error Message
+    const stderr = mock.stderr_buf.items;
+    try std.testing.expect(std.mem.indexOf(u8, stderr, "POLICY VIOLATION") != null);
+}
+
+test "Governance: Budget Exceeded" {
+    var mock = try MockState.init(std.testing.allocator);
+    defer mock.deinit();
+
+    // 1. Config: Max budget $0.01
+    const config_content =
+        \\[budget]
+        \\max_cost_usd = 0.01
+    ;
+    try std.fs.cwd().writeFile(.{ .sub_path = "llm-cost.toml", .data = config_content });
+    defer std.fs.cwd().deleteFile("llm-cost.toml") catch {};
+
+    // 2. Maak een "dure" prompt file
+    // "token " is 6 chars, roughly 1-2 tokens depending on BPE. 5000 repetitions is plenty.
+    const huge_prompt = "token " ** 5000;
+    try std.fs.cwd().writeFile(.{ .sub_path = "huge.txt", .data = huge_prompt });
+    defer std.fs.cwd().deleteFile("huge.txt") catch {};
+
+    const args = [_][]const u8{ "--model", "gpt-4o", "huge.txt" };
+
+    const check_cmd = @import("check.zig");
+    const exit_code = try check_cmd.run(mock.allocator, &args, mock.registry, mock.stdout_buf.writer().any(), mock.stderr_buf.writer().any());
+
+    // 3. Verificatie
+    // Exit Code 2 = Budget Exceeded
+    try std.testing.expectEqual(@intFromEnum(check_cmd.ExitCode.BudgetExceeded), exit_code);
+
+    const stderr = mock.stderr_buf.items;
+    try std.testing.expect(std.mem.indexOf(u8, stderr, "BUDGET EXCEEDED") != null);
+}
+
+test "Governance: Success Pass" {
+    var mock = try MockState.init(std.testing.allocator);
+    defer mock.deinit();
+
+    // Config: Ruim budget
+    const config_content =
+        \\[budget]
+        \\max_cost_usd = 1.00
+    ;
+    try std.fs.cwd().writeFile(.{ .sub_path = "llm-cost.toml", .data = config_content });
+    defer std.fs.cwd().deleteFile("llm-cost.toml") catch {};
+
+    // Kleine prompt
+    try std.fs.cwd().writeFile(.{ .sub_path = "small.txt", .data = "hello world" });
+    defer std.fs.cwd().deleteFile("small.txt") catch {};
+
+    const args = [_][]const u8{ "--model", "gpt-4o", "small.txt" };
+
+    const check_cmd = @import("check.zig");
+    const exit_code = try check_cmd.run(mock.allocator, &args, mock.registry, mock.stdout_buf.writer().any(), mock.stderr_buf.writer().any());
+
+    // Exit Code 0 = OK
+    try std.testing.expectEqual(@intFromEnum(check_cmd.ExitCode.Ok), exit_code);
+}

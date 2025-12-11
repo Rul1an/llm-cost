@@ -13,8 +13,8 @@ llm-cost is an **offline** token counting & pricing CLI. It is intended to be:
 - Safe to run on sensitive JSONL data
 - Predictable and machine-friendly, with stable JSON contracts
 
-This is not a network client: it never contacts model vendors directly.
-Instead, it uses local pricing tables and tokenization logic.
+This is primarily an **offline** tool: it does not contact model vendors for validation.
+However, v0.9.0+ introduces an optional `update-db` command to securely fetch pricing updates from the official registry. This is user-initiated and cryptographically verified.
 
 ---
 
@@ -219,6 +219,19 @@ This enables reliable error handling in scripts and CI pipelines.
 
 A summary line (or JSON summary) can be produced via `--summary` and
 `--summary-format`.
+
+### 4.6 Secure Updates (Client Side)
+
+The `update-db` command fetches pricing data from `https://prices.llm-cost.dev/`.
+This process is secured via **Ed25519 Minisign Verification**:
+
+1.  **Fetch**: Downloads `pricing_db.json` and `pricing_db.json.minisig`.
+2.  **Verify**: The `.minisig` is verified against the **embedded public key** (hardcoded in the binary).
+    - If verification fails, the update is aborted.
+    - If the timestamp is too old (replay attack), the update is aborted.
+3.  **Atomic Swap**: Data is written to a temporary file and atomically renamed only after successful verification.
+
+This ensures that even if the pricing server or CDN is compromised, clients will not accept malicious pricing data.
 
 ---
 
