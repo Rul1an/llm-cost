@@ -141,13 +141,8 @@ jobs:
 
       - name: Stage Artifacts
         run: |
-          mkdir -p dist
+          # dist directory created earlier
           cp "zig-out/bin/${{ matrix.binary }}" "dist/llm-cost-${{ matrix.suffix }}"
-          # Move signatures and certificates if they exist (created by v3 in zig-out/bin alongside the binary)
-          if [ "${{ matrix.do_sign }}" = "true" ]; then
-            cp "zig-out/bin/${{ matrix.binary }}.sig" "dist/llm-cost-${{ matrix.suffix }}.sig"
-            cp "zig-out/bin/${{ matrix.binary }}.crt" "dist/llm-cost-${{ matrix.suffix }}.crt"
-          fi
 
       - name: Smoke Test
         if: matrix.target == 'x86_64-linux-gnu' || matrix.target == 'aarch64-macos'
