@@ -143,10 +143,9 @@ fn generateText(allocator: std.mem.Allocator, size: usize) ![]u8 {
 }
 
 fn parseArgs(allocator: std.mem.Allocator) !Args {
-    _ = allocator;
     var args = Args{};
-
-    var arg_iter = std.process.args();
+    var arg_iter = try std.process.argsWithAllocator(allocator);
+    defer arg_iter.deinit();
     _ = arg_iter.skip(); // Skip program name
 
     while (arg_iter.next()) |arg| {
