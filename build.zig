@@ -69,22 +69,32 @@ pub fn build(b: *std.Build) void {
     parity_step.dependOn(&run_parity_tests.step);
 
     // Golden tests (CLI contract)
-    // Golden tests (Streaming Parity Runner)
-    const golden_exe = b.addExecutable(.{
-        .name = "golden-test",
+    // Tokenizer Parity Runner (Executes src/tokenizer_parity_runner.zig)
+    const parity_runner_exe = b.addExecutable(.{
+        .name = "tokenizer-runner",
+        .root_source_file = b.path("src/tokenizer_parity_runner.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    b.installArtifact(parity_runner_exe);
+
+    const run_parity_runner = b.addRunArtifact(parity_runner_exe);
+    if (b.args) |args| {
+        run_parity_runner.addArgs(args);
+    }
+
+    const parity_runner_step = b.step("run-tokenizer-parity", "Run tokenizer parity runner (corpus_v2)");
+    parity_runner_step.dependOn(&run_parity_runner.step);
+
+    // Golden Tests (CLI Contract)
+    const golden_tests = b.addTest(.{
         .root_source_file = b.path("src/golden_test.zig"),
         .target = target,
         .optimize = optimize,
     });
-    b.installArtifact(golden_exe);
-
-    const run_golden = b.addRunArtifact(golden_exe);
-    if (b.args) |args| {
-        run_golden.addArgs(args);
-    }
-
-    const golden_step = b.step("test-golden", "Run golden parity tests against tiktoken");
-    golden_step.dependOn(&run_golden.step);
+    const run_golden_tests = b.addRunArtifact(golden_tests);
+    const golden_step = b.step("test-golden", "Run CLI contract golden tests");
+    golden_step.dependOn(&run_golden_tests.step);
 
     // Tools: Vocabulary Converter
     const convert_vocab_exe = b.addExecutable(.{

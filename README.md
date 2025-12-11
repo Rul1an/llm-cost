@@ -46,6 +46,12 @@ cat document.txt | llm-cost count --model gpt-4o
 llm-cost estimate --model gpt-4o --input-tokens 5000 --output-tokens 200
 ```
 
+**Analyze Corpus (Compression & Costs)**
+```bash
+llm-cost report --model gpt-4o --json my_corpus.txt
+# Output: {"stats":{...}, "metrics":{"bytes_per_token":4.2, "tokens_per_word":1.3}}
+```
+
 **Pipeline Integration**
 ```bash
 # Fail if cost exceeds $1.00
@@ -75,6 +81,7 @@ See [docs/reference/benchmarks.md](docs/reference/benchmarks.md) for methodology
 ## Security
 
 Builds adhere to SLSA Level 2 standards.
+- **Secure Boot**: Pricing database verified at runtime via Ed25519 Minisign signatures.
 - **Artifacts**: Signed with Cosign (Keyless via OIDC).
 - **SBOM**: CycloneDX format provided.
 - **Reproducibility**: Deterministic builds.
