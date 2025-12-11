@@ -1,5 +1,4 @@
 const std = @import("std");
-const pricing = @import("../pricing.zig");
 const tokenizer_mod = @import("../tokenizer/mod.zig");
 const openai_tok = tokenizer_mod.openai;
 const registry = tokenizer_mod.registry;
@@ -99,7 +98,26 @@ fn findDisallowedSpecial(
     return null;
 }
 
+/// Resolves best tokenizer configuration for a given model ID.
+pub fn resolveConfig(model_id: []const u8) !TokenizerConfig {
+    const spec = registry.Registry.getEncodingForModel(model_id);
+    return TokenizerConfig{
+        .spec = spec,
+        .model_name = model_id,
+        // Approximate is handled internally by estimateTokens
+    };
+}
+
 /// Core API: calculate token count for text using specified tokenizer.
+pub fn countTokens(
+    alloc: std.mem.Allocator,
+    text: []const u8,
+    cfg: TokenizerConfig,
+) !usize {
+    const res = try estimateTokens(alloc, cfg, text, .strict);
+    return res.tokens;
+}
+
 pub fn estimateTokens(
     alloc: std.mem.Allocator,
     cfg: TokenizerConfig,
@@ -144,53 +162,6 @@ fn simpleWordLikeCount(text: []const u8) usize {
         }
     }
     return count;
-}
-
-/// Cost calculation based on pricing database.
-/// Price fields interpreted as "per million tokens".
-pub fn estimateCost(
-    db: *const pricing.PricingDB,
-    model_name: []const u8,
-    input_tokens: usize,
-    output_tokens: usize,
-    reasoning_tokens: usize,
-) EngineError!CostResult {
-    const maybe_model = db.resolveModel(model_name);
-    if (maybe_model == null) {
-        return EngineError.ModelNotFound;
-    }
-
-    const model = maybe_model.?;
-
-    // Basic sanity: prices cannot be negative.
-    if (model.input_price_per_million < 0.0 or model.output_price_per_million < 0.0) {
-        return EngineError.InvalidPricing;
-    }
-
-    const cost_in =
-        @as(f64, @floatFromInt(input_tokens)) * (model.input_price_per_million / 1_000_000.0);
-    const cost_out =
-        @as(f64, @floatFromInt(output_tokens)) * (model.output_price_per_million / 1_000_000.0);
-
-    var cost_reasoning: f64 = 0.0;
-    if (model.reasoning_price_per_million) |p| {
-        if (p < 0.0) {
-            return EngineError.InvalidPricing;
-        }
-        cost_reasoning = @as(f64, @floatFromInt(reasoning_tokens)) * (p / 1_000_000.0);
-    }
-
-    return CostResult{
-        .model_name = model.name, // normalized name
-        .input_tokens = input_tokens,
-        .output_tokens = output_tokens,
-        .reasoning_tokens = reasoning_tokens,
-
-        .cost_input = cost_in,
-        .cost_output = cost_out,
-        .cost_reasoning = cost_reasoning,
-        .cost_total = cost_in + cost_out + cost_reasoning,
-    };
 }
 
 test "findDisallowedSpecial logic" {

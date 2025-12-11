@@ -50,6 +50,21 @@ instructions.
 
 ---
 
+## Database Security (Secure Boot)
+
+llm-cost implements a "Secure Boot" process for its internal pricing database (`data/pricing_db.json`) to prevent tampering:
+
+1.  **Integrity**: The database file is hashed (`Blake2b-512`). This hash must match the signature stored in `data/pricing_db.json.minisig`.
+2.  **Trust**: The signature is cryptographically verified using a hardcoded Ed25519 Public Key.
+3.  **Policy**:
+    - If the hash check fails, the application **terminates immediately**.
+    - If the timestamp is untrusted but integrity is valid (e.g., clock skew), the application warns but proceeds.
+
+Internal Public Key:
+`RWQlMFKYcN36NSyucoSch4tDfC/U/giAHdYklLaCOKZ+9PtYNdjO2Urw`
+
+---
+
 ## Security Considerations
 
 llm-cost is designed as an **offline** CLI tool:
