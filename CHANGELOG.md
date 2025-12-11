@@ -1,6 +1,24 @@
 # Changelog
 
-## [v0.7.1] - 2025-12-10
+## [v0.8.0] - 2025-12-11
+### Security (Hardening)
+- **Secure Boot**: Implemented Minisign verification for the Pricing Registry. The CLI now verifies:
+    1. **Data Integrity**: `Blake2b512` hash of the DB file matches the signed signature.
+    2. **Trust Binding**: The signature is cryptographically signed by the release authority (offline public key).
+- **Golden Tests**: Enforced CLI contract stability via `src/golden_test.zig` (JSON Schema, Pipe Logic, Pricing Math).
+
+### Added
+- **Report Analytics**: New `report` command (aliased as `tokenizer-report`) providing research-grade metrics:
+    - **Compression Ratio** (Bytes/Token).
+    - **Fertility** (Tokens/Word).
+    - **Cost Estimation** (Total Corpus Cost).
+- **Pricing Engine (2025)**: Updated schema to support `_mtok` (per million tokens) fields and `reasoning_tokens` (Gemini 2.5, o1).
+
+### Fixed
+- **Zero Cost Bug**: Resolved an issue where pricing defaulted to $0 due to field name mismatch (`per_million` vs `per_mtok`).
+- **Engine Exports**: Exposed `resolveConfig` and `countTokens` in `core/engine.zig` for public API usage.
+
+
 ### Added
 - **Documentation**: Complete overhaul of documentation structure (Diátaxis framework).
 - **CLI Reference**: New `docs/explanation/cli.md` guide.

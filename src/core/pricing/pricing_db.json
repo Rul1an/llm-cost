@@ -1,0 +1,105 @@
+{
+    "version": 1,
+    "updated_at": "2025-11-15T00:00:00Z",
+    "valid_until": "2026-02-15T00:00:00Z",
+    "models": {
+        "gpt-5": {
+            "provider": "OpenAI",
+            "input_price_per_mtok": 1.25,
+            "output_price_per_mtok": 10.00,
+            "cache_read_price_per_mtok": 0.125,
+            "context_window": 128000
+        },
+        "gpt-5-mini": {
+            "provider": "OpenAI",
+            "input_price_per_mtok": 0.25,
+            "output_price_per_mtok": 2.00,
+            "cache_read_price_per_mtok": 0.025
+        },
+        "gpt-5-nano": {
+            "provider": "OpenAI",
+            "input_price_per_mtok": 0.05,
+            "output_price_per_mtok": 0.40,
+            "cache_read_price_per_mtok": 0.005
+        },
+        "gpt-4o": {
+            "provider": "OpenAI",
+            "input_price_per_mtok": 5.00,
+            "output_price_per_mtok": 20.00,
+            "cache_read_price_per_mtok": 2.50,
+            "context_window": 128000
+        },
+        "gpt-4o-mini": {
+            "provider": "OpenAI",
+            "input_price_per_mtok": 0.60,
+            "output_price_per_mtok": 2.40,
+            "cache_read_price_per_mtok": 0.30,
+            "context_window": 128000
+        },
+        "gemini-2.5-pro": {
+            "provider": "Google",
+            "input_price_per_mtok": 1.25,
+            "output_price_per_mtok": 10.00,
+            "context_window": 2000000,
+            "description": "Pricing doubles > 200k tokens (not modeled yet)"
+        },
+        "gemini-2.5-flash": {
+            "provider": "Google",
+            "input_price_per_mtok": 0.15,
+            "output_price_per_mtok": 0.60,
+            "output_reasoning_price_per_mtok": 3.50,
+            "context_window": 2000000
+        },
+        "claude-opus-4.1": {
+            "provider": "Anthropic",
+            "input_price_per_mtok": 15.00,
+            "output_price_per_mtok": 75.00,
+            "cache_read_price_per_mtok": 1.50,
+            "cache_write_price_per_mtok": 18.75,
+            "context_window": 200000
+        },
+        "claude-sonnet-4": {
+            "provider": "Anthropic",
+            "input_price_per_mtok": 3.00,
+            "output_price_per_mtok": 15.00,
+            "cache_read_price_per_mtok": 0.30,
+            "cache_write_price_per_mtok": 3.75,
+            "context_window": 200000
+        },
+        "claude-haiku-3.5": {
+            "provider": "Anthropic",
+            "input_price_per_mtok": 0.80,
+            "output_price_per_mtok": 4.00,
+            "cache_read_price_per_mtok": 0.08,
+            "cache_write_price_per_mtok": 1.00,
+            "context_window": 200000
+        },
+        "grok-3": {
+            "provider": "xAI",
+            "input_price_per_mtok": 3.00,
+            "output_price_per_mtok": 15.00,
+            "context_window": 131072
+        },
+        "grok-3-mini": {
+            "provider": "xAI",
+            "input_price_per_mtok": 0.30,
+            "output_price_per_mtok": 0.50,
+            "context_window": 131072
+        },
+        "deepseek-v3.2-exp": {
+            "provider": "DeepSeek",
+            "input_price_per_mtok": 0.28,
+            "output_price_per_mtok": 0.42,
+            "cache_read_price_per_mtok": 0.028,
+            "context_window": 128000
+        }
+    },
+    "aliases": {
+        "gpt-4o-latest": "gpt-4o",
+        "claude-3-5-sonnet": "claude-sonnet-4",
+        "claude-3-opus": "claude-opus-4.1",
+        "gemini-pro": "gemini-2.5-pro",
+        "deepseek-chat": "deepseek-v3.2-exp",
+        "deepseek-reasoner": "deepseek-v3.2-exp"
+    }
+}

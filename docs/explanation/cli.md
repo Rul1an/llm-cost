@@ -110,12 +110,12 @@ llm-cost analyze-fairness --corpus <path> --model <model>
 *   **Parity Ratio**: Fertility relative to English.
 *   **Gini Coefficient**: Measure of inequality across languages in the corpus.
 
-### 5. `tokenizer-report`
+### 5. `report` (alias: `tokenizer-report`)
 Generates a detailed statistical report on how a specific text is tokenized, identifying the most frequent tokens and compression efficiency.
 
 **Usage:**
 ```bash
-llm-cost tokenizer-report --model <model> --file <path>
+llm-cost report --model <model> [file]
 ```
 
 **Arguments:**
