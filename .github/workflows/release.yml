@@ -124,6 +124,7 @@ jobs:
           artifact-name: llm-cost-${{ matrix.suffix }}.cdx.json
           format: cyclonedx-json
           output-file: dist/llm-cost-${{ matrix.suffix }}.cdx.json
+          upload-artifact: false
 
 
       - name: Sign Artifact
