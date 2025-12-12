@@ -58,6 +58,11 @@ pub const Context = struct {
             try env_map.put("PATH", path_val);
         } else |_| {} // PATH missing? weird but proceed.
 
+        if (std.process.getEnvVarOwned(allocator, "HOME")) |home_val| {
+            defer allocator.free(home_val);
+            try env_map.put("HOME", home_val);
+        } else |_| {}
+
         const result = try std.process.Child.run(.{
             .allocator = allocator,
             .argv = &argv,

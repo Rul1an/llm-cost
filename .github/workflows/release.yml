@@ -189,7 +189,7 @@ jobs:
           cd release_assets
           # Generate checksums for binaries (exclude .sig, .crt, .cdx.json)
           # Spec requires shasum format: "<hash>  <filename>"
-          shasum -a 256 llm-cost-* | grep -v "\." > checksums.txt
+          shasum -a 256 llm-cost-* | grep "^[a-f0-9]\{64\}  llm-cost-[^.]*$" > checksums.txt
 
           # Verify content
           cat checksums.txt

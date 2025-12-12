@@ -14,7 +14,7 @@ if [ -z "${RUNNER_TMP}" ]; then
 fi
 
 TMP_DIR="$(mktemp -d "${RUNNER_TMP%/}/llm-cost.XXXXXX")"
-cleanup() { rm -rf "${TMP_DIR}"; }
+cleanup() { [ -d "${TMP_DIR:-}" ] && rm -rf "${TMP_DIR}"; }
 trap cleanup EXIT
 
 need_cmd() {
@@ -51,7 +51,74 @@ gh_api_get() {
   fi
 }
 
-# ... (middle parts unchanged) ...
+detect_os_arch() {
+  local os
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  case "${os}" in
+    linux) OS="linux" ;;
+    darwin) OS="macos" ;;
+    mingw*|msys*) OS="windows" ;;
+    *)
+      echo "::error::Unsupported OS: ${os}"
+      exit 1
+      ;;
+  esac
+
+  local arch
+  arch="$(uname -m | tr '[:upper:]' '[:lower:]')"
+  case "${arch}" in
+    x86_64|amd64) ARCH="x86_64" ;;
+    arm64|aarch64) ARCH="arm64" ;;
+    *)
+      echo "::error::Unsupported Architecture: ${arch}"
+      exit 1
+      ;;
+  esac
+
+  # Map to llm-cost binary suffix
+  # linux-x86_64, linux-x86_64-musl, linux-arm64, macos-arm64, windows-x86_64.exe
+  # standard macos x86_64 not supported in current release matrix (only arm64 macos) but code might support it?
+  # Matrix: macos-latest (arm64 for 14+?), target=aarch64-macos.
+  # If user is on Intel Mac ...? We don't have a release asset for it in release.yml!
+  # release.yml has: x86_64-linux-gnu, x86_64-linux-musl, aarch64-linux-gnu, x86_64-windows-gnu, aarch64-macos.
+  # So Intel Mac is NOT supported.
+
+  if [ "${OS}" = "macos" ] && [ "${ARCH}" = "x86_64" ]; then
+     echo "::error::Intel macOS (x86_64) is not currently supported by pre-built binaries."
+     exit 1
+  fi
+
+  # Determine ASSET name
+  # llm-cost-<suffix>
+  # Suffixes:
+  # linux-x86_64
+  # linux-arm64
+  # macos-arm64
+  # windows-x86_64.exe
+
+  local suffix=""
+  if [ "${OS}" = "windows" ]; then
+    suffix="windows-${ARCH}.exe"
+  else
+    suffix="${OS}-${ARCH}"
+  fi
+
+  ASSET="llm-cost-${suffix}"
+
+  # release_assets/llm-cost-<suffix>
+  # We need the binary name for URL.
+  # URL structure: https://github.com/OWNER/REPO/releases/download/TAG/llm-cost-<suffix>
+
+  if [ "${VERSION}" = "latest" ]; then
+     # Resolved later
+     bindownload_url=""
+  else
+     BIN_URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET}"
+     CHECKSUMS_URL="https://github.com/${REPO}/releases/download/${VERSION}/checksums.txt"
+  fi
+}
+
+detect_os_arch
 
 echo "::notice::Installing llm-cost ${VERSION} (${OS}/${ARCH}) from ${REPO}"
 

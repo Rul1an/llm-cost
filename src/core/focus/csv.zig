@@ -160,7 +160,7 @@ pub const CsvWriter = struct {
             // Original implementation was: "x-cache-hit-ratio": "0.50" (String).
             // Let's stick to string for metadata to be safe, or number?
             // Previous code: formatted with {d:.2} then appended with quotes. So it was a string.
-            try jw.putString("x-cache-hit-ratio", ratio_s);
+            try jw.put("x-cache-hit-ratio", ratio_s);
         }
 
         // 3. Add User Tags (Filter reserved)

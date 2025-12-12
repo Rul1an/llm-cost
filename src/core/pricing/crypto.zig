@@ -147,6 +147,7 @@ fn parseMinisignFile(allocator: std.mem.Allocator, content: []const u8) !Minisig
 
     const untrusted_comment = lines.next() orelse return error.InvalidFormat;
     if (untrusted_comment.len > MAX_LINE_LENGTH) return error.InvalidFormat;
+    _ = untrusted_comment;
 
     const sig_line = lines.next() orelse return error.InvalidFormat;
     if (sig_line.len > MAX_LINE_LENGTH) return error.InvalidFormat;
