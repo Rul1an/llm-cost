@@ -5,6 +5,7 @@ const Base64 = std.base64.standard;
 
 // Production Public Key from mod.zig
 const EMBEDDED_PUB_KEY_STR = "RWQlMFKYcN36NSyucoSch4tDfC/U/giAHdYklLaCOKZ+9PtYNdjO2Urw";
+const MAX_LINE_LENGTH = 8192;
 
 const REVOKED_KEY_IDS = [_]u64{
     0xDEADBEEFDEADBEEF,
@@ -145,9 +146,10 @@ fn parseMinisignFile(allocator: std.mem.Allocator, content: []const u8) !Minisig
     var lines = std.mem.tokenizeAny(u8, content, "\n");
 
     const untrusted_comment = lines.next() orelse return error.InvalidFormat;
-    _ = untrusted_comment;
+    if (untrusted_comment.len > MAX_LINE_LENGTH) return error.InvalidFormat;
 
     const sig_line = lines.next() orelse return error.InvalidFormat;
+    if (sig_line.len > MAX_LINE_LENGTH) return error.InvalidFormat;
     const sig_rec = try parseSigRecord74(sig_line);
 
     var trusted_comment: []const u8 = "";
@@ -155,6 +157,7 @@ fn parseMinisignFile(allocator: std.mem.Allocator, content: []const u8) !Minisig
 
     // Try to find trusted comment
     if (lines.next()) |l| {
+        if (l.len > MAX_LINE_LENGTH) return error.InvalidFormat;
         if (std.mem.startsWith(u8, l, "trusted comment: ")) {
             trusted_comment = try allocator.dupe(u8, l["trusted comment: ".len..]);
         } else {
@@ -162,11 +165,10 @@ fn parseMinisignFile(allocator: std.mem.Allocator, content: []const u8) !Minisig
             return error.InvalidFormat;
         }
     }
-    // ensure we free if we fail later (handled by caller, but we must return it to caller)
-    // Actually caller frees it. We must ensure success path returns it.
 
     const csig_line = lines.next();
     if (csig_line) |l| {
+        if (l.len > MAX_LINE_LENGTH) return error.InvalidFormat;
         // Try parsing as standard record first
         if (parseSigRecord74(l)) |csig_rec| {
             if (csig_rec.key_id != sig_rec.key_id) {

@@ -1,0 +1,26 @@
+name: Determinism Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  check-determinism:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.14.0
+
+      - name: Build
+        run: zig build -Doptimize=ReleaseSafe
+
+      - name: Verify Determinism
+        run: |
+          chmod +x scripts/verify-determinism.sh
+          ./scripts/verify-determinism.sh

@@ -12,16 +12,17 @@ const init = @import("init.zig");
 const manifest = @import("core/manifest.zig");
 const resource_id = @import("core/resource_id.zig");
 const export_cmd = @import("export.zig");
+const diff_cmd = @import("diff.zig");
+// Components Refactor
+const context = @import("context.zig");
+const estimate_cmd = @import("commands/estimate.zig");
+const ci_action_cmd = @import("ci_action.zig");
 
 pub const version_str = "0.10.0";
 
-// --- CLI State (Now Public) ---
-pub const GlobalState = struct {
-    allocator: std.mem.Allocator,
-    registry: *Pricing.Registry,
-    stdout: std.io.AnyWriter,
-    stderr: std.io.AnyWriter,
-};
+// Re-exporting GlobalState for backward compatibility if needed, but components use context.GlobalState
+pub const GlobalState = context.GlobalState;
+pub const runEstimate = estimate_cmd.run;
 
 pub fn main() !void {
     // 1. Setup Allocator
@@ -72,7 +73,7 @@ pub fn main() !void {
     } else if (std.mem.eql(u8, command, "tokens") or std.mem.eql(u8, command, "count")) {
         try runCount(state, args[2..]);
     } else if (std.mem.eql(u8, command, "price") or std.mem.eql(u8, command, "estimate")) {
-        try runEstimate(state, args[2..]);
+        try estimate_cmd.run(state, args[2..]);
     } else if (std.mem.eql(u8, command, "pipe")) {
         try runPipe(state, args[2..]);
     } else if (std.mem.eql(u8, command, "report") or std.mem.eql(u8, command, "tokenizer-report")) {
@@ -88,6 +89,11 @@ pub fn main() !void {
         try init.run(state.allocator, args[2..], std.io.getStdIn().reader(), state.stdout);
     } else if (std.mem.eql(u8, command, "export")) {
         try export_cmd.run(state.allocator, args[2..], state.registry, state.stdout);
+    } else if (std.mem.eql(u8, command, "diff")) {
+        try diff_cmd.run(state.allocator, args[2..], state.registry, state.stdout);
+    } else if (std.mem.eql(u8, command, "ci-action")) {
+        const exit_code = try ci_action_cmd.run(state, args[2..]);
+        if (exit_code != 0) std.process.exit(exit_code);
     } else {
         try stderr.print("Error: Unknown command '{s}'\n\n", .{command});
         try printUsage(stderr);
@@ -95,7 +101,7 @@ pub fn main() !void {
     }
 }
 
-// --- Commands (Now Public) ---
+// --- Commands ---
 
 pub fn runModels(state: GlobalState, args: []const []const u8) !void {
     var format_json = false;
@@ -168,216 +174,7 @@ pub fn runModels(state: GlobalState, args: []const []const u8) !void {
     }
 }
 
-pub fn runEstimate(state: GlobalState, args: []const []const u8) !void {
-    var model_name: []const u8 = "gpt-4o";
-    var input_tokens_arg: ?u64 = null;
-    var output_tokens_arg: ?u64 = null;
-    var reasoning_tokens_arg: u64 = 0;
-    var format_json = false;
-    var input_files = std.ArrayList([]const u8).init(state.allocator);
-    defer input_files.deinit();
-
-    var i: usize = 0;
-    while (i < args.len) : (i += 1) {
-        const arg = args[i];
-        if (std.mem.eql(u8, arg, "--model") or std.mem.eql(u8, arg, "-m")) {
-            if (i + 1 >= args.len) return error.MissingArgument;
-            model_name = args[i + 1];
-            i += 1;
-        } else if (std.mem.eql(u8, arg, "--input-tokens")) {
-            if (i + 1 >= args.len) return error.MissingArgument;
-            input_tokens_arg = try std.fmt.parseInt(u64, args[i + 1], 10);
-            i += 1;
-        } else if (std.mem.eql(u8, arg, "--output-tokens")) {
-            if (i + 1 >= args.len) return error.MissingArgument;
-            output_tokens_arg = try std.fmt.parseInt(u64, args[i + 1], 10);
-            i += 1;
-        } else if (std.mem.eql(u8, arg, "--reasoning-tokens")) {
-            if (i + 1 >= args.len) return error.MissingArgument;
-            reasoning_tokens_arg = try std.fmt.parseInt(u64, args[i + 1], 10);
-            i += 1;
-        } else if (std.mem.eql(u8, arg, "--format=json") or std.mem.eql(u8, arg, "--json")) {
-            format_json = true;
-        } else if (!std.mem.startsWith(u8, arg, "-")) {
-            try input_files.append(arg);
-        }
-    }
-
-    // Load Manifest (for ResourceID resolution)
-    var policy = manifest.Policy{};
-    const cwd = std.fs.cwd();
-    if (cwd.readFileAlloc(state.allocator, "llm-cost.toml", 1024 * 1024)) |content| {
-        defer state.allocator.free(content);
-        policy = try manifest.parse(state.allocator, content);
-    } else |_| {}
-    defer policy.deinit(state.allocator);
-
-    const price_def = state.registry.get(model_name) orelse {
-        try state.stderr.print("Error: Unknown model '{s}'. Run 'llm-cost models' to list available models.\n", .{model_name});
-        std.process.exit(1);
-    };
-
-    var total_cost: f64 = 0.0;
-
-    // JSON Output Structures
-    const PromptResult = struct {
-        path: []const u8,
-        resource_id: []const u8,
-        resource_id_source: []const u8,
-        model: []const u8,
-        input_tokens: u64,
-        output_tokens: u64,
-        cost_usd: f64,
-    };
-    var results = std.ArrayList(PromptResult).init(state.allocator);
-    defer results.deinit();
-    // Memory management for PromptResult string fields:
-    // - .resource_id: always duplicated (owned by results array, freed with allocator)
-    // - .path, .resource_id_source, .model: these are borrowed from static strings or
-    //   from variables that outlive the results array (e.g., model_name is a CLI arg, "stdin" is a string literal).
-    // This ensures that only .resource_id needs to be explicitly freed; the others are safe to reference directly.
-
-    // If no files provided, verify if stdin intended or error
-    if (input_files.items.len == 0 and input_tokens_arg == null) {
-        // Read from STDIN
-        const input_text = try std.io.getStdIn().readToEndAlloc(state.allocator, 1024 * 1024 * 10);
-        defer state.allocator.free(input_text);
-
-        var token_count: u64 = 0;
-        if (input_text.len > 0) {
-            const tokenizer_config = try engine.resolveConfig(model_name);
-            token_count = try engine.countTokens(state.allocator, input_text, tokenizer_config);
-        }
-
-        const cost = Pricing.Registry.calculate(price_def, token_count, output_tokens_arg orelse 0, reasoning_tokens_arg);
-        total_cost += cost;
-
-        // ResourceID for STDIN
-        var rid = try resource_id.derive(state.allocator, null, null, input_text);
-        defer rid.deinit(state.allocator);
-
-        if (format_json) {
-            try results.append(.{
-                .path = "stdin",
-                .resource_id = try state.allocator.dupe(u8, rid.value), // Owns a copy of the resource ID string; must be freed with the results list.
-                .resource_id_source = @tagName(rid.source),
-                .model = model_name,
-                .input_tokens = token_count,
-                .output_tokens = output_tokens_arg orelse 0,
-                .cost_usd = cost,
-            });
-        } else {
-            try state.stdout.print("Model:       {s}\n", .{model_name});
-            try state.stdout.print("Tokens In:   {d}\n", .{token_count});
-            if ((output_tokens_arg orelse 0) > 0) try state.stdout.print("Tokens Out:  {d}\n", .{output_tokens_arg orelse 0});
-            try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
-            try state.stdout.print("Resource ID: {s} ({s})\n", .{ rid.value, @tagName(rid.source) });
-        }
-    } else if (input_tokens_arg != null) {
-        // Direct token count mode
-        const cost = Pricing.Registry.calculate(price_def, input_tokens_arg.?, output_tokens_arg orelse 0, reasoning_tokens_arg);
-        total_cost += cost;
-        if (!format_json) {
-            try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
-        } else {
-            try results.append(.{
-                .path = "manual-tokens",
-                .resource_id = "manual",
-                .resource_id_source = "manual",
-                .model = model_name,
-                .input_tokens = input_tokens_arg.?,
-                .output_tokens = output_tokens_arg orelse 0,
-                .cost_usd = cost,
-            });
-        }
-    } else {
-        // Process Files
-        for (input_files.items) |path| {
-            // Read file
-            const content = cwd.readFileAlloc(state.allocator, path, 10 * 1024 * 1024) catch |err| {
-                try state.stderr.print("Error reading {s}: {s}\n", .{ path, @errorName(err) });
-                continue;
-            };
-            defer state.allocator.free(content);
-
-            const tokenizer_config = try engine.resolveConfig(model_name);
-            const token_count = try engine.countTokens(state.allocator, content, tokenizer_config);
-            const cost = Pricing.Registry.calculate(price_def, token_count, output_tokens_arg orelse 0, reasoning_tokens_arg);
-            total_cost += cost;
-
-            // ResourceID Resolution
-
-            // Check Manifest first
-            var manifest_id: ?[]const u8 = null;
-            if (policy.prompts) |prompts| {
-                for (prompts) |p| {
-                    if (std.mem.eql(u8, p.path, path)) {
-                        manifest_id = p.prompt_id;
-                        break;
-                    }
-                }
-            }
-
-            var rid = try resource_id.derive(state.allocator, manifest_id, path, content);
-            // We need to keep rid valid.
-            // For JSON list, we dup.
-
-            if (format_json) {
-                try results.append(.{
-                    .path = path,
-                    .resource_id = try state.allocator.dupe(u8, rid.value),
-                    .resource_id_source = @tagName(rid.source), // enum tag name is static
-                    .model = model_name,
-                    .input_tokens = token_count,
-                    .output_tokens = output_tokens_arg orelse 0,
-                    .cost_usd = cost,
-                });
-            } else {
-                try state.stdout.print("File:        {s}\n", .{path});
-                try state.stdout.print("Tokens In:   {d}\n", .{token_count});
-                try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
-                try state.stdout.print("Resource ID: {s} ({s})\n\n", .{ rid.value, @tagName(rid.source) });
-            }
-            rid.deinit(state.allocator);
-        }
-    }
-
-    if (format_json) {
-        // Manual JSON construction to avoid struct serialization issues with derived values
-        try state.stdout.print("{{\n  \"prompts\": [\n", .{});
-        for (results.items, 0..) |res, idx| {
-            try state.stdout.print("    {{\n", .{});
-            // Direct JSON streaming avoids buffer management and type errors
-            try state.stdout.print("      \"path\": ", .{});
-            try std.json.stringify(res.path, .{}, state.stdout);
-            try state.stdout.print(",\n", .{});
-
-            try state.stdout.print("      \"resource_id\": ", .{});
-            try std.json.stringify(res.resource_id, .{}, state.stdout);
-            try state.stdout.print(",\n", .{});
-
-            try state.stdout.print("      \"resource_id_source\": ", .{});
-            try std.json.stringify(res.resource_id_source, .{}, state.stdout);
-            try state.stdout.print(",\n", .{});
-
-            try state.stdout.print("      \"model\": ", .{});
-            try std.json.stringify(res.model, .{}, state.stdout);
-            try state.stdout.print(",\n", .{});
-            try state.stdout.print("      \"input_tokens\": {d},\n", .{res.input_tokens});
-            try state.stdout.print("      \"output_tokens\": {d},\n", .{res.output_tokens});
-            try state.stdout.print("      \"cost_usd\": {d:.6}\n", .{res.cost_usd});
-            try state.stdout.print("    }}{s}\n", .{if (idx < results.items.len - 1) "," else ""});
-
-            // Cleanup duped strings
-            if (!std.mem.eql(u8, res.resource_id, "manual")) state.allocator.free(res.resource_id);
-        }
-        try state.stdout.print("  ],\n", .{});
-        try state.stdout.print("  \"total_cost_usd\": {d:.6}\n", .{total_cost});
-        try state.stdout.print("}}\n", .{});
-    } else if (input_files.items.len > 1) {
-        try state.stdout.print("Total Cost:  ${d:.6}\n", .{total_cost});
-    }
-}
+// runEstimate has been moved to commands/estimate.zig
 
 fn stringLessThan(_: void, a: []const u8, b: []const u8) bool {
     return std.mem.order(u8, a, b) == .lt;
@@ -458,19 +255,22 @@ fn printUsage(w: anytype) !void {
         \\llm-cost v{s}
         \\
         \\Usage:
-        \\  llm-cost tokens --model [ID] [FILE]    Count tokens in a file or stdin
-        \\  llm-cost price  --model [ID] [FILE]    Estimate cost for a file or stdin
-        \\  llm-cost models [--json]               List supported models and prices
-        \\  llm-cost check  [FILES...]             Check budget/policy (llm-cost.toml)
-        \\  llm-cost pipe   [OPTIONS]              Batch process JSONL from stdin
-        \\  llm-cost report [OPTIONS]              Analyze usage logs
-        \\  llm-cost export [OPTIONS]              Export forecast to FOCUS v1.0 CSV
-        \\  llm-cost update-db                     Update pricing database
-        \\  llm-cost version                       Show version
+        \\  llm-cost tokens    --model [ID] [FILE]    Count tokens in a file or stdin
+        \\  llm-cost price     --model [ID] [FILE]    Estimate cost for a file or stdin
+        \\  llm-cost models    [--json]               List supported models and prices
+        \\  llm-cost check     [FILES...]             Check budget/policy (llm-cost.toml)
+        \\  llm-cost pipe      [OPTIONS]              Batch process JSONL from stdin
+        \\  llm-cost report    [OPTIONS]              Analyze usage logs
+        \\  llm-cost export    [OPTIONS]              Export forecast to FOCUS v1.0 CSV
+        \\  llm-cost diff      [OPTIONS]              Show cost difference against git ref
+        \\  llm-cost ci-action [OPTIONS]              Run CI checks and post comment
+        \\  llm-cost update-db                        Update pricing database
+        \\  llm-cost version                          Show version
         \\
         \\Examples:
         \\  cat prompt.txt | llm-cost tokens --model gpt-4o
         \\  llm-cost price --model gpt-4o-mini big_prompt.txt
+        \\  llm-cost ci-action --budget 1.00 --no-comment
         \\
     , .{version_str});
 }
