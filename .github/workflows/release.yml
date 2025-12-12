@@ -200,7 +200,6 @@ jobs:
         with:
           files: |
             release_assets/*
-            release_assets/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
