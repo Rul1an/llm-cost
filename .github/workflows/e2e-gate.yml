@@ -93,6 +93,7 @@ jobs:
           cd "$E2E_REPO"
           git checkout -- prompt_a.txt
 
+          export GITHUB_TOKEN="fake"
           "$GITHUB_WORKSPACE/zig-out/bin/llm-cost" ci-action \
             --manifest llm-cost.toml \
             --base "$BASELINE_SHA" \
@@ -107,6 +108,7 @@ jobs:
           cd "$E2E_REPO"
 
           set +e
+          export GITHUB_TOKEN="fake"
           "$GITHUB_WORKSPACE/zig-out/bin/llm-cost" ci-action \
             --manifest llm-cost.toml \
             --base "$BASELINE_SHA" \
