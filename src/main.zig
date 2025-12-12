@@ -344,21 +344,22 @@ pub fn runEstimate(state: GlobalState, args: []const []const u8) !void {
         try state.stdout.print("{{\n  \"prompts\": [\n", .{});
         for (results.items, 0..) |res, idx| {
             try state.stdout.print("    {{\n", .{});
-            var path_buf: [256]u8 = undefined;
-            var resource_id_buf: [256]u8 = undefined;
-            var resource_id_source_buf: [64]u8 = undefined;
-            var model_buf: [64]u8 = undefined;
+            // Direct JSON streaming avoids buffer management and type errors
+            try state.stdout.print("      \"path\": ", .{});
+            try std.json.stringify(res.path, .{}, state.stdout);
+            try state.stdout.print(",\n", .{});
 
-            // Using stringify ensures proper JSON escaping
-            const path_json = try std.json.stringify(res.path, .{}, &path_buf);
-            const resource_id_json = try std.json.stringify(res.resource_id, .{}, &resource_id_buf);
-            const resource_id_source_json = try std.json.stringify(res.resource_id_source, .{}, &resource_id_source_buf);
-            const model_json = try std.json.stringify(res.model, .{}, &model_buf);
+            try state.stdout.print("      \"resource_id\": ", .{});
+            try std.json.stringify(res.resource_id, .{}, state.stdout);
+            try state.stdout.print(",\n", .{});
 
-            try state.stdout.print("      \"path\": {s},\n", .{path_json});
-            try state.stdout.print("      \"resource_id\": {s},\n", .{resource_id_json});
-            try state.stdout.print("      \"resource_id_source\": {s},\n", .{resource_id_source_json});
-            try state.stdout.print("      \"model\": {s},\n", .{model_json});
+            try state.stdout.print("      \"resource_id_source\": ", .{});
+            try std.json.stringify(res.resource_id_source, .{}, state.stdout);
+            try state.stdout.print(",\n", .{});
+
+            try state.stdout.print("      \"model\": ", .{});
+            try std.json.stringify(res.model, .{}, state.stdout);
+            try state.stdout.print(",\n", .{});
             try state.stdout.print("      \"input_tokens\": {d},\n", .{res.input_tokens});
             try state.stdout.print("      \"output_tokens\": {d},\n", .{res.output_tokens});
             try state.stdout.print("      \"cost_usd\": {d:.6}\n", .{res.cost_usd});
