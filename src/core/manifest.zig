@@ -216,9 +216,9 @@ fn parseInlineTable(allocator: std.mem.Allocator, raw_val: []const u8) !std.Stri
             const key_dupe = try allocator.dupe(u8, key);
             const val_dupe = try parseString(allocator, val);
 
-            if (try map.put(key_dupe, val_dupe)) |old_entry| {
-                allocator.free(old_entry.key_ptr.*);
-                allocator.free(old_entry.value_ptr.*);
+            if (try map.fetchPut(key_dupe, val_dupe)) |old_entry| {
+                allocator.free(old_entry.key);
+                allocator.free(old_entry.value);
             }
         }
     }
