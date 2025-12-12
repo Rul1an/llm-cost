@@ -84,46 +84,21 @@ pub fn verify(allocator: std.mem.Allocator, file_data: []const u8, sig_file_cont
     }
 }
 
-fn parsePublicKey(b64_key: []const u8) !PublicKey {
-    var buf: [1024]u8 = undefined;
-    const decoded_len = Base64.Decoder.calcSizeForSlice(b64_key) catch return error.EncodingError;
-    Base64.Decoder.decode(buf[0..decoded_len], b64_key) catch return error.EncodingError;
-
-    if (decoded_len != 42) return error.InvalidFormat;
-
-    // Minisign pubkey magic is "Ed"
-    if (buf[0] != 'E' or buf[1] != 'd') return error.InvalidFormat;
-
-    const key_id = std.mem.readInt(u64, buf[2..10], .little);
-    const key_bytes = buf[10..42];
-    const key = Ed25519.PublicKey.fromBytes(key_bytes[0..32].*) catch return error.InvalidFormat;
-
-    return .{ .key_id = key_id, .key = key };
-}
-
 fn parseAlg(b0: u8, b1: u8) !Algorithm {
     if (b0 == 'E' and b1 == 'd') return .ed;
     if (b0 == 'E' and b1 == 'D') return .ed_hashed;
     return error.InvalidFormat;
 }
 
-fn parseSigRecord(line: []const u8) !SigRecord {
-    var rec_buf: [128]u8 = undefined;
-
+// Strict 74-byte Minisign Record Parser
+fn parseSigRecord74(line: []const u8) !SigRecord {
+    var rec_buf: [74]u8 = undefined;
     const trimmed = std.mem.trim(u8, line, "\r ");
+
     const rec_len = Base64.Decoder.calcSizeForSlice(trimmed) catch return error.EncodingError;
-    Base64.Decoder.decode(rec_buf[0..rec_len], trimmed) catch return error.EncodingError;
+    if (rec_len != rec_buf.len) return error.InvalidFormat;
 
-    // Record: [Alg(2) | KeyID(8) | Sig(64)] = 74 bytes
-    // OR: [Sig(64)] = 64 bytes (Bare Signature)
-    if (rec_len == 64) {
-        var sig: [64]u8 = undefined;
-        @memcpy(&sig, rec_buf[0..64]);
-        // Return dummy alg/key_id for bare signature
-        return .{ .alg = .ed, .key_id = 0, .sig = sig };
-    }
-
-    if (rec_len != 74) return error.InvalidFormat;
+    Base64.Decoder.decode(&rec_buf, trimmed) catch return error.EncodingError;
 
     const alg = try parseAlg(rec_buf[0], rec_buf[1]);
     const key_id = std.mem.readInt(u64, rec_buf[2..10], .little);
@@ -134,51 +109,87 @@ fn parseSigRecord(line: []const u8) !SigRecord {
     return .{ .alg = alg, .key_id = key_id, .sig = sig };
 }
 
+// Strict 64-byte Bare Signature Parser
+fn parseBareSig64(line: []const u8) !Ed25519.Signature {
+    var buf: [64]u8 = undefined;
+    const trimmed = std.mem.trim(u8, line, "\r ");
+
+    const n = Base64.Decoder.calcSizeForSlice(trimmed) catch return error.EncodingError;
+    if (n != buf.len) return error.InvalidFormat;
+
+    Base64.Decoder.decode(&buf, trimmed) catch return error.EncodingError;
+
+    return Ed25519.Signature.fromBytes(buf);
+}
+
+fn parsePublicKey(b64_key: []const u8) !PublicKey {
+    var buf: [42]u8 = undefined; // Exactly 42 bytes for Minisign pubkey (KeyID + Key)
+    const decoded_len = Base64.Decoder.calcSizeForSlice(b64_key) catch return error.EncodingError;
+
+    // Strict length check BEFORE decode to prevent out-of-bounds
+    if (decoded_len != buf.len) return error.InvalidFormat;
+
+    Base64.Decoder.decode(&buf, b64_key) catch return error.EncodingError;
+
+    const alg = try parseAlg(buf[0], buf[1]);
+    if (alg != .ed) return error.InvalidFormat; // Only support standard Ed keys for now
+
+    const key_id = std.mem.readInt(u64, buf[2..10], .little);
+    const key_bytes = buf[10..42];
+
+    const key = try Ed25519.PublicKey.fromBytes(key_bytes[0..32].*);
+    return .{ .key_id = key_id, .key = key };
+}
+
 fn parseMinisignFile(allocator: std.mem.Allocator, content: []const u8) !MinisignSig {
-    var lines = std.mem.tokenizeSequence(u8, content, "\n");
+    var lines = std.mem.tokenizeAny(u8, content, "\n");
 
-    // Line 1: untrusted comment (ignore)
-    _ = lines.next() orelse return error.InvalidFormat;
+    const untrusted_comment = lines.next() orelse return error.InvalidFormat;
+    _ = untrusted_comment;
 
-    // Line 2: data signature record
     const sig_line = lines.next() orelse return error.InvalidFormat;
-    const sig_rec = try parseSigRecord(sig_line);
+    const sig_rec = try parseSigRecord74(sig_line);
 
-    // Line 3: trusted comment
-    const comment_line_raw = lines.next() orelse return error.InvalidFormat;
-    const comment_line = std.mem.trimRight(u8, comment_line_raw, "\r");
+    var trusted_comment: []const u8 = "";
+    var comment_signature: ?[64]u8 = null;
 
-    const prefix = "trusted comment: ";
-    if (!std.mem.startsWith(u8, comment_line, prefix)) return error.InvalidFormat;
-
-    // IMPORTANT: only the comment text is signed (no prefix)
-    const comment_text = comment_line[prefix.len..];
-    const trusted_comment = try allocator.dupe(u8, comment_text);
-    errdefer allocator.free(trusted_comment);
-
-    // Line 4: comment signature record (optional in our verifier; Minisign normally includes it)
-    const csig_line = lines.next();
-    var comment_sig: ?[64]u8 = null;
-    if (csig_line) |l| {
-        const csig_rec = try parseSigRecord(l);
-
-        // If key_id is 0 (bare sig), we skip the check as it's implicit
-        if (csig_rec.key_id != 0 and csig_rec.key_id != sig_rec.key_id) {
-            // treat as unauthenticated metadata, not data failure
-            std.log.warn(
-                "Minisign: comment signature key_id mismatch. Data is valid but metadata may be forged.",
-                .{},
-            );
+    // Try to find trusted comment
+    if (lines.next()) |l| {
+        if (std.mem.startsWith(u8, l, "trusted comment: ")) {
+            trusted_comment = try allocator.dupe(u8, l["trusted comment: ".len..]);
         } else {
-            comment_sig = csig_rec.sig;
+            // Unexpected line format for trusted comment
+            return error.InvalidFormat;
+        }
+    }
+    // ensure we free if we fail later (handled by caller, but we must return it to caller)
+    // Actually caller frees it. We must ensure success path returns it.
+
+    const csig_line = lines.next();
+    if (csig_line) |l| {
+        // Try parsing as standard record first
+        if (parseSigRecord74(l)) |csig_rec| {
+             if (csig_rec.key_id != sig_rec.key_id) {
+                std.log.warn("Minisign: comment signature key_id mismatch.", .{});
+            } else {
+                comment_signature = csig_rec.sig;
+            }
+        } else |_| {
+            // Fallback: Try parsing as bare signature
+            if (parseBareSig64(l)) |bare_sig| {
+                 comment_signature = bare_sig.toBytes();
+            } else |_| {
+                // Both failed -> InvalidFormat
+                 return error.InvalidFormat;
+            }
         }
     }
 
-    return .{
+    return MinisignSig{
         .key_id = sig_rec.key_id,
         .alg = sig_rec.alg,
         .signature = sig_rec.sig,
         .trusted_comment = trusted_comment,
-        .comment_signature = comment_sig,
+        .comment_signature = comment_signature,
     };
 }

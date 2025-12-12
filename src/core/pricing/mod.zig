@@ -6,7 +6,6 @@ pub const Crypto = @import("crypto.zig");
 
 // Time limits (seconds)
 
-// Time limits (seconds)
 const CRITICAL_AGE_SECONDS = 90 * 24 * 60 * 60; // 90 days
 
 const StaleStatus = enum { Fresh, Warning, Critical };

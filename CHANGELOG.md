@@ -2,7 +2,7 @@
 
 ## [v0.10.1] - Stability Patch
 ### Fixed
-- **Golden Tests**: Resolved "Signal 6" crash by implementing hermetic test environments (`TestEnv`, `CWDAccess`).
+- **Golden Tests**: Resolved Signal 6/segfault by (1) implementing hermetic temp CWD (`TestEnv`, `CwdGuard`) and (2) fixing dangling stdout/stderr writers in test harness (Use-After-Return).
 - **Security**: Fixed Minisign verification warning ("Trusted comment verification failed") by correctly handling legacy hashed signatures and "bare" comment signatures.
 - **Memory**: Fixed memory leak in test harness initialization.
 
