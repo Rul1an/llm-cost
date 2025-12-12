@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const Crypto = @import("crypto.zig");
+pub const Crypto = @import("crypto.zig");
 // Public Key moved to crypto.zig
 
 // Time limits (seconds)
