@@ -279,7 +279,6 @@ pub fn runEstimate(state: GlobalState, args: []const []const u8) !void {
         if (!format_json) {
             try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
         } else {
-
             try results.append(.{
                 .path = "manual-tokens",
                 .resource_id = "manual",
