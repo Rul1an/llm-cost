@@ -367,12 +367,7 @@ test "v0.10: Estimate JSON Output" {
     // Actually, runEstimate logic does file reading. So we MUST be in the temp directory.
 
     // Using withTempCwd to wrap the execution
-    try withTempCwd(
-        std.testing.allocator,
-        env.tmp.dir,
-        main_app.runEstimate,
-        .{ mock.toGlobalState(), &args }
-    );
+    try withTempCwd(std.testing.allocator, env.tmp.dir, main_app.runEstimate, .{ mock.toGlobalState(), &args });
 
     const out = mock.stdout_buf.items;
 

@@ -30,8 +30,8 @@ const MinisignSig = struct {
     key_id: u64,
     alg: Algorithm,
     signature: [64]u8,
-    trusted_comment: []const u8,        // comment text only (no "trusted comment: " prefix)
-    comment_signature: ?[64]u8 = null,  // optional; if missing => warn
+    trusted_comment: []const u8, // comment text only (no "trusted comment: " prefix)
+    comment_signature: ?[64]u8 = null, // optional; if missing => warn
 };
 
 const PublicKey = struct {
