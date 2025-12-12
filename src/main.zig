@@ -85,6 +85,8 @@ pub fn main() !void {
         if (exit_code != 0) std.process.exit(exit_code);
     } else if (std.mem.eql(u8, command, "init")) {
         try init.run(state.allocator, args[2..], std.io.getStdIn().reader(), state.stdout);
+    } else if (std.mem.eql(u8, command, "export")) {
+        try @import("export.zig").run(state.allocator, args[2..]);
     } else {
         try stderr.print("Error: Unknown command '{s}'\n\n", .{command});
         try printUsage(stderr);
@@ -228,9 +230,11 @@ pub fn runEstimate(state: GlobalState, args: []const []const u8) !void {
     };
     var results = std.ArrayList(PromptResult).init(state.allocator);
     defer results.deinit();
-    // Note: contents of results refer to slices we need to manage if we duped them.
-    // For simplicity in CLI we rely on arena or careful duping.
-    // Here we will dupe resource_id strings.
+    // Memory management for PromptResult string fields:
+    // - .resource_id: always duplicated (owned by results array, freed with allocator)
+    // - .path, .resource_id_source, .model: these are borrowed from static strings or
+    //   from variables that outlive the results array (e.g., model_name is a CLI arg, "stdin" is a string literal).
+    // This ensures that only .resource_id needs to be explicitly freed; the others are safe to reference directly.
 
     // If no files provided, verify if stdin intended or error
     if (input_files.items.len == 0 and input_tokens_arg == null) {
@@ -254,7 +258,7 @@ pub fn runEstimate(state: GlobalState, args: []const []const u8) !void {
         if (format_json) {
             try results.append(.{
                 .path = "stdin",
-                .resource_id = try state.allocator.dupe(u8, rid.value), // Must own for results list? Or just leak to end?
+                .resource_id = try state.allocator.dupe(u8, rid.value), // Owns a copy of the resource ID string; must be freed with the results list.
                 .resource_id_source = @tagName(rid.source),
                 .model = model_name,
                 .input_tokens = token_count,
@@ -275,7 +279,7 @@ pub fn runEstimate(state: GlobalState, args: []const []const u8) !void {
         if (!format_json) {
             try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
         } else {
-            // JSON for explicit tokens?
+
             try results.append(.{
                 .path = "manual-tokens",
                 .resource_id = "manual",
@@ -343,10 +347,21 @@ pub fn runEstimate(state: GlobalState, args: []const []const u8) !void {
         try state.stdout.print("{{\n  \"prompts\": [\n", .{});
         for (results.items, 0..) |res, idx| {
             try state.stdout.print("    {{\n", .{});
-            try state.stdout.print("      \"path\": \"{s}\",\n", .{res.path});
-            try state.stdout.print("      \"resource_id\": \"{s}\",\n", .{res.resource_id});
-            try state.stdout.print("      \"resource_id_source\": \"{s}\",\n", .{res.resource_id_source});
-            try state.stdout.print("      \"model\": \"{s}\",\n", .{res.model});
+            var path_buf: [256]u8 = undefined;
+            var resource_id_buf: [256]u8 = undefined;
+            var resource_id_source_buf: [64]u8 = undefined;
+            var model_buf: [64]u8 = undefined;
+
+            // Using stringify ensures proper JSON escaping
+            const path_json = try std.json.stringify(res.path, .{}, &path_buf);
+            const resource_id_json = try std.json.stringify(res.resource_id, .{}, &resource_id_buf);
+            const resource_id_source_json = try std.json.stringify(res.resource_id_source, .{}, &resource_id_source_buf);
+            const model_json = try std.json.stringify(res.model, .{}, &model_buf);
+
+            try state.stdout.print("      \"path\": {s},\n", .{path_json});
+            try state.stdout.print("      \"resource_id\": {s},\n", .{resource_id_json});
+            try state.stdout.print("      \"resource_id_source\": {s},\n", .{resource_id_source_json});
+            try state.stdout.print("      \"model\": {s},\n", .{model_json});
             try state.stdout.print("      \"input_tokens\": {d},\n", .{res.input_tokens});
             try state.stdout.print("      \"output_tokens\": {d},\n", .{res.output_tokens});
             try state.stdout.print("      \"cost_usd\": {d:.6}\n", .{res.cost_usd});

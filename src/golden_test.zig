@@ -341,7 +341,7 @@ test "v0.10: Check with Manifest V2 (Arrays)" {
 
     // Output should indicate 1 prompt validated
     const out = mock.stdout_buf.items;
-    try std.testing.expect(std.mem.indexOf(u8, out, "1 prompts validated") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "1 prompt validated") != null);
 }
 
 test "v0.10: Estimate JSON Output" {

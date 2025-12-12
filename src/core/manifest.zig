@@ -82,21 +82,8 @@ pub fn parse(allocator: std.mem.Allocator, content: []const u8) !Policy {
             const section_name = line[2 .. line.len - 2];
             if (std.mem.eql(u8, section_name, "prompts")) {
                 current_state = .Prompt;
-                // Start a new prompt
-                try prompts_list.append(PromptDef{ .path = "" }); // Path is required, check later? Or treat empty path as invalid?
-                // For now, init with empty string, must be populated.
-                // Note: path is []const u8, we'll assign it from dupe later.
-                // Wait, .path="" points to static memory, safe. But we can't free it if static.
-                // Better: init with nullable fields, enforce path presence at validation stage?
-                // Struct has path: []const u8. Let's make it empty slice for now.
-                // Actually, PromptDef.deinit calls free(self.path). We must ensure it's either null (if we change struct) or owned.
-                // Let's rely on empty valid slice for init, but flag it.
-                // Hack: Use a marker? No, just let it be empty, validate later if strictness needed.
-                // Wait, free("") is undefined specific to allocator implementation but usually bad if not allocated.
-                // Let's just track if we allocated it?
-                // Simplest: Don't allocate path in init, but `deinit` expects allocated.
-                // Let's use `allocator.dupe(u8, "")` to be safe? Or change struct to optional path?
-                // Spec says path is Required. Let's make init safe.
+                // Start a new prompt. Path is required and must be owned memory for deinit; initialize with an allocated empty string.
+                try prompts_list.append(PromptDef{ .path = "" });
                 prompts_list.items[prompts_list.items.len - 1].path = try allocator.dupe(u8, "");
             }
             continue;
@@ -229,7 +216,10 @@ fn parseInlineTable(allocator: std.mem.Allocator, raw_val: []const u8) !std.Stri
             const key_dupe = try allocator.dupe(u8, key);
             const val_dupe = try parseString(allocator, val);
 
-            try map.put(key_dupe, val_dupe);
+            if (try map.put(key_dupe, val_dupe)) |old_entry| {
+                allocator.free(old_entry.key_ptr.*);
+                allocator.free(old_entry.value_ptr.*);
+            }
         }
     }
     return map;

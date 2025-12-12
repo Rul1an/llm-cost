@@ -62,7 +62,7 @@ Defines the list of managed prompts. This is used by `check` (in Manifest Mode) 
 | Key | Type | Required | Description |
 | :--- | :--- | :--- | :--- |
 | `path` | String | **Yes** | Path to the prompt file (relative to manifest). |
-| `prompt_id` | String | **Yes** | Stable identifier for the prompt (e.g., `login-v1`). Required for FOCUS compliance. |
+| `prompt_id` | String | No | Stable identifier for the prompt (e.g., `login-v1`). **Recommended** for stable prompt tracking and required for FOCUS compliance, but optional otherwise. If omitted, a warning will be issued. |
 | `model` | String | No | Specific model to use for this prompt (overrides global defaults). |
 | `tags` | Inline Table | No | Metadata tags (e.g., `{ team = "auth" }`). |
 

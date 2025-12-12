@@ -84,20 +84,27 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8, stdin: anytyp
         // Let's implement basic suffixing here if conflict
 
         var candidate = initial_slug;
+        var used_initial_slug = true;
         var suffix: usize = 1;
+
         while (used_ids.contains(candidate)) {
-            // Collision
+            // Collision: free previous candidate if it was not initial_slug (which is owned by outer scope scope logic but we handle transfer below)
+            // Actually, best pattern: if (candidate != initial_slug) allocator.free(candidate);
+            if (!used_initial_slug) {
+                allocator.free(candidate);
+            }
+
             // Create new candidate with suffix
-            const old_candidate = candidate;
             candidate = try std.fmt.allocPrint(allocator, "{s}-{d}", .{ initial_slug, suffix });
-            if (suffix > 1) allocator.free(old_candidate); // free intermediate loops, initial_slug handled by defer below if needed? NO wait.
-            // if suffix==1, candidate was initial_slug. We shouldn't free initial_slug yet.
-            // Let's handle memory clearer.
+            used_initial_slug = false; // We are now using an allocated candidate
             suffix += 1;
         }
 
-        // If we looped, initial_slug is still alloc'd but not used in map. We should free it if distinct from candidate.
-        if (candidate.ptr != initial_slug.ptr) {
+        // If the final candidate is not initial_slug, initial_slug is unused in this iteration (as a final ID) and needs freeing?
+        // No, 'initial_slug' was allocated at line 81.
+        // If we settled on 'search-1' (candidate), then 'search' (initial_slug) is effectively discarded unless we reused it (which we didn't).
+        // So if candidate != initial_slug, we must free initial_slug.
+        if (!used_initial_slug) {
             allocator.free(initial_slug);
         }
 

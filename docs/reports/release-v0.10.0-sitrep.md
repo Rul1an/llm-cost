@@ -31,7 +31,7 @@ During final verification, the `golden_test.zig` test case for `Estimate JSON Ou
 ### A. Hierarchical Resource ID Derivation
 We implemented a strict fallback hierarchy for `resource_id`:
 1.  **Explicit Manifest ID**: The gold standard for stable tracking.
-2.  **Path Path**: Automatic fallback for unmanaged files (e.g., `prompts/login.txt` -> `prompts-login-txt`).
+2.  **Path Slug**: Automatic fallback for unmanaged files (e.g., `prompts/login.txt` -> `prompts-login-txt`).
 3.  **Content Hash**: Fallback for stdin/raw content (Blake2b).
 This ensures 100% coverage for FOCUS exports while encouraging explicit IDs.
 
