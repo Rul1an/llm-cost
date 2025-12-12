@@ -40,14 +40,14 @@ jobs:
           echo "Prompt B" > prompt_b.txt
 
           cat > llm-cost.toml <<'EOF'
-[[prompts]]
-path = "prompt_a.txt"
-model = "gpt-4o"
+          [[prompts]]
+          path = "prompt_a.txt"
+          model = "gpt-4o"
 
-[[prompts]]
-path = "prompt_b.txt"
-model = "gpt-4o-mini"
-EOF
+          [[prompts]]
+          path = "prompt_b.txt"
+          model = "gpt-4o-mini"
+          EOF
 
           git add llm-cost.toml prompt_a.txt prompt_b.txt
           git commit -m "Baseline"
