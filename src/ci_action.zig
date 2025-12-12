@@ -302,7 +302,7 @@ pub fn run(state: context.GlobalState, argv: []const []const u8) !u8 {
         return @intFromEnum(ExitCode.api_error);
     };
 
-    var policy_violation = false;
+    var increase_violation = false;
     var total_delta_usd: f64 = 0.0;
     var diff_calculated = false;
 
@@ -336,7 +336,7 @@ pub fn run(state: context.GlobalState, argv: []const []const u8) !u8 {
             diff_calculated = true;
 
             if (cfg.fail_on_increase and total_delta_usd > 0) {
-                policy_violation = true;
+                increase_violation = true;
             }
         } else {
             // Missing Base Ref -> Cannot compute diff -> Warn but don't crash?
@@ -349,10 +349,8 @@ pub fn run(state: context.GlobalState, argv: []const []const u8) !u8 {
     const budget_failed = if (cfg.budget_usd) |b| total > b else false;
     var exit_code: u8 = @intFromEnum(ExitCode.ok);
 
-    if (budget_failed) {
+    if (budget_failed or increase_violation) {
         exit_code = @intFromEnum(ExitCode.budget_exceeded);
-    } else if (policy_violation) {
-        exit_code = @intFromEnum(ExitCode.policy_violation);
     }
 
     try state.stdout.print("ci-action: total_cost_usd={d:.6}", .{total});
@@ -361,7 +359,7 @@ pub fn run(state: context.GlobalState, argv: []const []const u8) !u8 {
 
     var status_str: []const u8 = "pass";
     if (budget_failed) status_str = "fail(budget)";
-    if (policy_violation) status_str = "fail(policy)";
+    if (increase_violation) status_str = "fail(increase)";
 
     try state.stdout.print(" status={s}\n", .{status_str});
 
