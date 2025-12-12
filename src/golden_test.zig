@@ -9,37 +9,51 @@ const TestEnv = @import("helpers/test_env.zig").TestEnv;
 const withTempCwd = @import("helpers/cwd_guard.zig").withTempCwd;
 
 // --- Hermetic Environments ---
+fn arrayListWriteFn(ctx: *const anyopaque, bytes: []const u8) anyerror!usize {
+    const list: *std.ArrayList(u8) = @constCast(@ptrCast(@alignCast(ctx)));
+    try list.appendSlice(bytes);
+    return bytes.len;
+}
+
+fn anyWriterFromArrayList(list: *std.ArrayList(u8)) std.io.AnyWriter {
+    return .{
+        .context = list,
+        .writeFn = arrayListWriteFn,
+    };
+}
+
+// --- Hermetic Environments ---
 const MockState = struct {
     allocator: std.mem.Allocator,
     registry: *Pricing.Registry,
-    stdout_buf: std.ArrayList(u8),
-    stderr_buf: std.ArrayList(u8),
-    // Stable storage for Writer structs to safely point .any() to them
-    stdout_w: std.ArrayList(u8).Writer,
-    stderr_w: std.ArrayList(u8).Writer,
+    // Heap allocated to keep address stable (prevents AnyWriter lifetime/UAF when MockState moves)
+    stdout_buf: *std.ArrayList(u8),
+    stderr_buf: *std.ArrayList(u8),
 
     pub fn init(allocator: std.mem.Allocator) !*MockState {
-        // Usage: Return pointer to heap-allocated struct so internal writer pointers remain valid
+        // Return pointer to heap-allocated struct
         const self = try allocator.create(MockState);
         errdefer allocator.destroy(self);
 
-        // Initialize real registry (triggers Minisign verification)
+        // Initialize real registry
         const registry = try allocator.create(Pricing.Registry);
         errdefer allocator.destroy(registry);
         registry.* = try Pricing.Registry.init(allocator, .{});
 
+        const out = try allocator.create(std.ArrayList(u8));
+        errdefer allocator.destroy(out);
+        out.* = std.ArrayList(u8).init(allocator);
+
+        const err = try allocator.create(std.ArrayList(u8));
+        errdefer allocator.destroy(err);
+        err.* = std.ArrayList(u8).init(allocator);
+
         self.* = MockState{
             .allocator = allocator,
             .registry = registry,
-            .stdout_buf = std.ArrayList(u8).init(allocator),
-            .stderr_buf = std.ArrayList(u8).init(allocator),
-            .stdout_w = undefined,
-            .stderr_w = undefined,
+            .stdout_buf = out,
+            .stderr_buf = err,
         };
-
-        // Initialize writers pointing to the buffers (stable heap address)
-        self.stdout_w = self.stdout_buf.writer();
-        self.stderr_w = self.stderr_buf.writer();
         return self;
     }
 
@@ -48,6 +62,8 @@ const MockState = struct {
         self.allocator.destroy(self.registry);
         self.stdout_buf.deinit();
         self.stderr_buf.deinit();
+        self.allocator.destroy(self.stdout_buf);
+        self.allocator.destroy(self.stderr_buf);
         self.allocator.destroy(self);
     }
 
@@ -55,9 +71,9 @@ const MockState = struct {
         return .{
             .allocator = self.allocator,
             .registry = self.registry,
-            // Point to stable writer storage
-            .stdout = self.stdout_w.any(),
-            .stderr = self.stderr_w.any(),
+            // Avoid .writer().any() from temporary values: build AnyWriter over stable heap context
+            .stdout = anyWriterFromArrayList(self.stdout_buf),
+            .stderr = anyWriterFromArrayList(self.stderr_buf),
         };
     }
 };
@@ -375,15 +391,23 @@ test "v0.10: Estimate JSON Output" {
     var mock = try MockState.init(std.testing.allocator);
     defer mock.deinit();
 
+    // Use local writer handles to ensure AnyWriter pointers remain valid during call
+    // This avoids reliance on MockState internal storage lifetime matching the call
+    var out_w = mock.stdout_buf.writer();
+    // We don't use stderr but needed for state
+    var err_w = mock.stderr_buf.writer();
+
+    const state: main_app.GlobalState = .{
+        .allocator = mock.allocator,
+        .registry = mock.registry,
+        .stdout = out_w.any(),
+        .stderr = err_w.any(),
+    };
+
     const args = [_][]const u8{ "--format=json", "json_test.txt" };
 
     // Run in sub-process/temp-cwd environment
-    // Use main_app.runEstimate wrapper via withTempCwd
-    // But runEstimate takes GlobalState... we need to adapt it or just run logic.
-    // Actually, runEstimate logic does file reading. So we MUST be in the temp directory.
-
-    // Using withTempCwd to wrap the execution
-    try withTempCwd(std.testing.allocator, env.tmp.dir, main_app.runEstimate, .{ mock.toGlobalState(), &args });
+    try withTempCwd(std.testing.allocator, env.tmp.dir, main_app.runEstimate, .{ state, &args });
 
     const out = mock.stdout_buf.items;
 
@@ -391,4 +415,63 @@ test "v0.10: Estimate JSON Output" {
     try std.testing.expect(std.mem.indexOf(u8, out, "\"prompts\": [") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"resource_id\": \"json-test-txt\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"resource_id_source\": \"path_slug\"") != null);
+}
+
+test "v1.0: FOCUS Export (Vantage-subset)" {
+    var env = TestEnv.init(std.testing.allocator);
+    defer env.deinit();
+
+    // 1. Manifest
+    const manifest_content =
+        \\[[prompts]]
+        \\path = "focus_prompt.txt"
+        \\prompt_id = "focus-id"
+        \\model = "gpt-4o"
+        \\tags = { team = "finops" }
+    ;
+    try env.write("llm-cost.toml", manifest_content);
+
+    // 2. Prompt
+    try env.write("focus_prompt.txt", "12345");
+
+    var mock = try MockState.init(std.testing.allocator);
+    defer mock.deinit();
+
+    // 3. Run Export
+    const args = [_][]const u8{ "--format", "focus", "--test-date", "2025-01-01" };
+    const export_mod = @import("export.zig");
+
+    try withTempCwd(std.testing.allocator, env.tmp.dir, export_mod.run, .{ mock.toGlobalState().allocator, &args, mock.registry, mock.stdout_buf.writer().any() });
+
+    const out = mock.stdout_buf.items;
+    std.debug.print("DEBUG OUT:\n{s}\n", .{out});
+
+    // 4. Verification
+    const EXPECTED_HEADER = "ChargePeriodStart,ChargeCategory,BilledCost,ResourceId,ResourceType,RegionId,ServiceCategory,ServiceName,ConsumedQuantity,ConsumedUnit,Tags";
+    try std.testing.expect(std.mem.startsWith(u8, out, EXPECTED_HEADER));
+
+    // Check Row Data
+    // Date
+    try std.testing.expect(std.mem.indexOf(u8, out, "2025-01-01") != null);
+
+    // Cost (2 tokens @ $5/1M = $0.000010) -> 0.000010000000 (12 decimals)
+    try std.testing.expect(std.mem.indexOf(u8, out, "0.000010000000") != null);
+
+    // Check Token Count in Tags (escaped)
+    // "x-token-count-input":"2" -> ""x-token-count-input"":""2""
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"\"x-token-count-input\"\":\"\"2\"\"") != null);
+
+    // Tags JSON Escaping correctness & Ordering
+    // Should NOT see raw JSON quotes: "team":"finops"
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"team\":\"finops\"") == null);
+
+    // Check specific system tag order/presence (Vantage compatible)
+    // "focus-version":"1.0"
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"\"focus-version\"\":\"\"1.0\"\"") != null);
+
+    // Sorted user tags: team should appear after system tags
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"\"team\"\":\"\"finops\"\"") != null);
+
+    // Resource Name in tags
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"\"resource-name\"\":\"\"focus_prompt.txt\"\"") != null);
 }

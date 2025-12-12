@@ -11,6 +11,7 @@ const check = @import("check.zig");
 const init = @import("init.zig");
 const manifest = @import("core/manifest.zig");
 const resource_id = @import("core/resource_id.zig");
+const export_cmd = @import("export.zig");
 
 pub const version_str = "0.10.0";
 
@@ -85,6 +86,8 @@ pub fn main() !void {
         if (exit_code != 0) std.process.exit(exit_code);
     } else if (std.mem.eql(u8, command, "init")) {
         try init.run(state.allocator, args[2..], std.io.getStdIn().reader(), state.stdout);
+    } else if (std.mem.eql(u8, command, "export")) {
+        try export_cmd.run(state.allocator, args[2..], state.registry, state.stdout);
     } else {
         try stderr.print("Error: Unknown command '{s}'\n\n", .{command});
         try printUsage(stderr);
@@ -461,6 +464,7 @@ fn printUsage(w: anytype) !void {
         \\  llm-cost check  [FILES...]             Check budget/policy (llm-cost.toml)
         \\  llm-cost pipe   [OPTIONS]              Batch process JSONL from stdin
         \\  llm-cost report [OPTIONS]              Analyze usage logs
+        \\  llm-cost export [OPTIONS]              Export forecast to FOCUS v1.0 CSV
         \\  llm-cost update-db                     Update pricing database
         \\  llm-cost version                       Show version
         \\
