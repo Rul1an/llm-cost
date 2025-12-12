@@ -2,9 +2,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 pub const Crypto = @import("crypto.zig");
-// Public Key moved to crypto.zig
-
-// Time limits (seconds)
 
 const CRITICAL_AGE_SECONDS = 90 * 24 * 60 * 60; // 90 days
 

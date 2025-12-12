@@ -1,6 +1,6 @@
-# SITREP: v1.0.0 FOCUS Export (Phase F)
+# SITREP: v1.0.0 (Base) -> v1.0.1 (Hardening)
 **Date**: 2025-12-12
-**Status**: COMPLETE ✅
+**Status**: v1.0.1 PR SUBMITTED ✅
 
 ## 1. Mission Objective
 The primary goal of Phase F was to enable **FinOps-grade cost export** compliant with the **FOCUS 1.0 Specification**, specifically targeting seamless integration with **Vantage**. This moves `llm-cost` from a developer tool to a strategic FinOps component.

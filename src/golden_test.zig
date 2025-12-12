@@ -391,15 +391,23 @@ test "v0.10: Estimate JSON Output" {
     var mock = try MockState.init(std.testing.allocator);
     defer mock.deinit();
 
+    // Use local writer handles to ensure AnyWriter pointers remain valid during call
+    // This avoids reliance on MockState internal storage lifetime matching the call
+    var out_w = mock.stdout_buf.writer();
+    // We don't use stderr but needed for state
+    var err_w = mock.stderr_buf.writer();
+
+    const state: main_app.GlobalState = .{
+        .allocator = mock.allocator,
+        .registry = mock.registry,
+        .stdout = out_w.any(),
+        .stderr = err_w.any(),
+    };
+
     const args = [_][]const u8{ "--format=json", "json_test.txt" };
 
     // Run in sub-process/temp-cwd environment
-    // Use main_app.runEstimate wrapper via withTempCwd
-    // But runEstimate takes GlobalState... we need to adapt it or just run logic.
-    // Actually, runEstimate logic does file reading. So we MUST be in the temp directory.
-
-    // Using withTempCwd to wrap the execution
-    try withTempCwd(std.testing.allocator, env.tmp.dir, main_app.runEstimate, .{ mock.toGlobalState(), &args });
+    try withTempCwd(std.testing.allocator, env.tmp.dir, main_app.runEstimate, .{ state, &args });
 
     const out = mock.stdout_buf.items;
 

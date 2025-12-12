@@ -96,9 +96,9 @@ fn parseSigRecord74(line: []const u8) !SigRecord {
     const trimmed = std.mem.trim(u8, line, "\r ");
 
     const rec_len = Base64.Decoder.calcSizeForSlice(trimmed) catch return error.EncodingError;
-    if (rec_len != rec_buf.len) return error.InvalidFormat;
+    if (rec_len > rec_buf.len or (rec_len != 64 and rec_len != 74)) return error.InvalidFormat;
 
-    Base64.Decoder.decode(&rec_buf, trimmed) catch return error.EncodingError;
+    Base64.Decoder.decode(rec_buf[0..rec_len], trimmed) catch return error.EncodingError;
 
     const alg = try parseAlg(rec_buf[0], rec_buf[1]);
     const key_id = std.mem.readInt(u64, rec_buf[2..10], .little);
