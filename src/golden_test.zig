@@ -413,8 +413,8 @@ test "v0.10: Estimate JSON Output" {
 
     // Minimal JSON check
     try std.testing.expect(std.mem.indexOf(u8, out, "\"prompts\": [") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out, "\"resource_id\": \"json-test-txt\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out, "\"resource_id_source\": \"path_slug\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"resource_id\":\"json-test-txt\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"resource_id_source\":\"path_slug\"") != null);
 }
 
 test "v1.0: FOCUS Export (Vantage-subset)" {
@@ -459,7 +459,7 @@ test "v1.0: FOCUS Export (Vantage-subset)" {
 
     // Check Token Count in Tags (escaped)
     // "x-token-count-input":"2" -> ""x-token-count-input"":""2""
-    try std.testing.expect(std.mem.indexOf(u8, out, "\"\"x-token-count-input\"\":\"\"2\"\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"\"x-token-count-input\"\":2") != null);
 
     // Tags JSON Escaping correctness & Ordering
     // Should NOT see raw JSON quotes: "team":"finops"

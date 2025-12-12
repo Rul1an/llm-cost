@@ -22,6 +22,7 @@ pub const version_str = "0.10.0";
 
 // Re-exporting GlobalState for backward compatibility if needed, but components use context.GlobalState
 pub const GlobalState = context.GlobalState;
+pub const runEstimate = estimate_cmd.run;
 
 pub fn main() !void {
     // 1. Setup Allocator
