@@ -240,8 +240,8 @@ pub fn runEstimate(state: GlobalState, args: []const []const u8) !void {
 
         var token_count: u64 = 0;
         if (input_text.len > 0) {
-             const tokenizer_config = try engine.resolveConfig(model_name);
-             token_count = try engine.countTokens(state.allocator, input_text, tokenizer_config);
+            const tokenizer_config = try engine.resolveConfig(model_name);
+            token_count = try engine.countTokens(state.allocator, input_text, tokenizer_config);
         }
 
         const cost = Pricing.Registry.calculate(price_def, token_count, output_tokens_arg orelse 0, reasoning_tokens_arg);
@@ -262,21 +262,21 @@ pub fn runEstimate(state: GlobalState, args: []const []const u8) !void {
                 .cost_usd = cost,
             });
         } else {
-             try state.stdout.print("Model:       {s}\n", .{model_name});
-             try state.stdout.print("Tokens In:   {d}\n", .{token_count});
-             if ((output_tokens_arg orelse 0) > 0) try state.stdout.print("Tokens Out:  {d}\n", .{output_tokens_arg orelse 0});
-             try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
-             try state.stdout.print("Resource ID: {s} ({s})\n", .{rid.value, @tagName(rid.source)});
+            try state.stdout.print("Model:       {s}\n", .{model_name});
+            try state.stdout.print("Tokens In:   {d}\n", .{token_count});
+            if ((output_tokens_arg orelse 0) > 0) try state.stdout.print("Tokens Out:  {d}\n", .{output_tokens_arg orelse 0});
+            try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
+            try state.stdout.print("Resource ID: {s} ({s})\n", .{ rid.value, @tagName(rid.source) });
         }
     } else if (input_tokens_arg != null) {
         // Direct token count mode
-         const cost = Pricing.Registry.calculate(price_def, input_tokens_arg.?, output_tokens_arg orelse 0, reasoning_tokens_arg);
-         total_cost += cost;
-         if (!format_json) {
-             try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
-         } else {
-             // JSON for explicit tokens?
-             try results.append(.{
+        const cost = Pricing.Registry.calculate(price_def, input_tokens_arg.?, output_tokens_arg orelse 0, reasoning_tokens_arg);
+        total_cost += cost;
+        if (!format_json) {
+            try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
+        } else {
+            // JSON for explicit tokens?
+            try results.append(.{
                 .path = "manual-tokens",
                 .resource_id = "manual",
                 .resource_id_source = "manual",
@@ -285,7 +285,7 @@ pub fn runEstimate(state: GlobalState, args: []const []const u8) !void {
                 .output_tokens = output_tokens_arg orelse 0,
                 .cost_usd = cost,
             });
-         }
+        }
     } else {
         // Process Files
         for (input_files.items) |path| {
@@ -307,10 +307,10 @@ pub fn runEstimate(state: GlobalState, args: []const []const u8) !void {
             var manifest_id: ?[]const u8 = null;
             if (policy.prompts) |prompts| {
                 for (prompts) |p| {
-                     if (std.mem.eql(u8, p.path, path)) {
-                         manifest_id = p.prompt_id;
-                         break;
-                     }
+                    if (std.mem.eql(u8, p.path, path)) {
+                        manifest_id = p.prompt_id;
+                        break;
+                    }
                 }
             }
 
@@ -329,10 +329,10 @@ pub fn runEstimate(state: GlobalState, args: []const []const u8) !void {
                     .cost_usd = cost,
                 });
             } else {
-                 try state.stdout.print("File:        {s}\n", .{path});
-                 try state.stdout.print("Tokens In:   {d}\n", .{token_count});
-                 try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
-                 try state.stdout.print("Resource ID: {s} ({s})\n\n", .{rid.value, @tagName(rid.source)});
+                try state.stdout.print("File:        {s}\n", .{path});
+                try state.stdout.print("Tokens In:   {d}\n", .{token_count});
+                try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
+                try state.stdout.print("Resource ID: {s} ({s})\n\n", .{ rid.value, @tagName(rid.source) });
             }
             rid.deinit(state.allocator);
         }
@@ -359,7 +359,7 @@ pub fn runEstimate(state: GlobalState, args: []const []const u8) !void {
         try state.stdout.print("  \"total_cost_usd\": {d:.6}\n", .{total_cost});
         try state.stdout.print("}}\n", .{});
     } else if (input_files.items.len > 1) {
-         try state.stdout.print("Total Cost:  ${d:.6}\n", .{total_cost});
+        try state.stdout.print("Total Cost:  ${d:.6}\n", .{total_cost});
     }
 }
 

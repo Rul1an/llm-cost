@@ -299,7 +299,7 @@ test "v0.10: Init Command Scaffolding" {
     // 3. Verify llm-cost.toml created
     // init command always writes to CWD "llm-cost.toml".
     const manifest_path = "llm-cost.toml";
-    const manifest_content = std.fs.cwd().readFileAlloc(mock.allocator, manifest_path, 1024*1024) catch |err| {
+    const manifest_content = std.fs.cwd().readFileAlloc(mock.allocator, manifest_path, 1024 * 1024) catch |err| {
         std.debug.print("Failed to read generated manifest: {}\n", .{err});
         return error.ManifestNotCreated;
     };

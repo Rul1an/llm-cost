@@ -161,12 +161,12 @@ pub fn parse(allocator: std.mem.Allocator, content: []const u8) !Policy {
                     } else if (std.mem.eql(u8, key, "tags")) {
                         if (prompt.tags) |*t| {
                             // Clear existing tags logic?
-                             var it = t.iterator();
-                             while (it.next()) |entry| {
-                                 allocator.free(entry.key_ptr.*);
-                                 allocator.free(entry.value_ptr.*);
-                             }
-                             t.deinit();
+                            var it = t.iterator();
+                            while (it.next()) |entry| {
+                                allocator.free(entry.key_ptr.*);
+                                allocator.free(entry.value_ptr.*);
+                            }
+                            t.deinit();
                         }
                         prompt.tags = try parseInlineTable(allocator, val);
                     }

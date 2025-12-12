@@ -94,14 +94,14 @@ pub fn run(
                     }
                 }
                 if (!allowed_found) {
-                   try stderr.print("POLICY VIOLATION: Model '{s}' for prompt '{s}' is not permitted.\n", .{effective_model, p.path});
-                   return @intFromEnum(ExitCode.PolicyViolation);
+                    try stderr.print("POLICY VIOLATION: Model '{s}' for prompt '{s}' is not permitted.\n", .{ effective_model, p.path });
+                    return @intFromEnum(ExitCode.PolicyViolation);
                 }
             }
 
             // Validation: Prompt ID
             if (p.prompt_id == null) {
-                 try stderr.print("⚠️  {s} has no prompt_id (will use path slug for FOCUS)\n", .{p.path});
+                try stderr.print("⚠️  {s} has no prompt_id (will use path slug for FOCUS)\n", .{p.path});
             }
 
             try work_list.append(.{
@@ -117,7 +117,7 @@ pub fn run(
     for (cli_inputs.items) |path| {
         const effective_model = cli_model orelse policy.default_model orelse "gpt-4o";
         // Check Allowed Models for CLI inputs
-         if (policy.allowed_models) |allowed| {
+        if (policy.allowed_models) |allowed| {
             var allowed_found = false;
             for (allowed) |m| {
                 if (std.mem.eql(u8, m, effective_model)) {
@@ -126,8 +126,8 @@ pub fn run(
                 }
             }
             if (!allowed_found) {
-               try stderr.print("POLICY VIOLATION: Model '{s}' for file '{s}' is not permitted.\n", .{effective_model, path});
-               return @intFromEnum(ExitCode.PolicyViolation);
+                try stderr.print("POLICY VIOLATION: Model '{s}' for file '{s}' is not permitted.\n", .{ effective_model, path });
+                return @intFromEnum(ExitCode.PolicyViolation);
             }
         }
 
@@ -146,8 +146,8 @@ pub fn run(
     }
 
     if (work_list.items.len == 0) {
-       try stderr.print("No prompts to check. Specify files or configure llm-cost.toml.\n", .{});
-       return @intFromEnum(ExitCode.Error);
+        try stderr.print("No prompts to check. Specify files or configure llm-cost.toml.\n", .{});
+        return @intFromEnum(ExitCode.Error);
     }
 
     // Execution Loop
@@ -181,8 +181,8 @@ pub fn run(
         try stdout.print("Budget Usage: ${d:.4} / ${d:.4} ({d:.1}%)\n", .{ total_cost, limit, percent });
 
         if (total_cost > limit) {
-             try stderr.print("BUDGET EXCEEDED: Cost ${d:.4} exceeds limit ${d:.4}\n", .{ total_cost, limit });
-             return @intFromEnum(ExitCode.BudgetExceeded);
+            try stderr.print("BUDGET EXCEEDED: Cost ${d:.4} exceeds limit ${d:.4}\n", .{ total_cost, limit });
+            return @intFromEnum(ExitCode.BudgetExceeded);
         }
     } else {
         try stdout.print("Total Est. Cost: ${d:.4} (No budget limit set)\n", .{total_cost});
