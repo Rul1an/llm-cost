@@ -10,7 +10,7 @@ const withTempCwd = @import("helpers/cwd_guard.zig").withTempCwd;
 
 // --- Hermetic Environments ---
 fn arrayListWriteFn(ctx: *const anyopaque, bytes: []const u8) anyerror!usize {
-    const list: *std.ArrayList(u8) = @constCast(@ptrCast(@alignCast(ctx)));
+    const list: *std.ArrayList(u8) = @ptrCast(@alignCast(@constCast(ctx)));
     try list.appendSlice(bytes);
     return bytes.len;
 }
@@ -26,7 +26,7 @@ fn anyWriterFromArrayList(list: *std.ArrayList(u8)) std.io.AnyWriter {
 const MockState = struct {
     allocator: std.mem.Allocator,
     registry: *Pricing.Registry,
-    // Heap allocated to keep address stable (prevents AnyWriter lifetime/UAF when MockState moves)
+    // Heap allocated to keep address stable (prevents AnyWriter lifetime issues)
     stdout_buf: *std.ArrayList(u8),
     stderr_buf: *std.ArrayList(u8),
 
@@ -382,7 +382,7 @@ test "v0.10: Check with Manifest V2 (Arrays)" {
 }
 
 test "v0.10: Estimate JSON Output" {
-    // HERMETIC FIX: Use isolated TestEnv + CwdGuard to prevent FS races and Bus Errors.
+    // HERMETIC: Use isolated TestEnv + CwdGuard to prevent FS races.
     var env = TestEnv.init(std.testing.allocator);
     defer env.deinit();
 

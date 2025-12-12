@@ -15,6 +15,7 @@
 - **Portable**: Static binary distribution for Linux, macOS, and Windows.
 - **Parity**: Validated against `tiktoken` using edge-case corpora (Unicode, Whitespace).
 - **Control**: Enforce cost limits via pipe mode.
+- **FinOps**: Export deterministic cost data (FOCUS 1.0) for Chargeback/Showback.
 - **Governance**: Policy and budget enforcement for CI/CD (`llm-cost check`).
 
 ## Installation
@@ -66,6 +67,12 @@ llm-cost check prompts/*.txt
 ```bash
 # Update pricing database securely
 llm-cost update-db
+```
+
+**FinOps Cost Export**
+```bash
+# Generate deterministic FOCUS v1.0 CSV for Vantage
+llm-cost export --manifest llm-cost.toml > costs.csv
 ```
 
 ## Documentation

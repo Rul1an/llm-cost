@@ -183,7 +183,26 @@ llm-cost init [--dir <path>] [--non-interactive]
 *   `--dir`: Directory to scan for prompts (default: current directory).
 *   `--non-interactive`: Skip confirmation prompts and write immediately.
 
-### 8. `update-db`
+### 8. `export`
+Generates a deterministic, compliant usage CSV export for FinOps tools (specifically Vantage). Outputs data formatted according to the **FOCUS 1.0** specification.
+
+**Usage:**
+```bash
+llm-cost export --manifest <path> [options]
+```
+
+**Arguments:**
+*   `--manifest`: Path to `llm-cost.toml`.
+*   `--test-date`: (Optional) Override `ChargePeriodStart` date (YYYY-MM-DD). Useful for deterministic testing. Iff omitted, uses current UTC date.
+
+**Output (CSV):**
+Standard output is a CSV stream. Columns adhere to the strict Vantage-compatible subset of FOCUS 1.0:
+`ChargePeriodStart,ChargeCategory,BilledCost,ResourceId,ResourceType,RegionId,ServiceCategory,ServiceName,ConsumedQuantity,ConsumedUnit,Tags`
+
+*   **BilledCost**: Calculated using `pico-USD` fixed-point math (12 decimal places) to prevent floating-point drift.
+*   **Tags**: JSON column containing metadata (`provider`, `model`, `resource-name`) and user tags. Keys are sorted for deterministic diffs.
+
+### 9. `update-db`
 Securely updates the pricing database from the official registry.
 
 **Usage:**

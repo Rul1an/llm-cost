@@ -16,7 +16,6 @@ pub fn withTempCwd(
     defer std.process.changeCurDir(old) catch {};
 
     // Use changeCurDir with realpath of handle because we can't easily setAsCwd from dir handle portably in all zig versions
-    // But we can get the path from the dir handle
     const path = try dir.realpathAlloc(allocator, ".");
     defer allocator.free(path);
 
