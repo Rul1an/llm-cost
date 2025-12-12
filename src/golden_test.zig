@@ -14,19 +14,33 @@ const MockState = struct {
     registry: *Pricing.Registry,
     stdout_buf: std.ArrayList(u8),
     stderr_buf: std.ArrayList(u8),
+    // Stable storage for Writer structs to safely point .any() to them
+    stdout_w: std.ArrayList(u8).Writer,
+    stderr_w: std.ArrayList(u8).Writer,
 
-    pub fn init(allocator: std.mem.Allocator) !MockState {
+    pub fn init(allocator: std.mem.Allocator) !*MockState {
+        // Usage: Return pointer to heap-allocated struct so internal writer pointers remain valid
+        const self = try allocator.create(MockState);
+        errdefer allocator.destroy(self);
+
         // Initialize real registry (triggers Minisign verification)
         const registry = try allocator.create(Pricing.Registry);
         errdefer allocator.destroy(registry);
         registry.* = try Pricing.Registry.init(allocator, .{});
 
-        return MockState{
+        self.* = MockState{
             .allocator = allocator,
             .registry = registry,
             .stdout_buf = std.ArrayList(u8).init(allocator),
             .stderr_buf = std.ArrayList(u8).init(allocator),
+            .stdout_w = undefined,
+            .stderr_w = undefined,
         };
+
+        // Initialize writers pointing to the buffers (stable heap address)
+        self.stdout_w = self.stdout_buf.writer();
+        self.stderr_w = self.stderr_buf.writer();
+        return self;
     }
 
     pub fn deinit(self: *MockState) void {
@@ -34,14 +48,16 @@ const MockState = struct {
         self.allocator.destroy(self.registry);
         self.stdout_buf.deinit();
         self.stderr_buf.deinit();
+        self.allocator.destroy(self);
     }
 
     pub fn toGlobalState(self: *MockState) main_app.GlobalState {
         return .{
             .allocator = self.allocator,
             .registry = self.registry,
-            .stdout = self.stdout_buf.writer().any(),
-            .stderr = self.stderr_buf.writer().any(),
+            // Point to stable writer storage
+            .stdout = self.stdout_w.any(),
+            .stderr = self.stderr_w.any(),
         };
     }
 };
