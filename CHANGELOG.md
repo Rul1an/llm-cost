@@ -1,5 +1,19 @@
 # Changelog
 
+## [v1.0.1] - FOCUS Hardening
+### Added
+- **Deterministic FOCUS Export**:
+    - Fixed-point cost precision (12 decimals) using `pico-USD`.
+    - Sorted JSON keys in `Tags` column for stable diffs.
+    - System tags emitted in strict order.
+- **Vantage Compatibility**:
+    - Strict column subset (no unsupported columns).
+    - `focus-version` and `focus-target` metadata tags.
+    - `resource-name` moved to Tags to adhere to Vantage schema constraints.
+
+### Fixed
+- **CI Stability**: Refactored `MockState` to use stable heap-allocated `AnyWriter` contexts, preventing Segfaults in tests.
+
 ## [v0.10.1] - Stability Patch
 ### Fixed
 - **Golden Tests**: Resolved Signal 6/segfault by (1) implementing hermetic temp CWD (`TestEnv`, `CwdGuard`) and (2) fixing dangling stdout/stderr writers in test harness (Use-After-Return).
