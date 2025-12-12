@@ -48,6 +48,22 @@ This creates a `llm-cost.toml` manifest discovering your prompt files.
 [defaults]
 model = "gpt-4o-mini"
 
+## GitHub Action
+
+Integrate `llm-cost` into your CI workflow with zero configuration.
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+  - uses: Rul1an/llm-cost@v1.1.1
+    with:
+      budget: "5.00"          # Fail if total cost > $5.00
+      fail-on-increase: true  # Fail if cost increases vs base branch
+      post-comment: true      # Post cost breakdown as PR comment
+```
+
+See [action.yml](action.yml) for all inputs (`manifest`, `github-token`, etc.).
+
 [[prompts]]
 path = "prompts/search.txt"
 prompt_id = "search"

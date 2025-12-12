@@ -1,0 +1,105 @@
+name: "llm-cost"
+description: "Estimate LLM costs in CI, enforce budgets, and (optionally) post sticky PR comments via llm-cost ci-action."
+author: "llm-cost"
+
+branding:
+  icon: "dollar-sign"
+  color: "green"
+
+inputs:
+  version:
+    description: "Release tag to install (e.g. v1.1.0). Use 'latest' to resolve via GitHub API."
+    required: false
+    default: "latest"
+
+  releases-repo:
+    description: "Repo that hosts llm-cost release assets (owner/name)."
+    required: false
+    default: "Rul1an/llm-cost"
+
+  manifest:
+    description: "Path to llm-cost.toml."
+    required: false
+    default: "llm-cost.toml"
+
+  budget:
+    description: "Budget in USD (string, e.g. 1.00). If set, ci-action enforces it."
+    required: false
+    default: ""
+
+  fail-on-increase:
+    description: "Fail if cost delta > 0."
+    required: false
+    default: "false"
+
+  post-comment:
+    description: "true|false|auto. auto should skip posting on fork PRs."
+    required: false
+    default: "auto"
+
+  comment-threshold:
+    description: "Minimum absolute delta (USD) before commenting."
+    required: false
+    default: "0"
+
+  github-token:
+    description: "Token used for GitHub API (PR comments). Defaults to workflow github.token if omitted."
+    required: false
+    default: ""
+
+  verify:
+    description: "true|false. If true, require checksum verification."
+    required: false
+    default: "true"
+
+  sha256:
+    description: "Optional expected sha256 for the downloaded binary (strong pin). If set, used for verification."
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install llm-cost
+      shell: bash
+      env:
+        LLM_COST_VERSION: ${{ inputs.version }}
+        LLM_COST_REPO: ${{ inputs.releases-repo }}
+        LLM_COST_VERIFY: ${{ inputs.verify }}
+        LLM_COST_SHA256: ${{ inputs.sha256 }}
+        # Use token for GitHub API to avoid rate limits when resolving "latest"
+        GITHUB_TOKEN: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
+      run: |
+        set -euo pipefail
+        bash "${GITHUB_ACTION_PATH}/.github/actions/llm-cost/install.sh"
+
+    - name: Run llm-cost ci-action
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
+        GITHUB_EVENT_PATH: ${{ github.event_path }}
+      run: |
+        set -euo pipefail
+
+        args=( "ci-action" "--manifest" "${{ inputs.manifest }}" )
+
+        if [ -n "${{ inputs.budget }}" ]; then
+          args+=( "--budget" "${{ inputs.budget }}" )
+        fi
+
+        if [ "${{ inputs.fail-on-increase }}" = "true" ]; then
+          args+=( "--fail-on-increase" )
+        fi
+
+        if [ "${{ inputs.comment-threshold }}" != "0" ]; then
+          args+=( "--comment-threshold" "${{ inputs.comment-threshold }}" )
+        fi
+
+        # post-comment: pass through (ci-action does fork-safe behavior in "auto")
+        if [ "${{ inputs.post-comment }}" = "false" ]; then
+          args+=( "--no-comment" )
+        elif [ "${{ inputs.post-comment }}" = "true" ]; then
+          args+=( "--post-comment" )
+        fi
+
+        llm-cost "${args[@]}"
