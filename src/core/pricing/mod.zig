@@ -141,6 +141,10 @@ pub const Registry = struct {
                 // Duplicate provider string because source buffer is transient (in loadFromCache)
                 if (!std.mem.eql(u8, def.value.provider, "Unknown")) {
                     def.value.provider = try allocator.dupe(u8, def.value.provider);
+                } else {
+                    // Critical: Point to static "Unknown" so it survives arena deinit
+                    // and matches the deinit check logic (which skips free for "Unknown")
+                    def.value.provider = "Unknown";
                 }
 
                 try map.put(try allocator.dupe(u8, entry.key_ptr.*), def.value);
