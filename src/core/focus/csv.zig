@@ -130,84 +130,55 @@ pub const CsvWriter = struct {
     }
 
     fn tagsToJson(self: *CsvWriter, row: schema.FocusRow, billed_cost_str: []const u8) ![]const u8 {
-        var json = std.ArrayList(u8).init(self.allocator);
-        errdefer json.deinit();
+        const CanonicalJsonWriter = @import("../json_canonical.zig").CanonicalJsonWriter;
 
-        var first: bool = true;
-        try json.append('{');
+        var jw = CanonicalJsonWriter.init(self.allocator);
+        defer jw.deinit();
 
-        // Helper to append one KV with comma handling
-        const appendKV = struct {
-            fn go(self_: *CsvWriter, j: *std.ArrayList(u8), first_: *bool, k: []const u8, v: []const u8) !void {
-                if (!first_.*) try j.append(',');
-                first_.* = false;
-                try j.append('"');
-                try self_.appendJsonEscaped(j, k);
-                try j.appendSlice("\":\"");
-                try self_.appendJsonEscaped(j, v);
-                try j.append('"');
-            }
-        }.go;
+        // 1. Add System Tags (Fixed values or already strings)
+        try jw.putString("llm-cost-type", "estimate");
+        try jw.putString("focus-version", "1.0");
+        try jw.putString("focus-target", "vantage");
+        try jw.putString("provider", row.tags.provider);
+        try jw.putString("model", row.tags.model);
+        try jw.putString("effective-cost", billed_cost_str);
+        try jw.putString("resource-name", row.resource_name);
+        try jw.putString("x-content-hash", row.tags.content_hash);
 
-        // --- System keys (fixed order, deterministic) ---
-        try appendKV(self, &json, &first, "llm-cost-type", "estimate");
-        try appendKV(self, &json, &first, "focus-version", "1.0");
-        try appendKV(self, &json, &first, "focus-target", "vantage");
+        // 2. Add Metrics (Integers / Floats need formatting first? Or use putInt/put)
+        // CanonicalJsonWriter.putInt supports stringify-able types.
+        try jw.putInt("x-token-count-input", row.tags.token_count_input);
+        try jw.putInt("x-token-count-output", row.tags.token_count_output);
 
-        try appendKV(self, &json, &first, "provider", row.tags.provider);
-        try appendKV(self, &json, &first, "model", row.tags.model);
-
-        // effective-cost: MUST match BilledCost formatting for determinism
-        try appendKV(self, &json, &first, "effective-cost", billed_cost_str);
-
-        // resource-name (hyphenated key; moved from CSV column into Tags)
-        try appendKV(self, &json, &first, "resource-name", row.resource_name);
-
-        // --- Metrics (deterministic order) ---
-        {
-            const in_s = try std.fmt.allocPrint(self.allocator, "{d}", .{row.tags.token_count_input});
-            defer self.allocator.free(in_s);
-            try appendKV(self, &json, &first, "x-token-count-input", in_s);
-        }
-        {
-            const out_s = try std.fmt.allocPrint(self.allocator, "{d}", .{row.tags.token_count_output});
-            defer self.allocator.free(out_s);
-            try appendKV(self, &json, &first, "x-token-count-output", out_s);
-        }
         if (row.tags.cache_hit_ratio) |ratio| {
+            // For floats, we want specific precision formatting before putting
             const ratio_s = try std.fmt.allocPrint(self.allocator, "{d:.2}", .{ratio});
             defer self.allocator.free(ratio_s);
-            try appendKV(self, &json, &first, "x-cache-hit-ratio", ratio_s);
+            // Since split logic expects pre-encoded or we use putString...
+            // Wait, ratio_s is raw string "0.50". putString will quote it: "0.50".
+            // Correct. Ratios in JSON are usually numbers, but FOCUS metadata might be strings or numbers.
+            // Original implementation was: "x-cache-hit-ratio": "0.50" (String).
+            // Let's stick to string for metadata to be safe, or number?
+            // Previous code: formatted with {d:.2} then appended with quotes. So it was a string.
+            try jw.putString("x-cache-hit-ratio", ratio_s);
         }
-        try appendKV(self, &json, &first, "x-content-hash", row.tags.content_hash);
 
-        // --- User tags (sorted keys, deterministic; reserved keys skipped) ---
+        // 3. Add User Tags (Filter reserved)
         if (row.tags.user_tags.count() > 0) {
-            var keys = std.ArrayList([]const u8).init(self.allocator);
-            defer keys.deinit();
-
             var it = row.tags.user_tags.keyIterator();
             while (it.next()) |k| {
-                // Collision policy: user keys cannot override system keys
                 if (ReservedTagKeys.isReserved(k.*)) continue;
-                try keys.append(k.*);
-            }
-
-            std.mem.sort([]const u8, keys.items, {}, struct {
-                fn lessThan(_: void, a: []const u8, b: []const u8) bool {
-                    return std.mem.order(u8, a, b) == .lt;
-                }
-            }.lessThan);
-
-            for (keys.items) |k| {
-                const v = row.tags.user_tags.get(k) orelse continue;
-                try appendKV(self, &json, &first, k, v);
+                const v = row.tags.user_tags.get(k.*) orelse continue;
+                try jw.putString(k.*, v);
             }
         }
 
-        try json.append('}');
+        // 4. Emit
+        var json_buf = std.ArrayList(u8).init(self.allocator);
+        errdefer json_buf.deinit();
 
-        return try json.toOwnedSlice();
+        try jw.write(json_buf.writer());
+        return json_buf.toOwnedSlice();
     }
 
     /// Escape special characters for JSON string values

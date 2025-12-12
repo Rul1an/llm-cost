@@ -1,0 +1,122 @@
+name: E2E Gate Verification
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.14.0
+
+      - name: Build llm-cost
+        run: |
+          set -euo pipefail
+          zig build -Doptimize=Debug
+
+      - name: Setup hermetic test repo
+        run: |
+          set -euo pipefail
+          REPO="$(mktemp -d /tmp/llm-cost-e2e.XXXXXX)"
+          cd "$REPO"
+
+          git init
+          git config user.name "Test"
+          git config user.email "test@example.com"
+
+          echo "Prompt A" > prompt_a.txt
+          echo "Prompt B" > prompt_b.txt
+
+          cat > llm-cost.toml <<'EOF'
+[[prompts]]
+path = "prompt_a.txt"
+model = "gpt-4o"
+
+[[prompts]]
+path = "prompt_b.txt"
+model = "gpt-4o-mini"
+EOF
+
+          git add llm-cost.toml prompt_a.txt prompt_b.txt
+          git commit -m "Baseline"
+
+          echo "BASELINE_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          echo "E2E_REPO=$REPO" >> $GITHUB_ENV
+
+      - name: Modify (Increase Cost)
+        run: |
+          set -euo pipefail
+          cd "$E2E_REPO"
+          for i in {1..100}; do echo "More tokens" >> prompt_a.txt; done
+
+      - name: Run ci-action (Should Fail on Increase)
+        run: |
+          set -euo pipefail
+          cd "$E2E_REPO"
+
+          # Create fake event
+          export GITHUB_TOKEN="fake"
+          export GITHUB_EVENT_PATH="${PWD}/event.json"
+          echo '{"repository":{"full_name":"Rul1an/llm-cost"},"pull_request":{"number":1}}' > event.json
+
+          # We expect Exit Code 2 (Gate/Budget), NOT 3 (Policy), as agreed in v1.1.0 cleanup.
+          set +e
+          "$GITHUB_WORKSPACE/zig-out/bin/llm-cost" ci-action \
+            --manifest llm-cost.toml \
+            --base "$BASELINE_SHA" \
+            --fail-on-increase \
+            --no-comment
+          EXIT_CODE=$?
+          set -e
+
+          if [ "$EXIT_CODE" -ne 2 ]; then
+            echo "Expected exit code 2 (Gate/Budget), got $EXIT_CODE"
+            exit 1
+          fi
+          echo "PASS: Fail-on-increase prevented cost hike."
+
+      - name: Revert & Verify Pass
+        run: |
+          set -euo pipefail
+          cd "$E2E_REPO"
+          git checkout -- prompt_a.txt
+
+          "$GITHUB_WORKSPACE/zig-out/bin/llm-cost" ci-action \
+            --manifest llm-cost.toml \
+            --base "$BASELINE_SHA" \
+            --fail-on-increase \
+            --no-comment
+
+          echo "PASS: Clean state passed."
+
+      - name: Budget Fail Check
+        run: |
+          set -euo pipefail
+          cd "$E2E_REPO"
+
+          set +e
+          "$GITHUB_WORKSPACE/zig-out/bin/llm-cost" ci-action \
+            --manifest llm-cost.toml \
+            --base "$BASELINE_SHA" \
+            --budget 0.00000001 \
+            --no-comment
+          EXIT_CODE=$?
+          set -e
+
+          if [ "$EXIT_CODE" -ne 2 ]; then
+            echo "Expected exit code 2 (Budget), got $EXIT_CODE"
+            exit 1
+          fi
+          echo "PASS: Budget gate working."

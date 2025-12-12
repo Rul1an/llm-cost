@@ -1,5 +1,21 @@
 # Changelog
 
+## [v1.1.1] - Hardening
+### Added
+- **Determinism (RFC 8785-inspired)**:
+    - Implemented Canonical JSON Writer for stable object key sorting.
+    - Prompts in `estimate` and tags in `export` are now strictly sorted by ID/Key.
+    - Fixed-point cost precision in JSON outputs.
+- **Input Hardening**:
+    - Pricing DB parser enforces `MAX_JSON_SIZE` (10MB) and `MAX_MODELS` (1000).
+    - Minisign verifier adheres to strict line length limits to prevent parser exploits.
+- **Release Integrity**:
+    - Binary checksums (`checksums.txt`) included in release assets.
+    - SLSA Provenance generation using `actions/attest-build-provenance@v2`.
+
+### Fixed
+- **Determinism**: Eliminated non-deterministic JSON field ordering in `diff` and `estimate` commands.
+
 ## [v1.0.1] - FOCUS Hardening
 ### Added
 - **Deterministic FOCUS Export**:

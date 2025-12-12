@@ -136,7 +136,7 @@ jobs:
             zig-out/bin/${{ matrix.binary }}
 
       - name: Attest Build Provenance
-        uses: actions/attest-build-provenance@92c65d2898f1f53cfdc910b962cecff86e7f8fcc # v1
+        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aeb632205d63c5005 # v2.2.0
         with:
           subject-path: "zig-out/bin/${{ matrix.binary }}"
 
@@ -173,10 +173,34 @@ jobs:
         with:
           path: artifacts
 
+      - name: Generate Checksums
+        run: |
+          # Flatten artifacts and generate checksums.txt
+          mkdir -p release_assets
+
+          # Iterate over downloaded artifact dirs
+          for dir in artifacts/*-signed; do
+            # The dir name is "llm-cost-<suffix>-signed"
+            # Inside is "llm-cost-<suffix>" binary + sigs
+            # We want to move everything to release_assets
+            cp "$dir"/* release_assets/
+          done
+
+          cd release_assets
+          # Generate checksums for binaries (exclude .sig, .crt, .cdx.json)
+          # Spec requires shasum format: "<hash>  <filename>"
+          shasum -a 256 llm-cost-* | grep -v "\." > checksums.txt
+
+          # Verify content
+          cat checksums.txt
+        shell: bash
+
       - name: Create Release
         uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.0.8
         with:
-          files: artifacts/**/*
+          files: |
+            release_assets/*
+            release_assets/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

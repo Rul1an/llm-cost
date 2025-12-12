@@ -11,7 +11,7 @@
 ## Features
 
 - **Performance**: ~10 MB/s throughput on single core.
-- **Offline**: Embedded pricing and vocabulary; no value is sent over the network.
+- **Offline-First**: No API keys, no telemetry, and **no network calls** during estimation. Only the Pricing DB update requires network (explicit command).
 - **Portable**: Static binary distribution for Linux, macOS, and Windows.
 - **Parity**: Validated against `tiktoken` using edge-case corpora (Unicode, Whitespace).
 - **Control**: Enforce cost limits via pipe mode.
@@ -31,6 +31,56 @@ cd llm-cost
 zig build -Doptimize=ReleaseFast
 cp zig-out/bin/llm-cost /usr/local/bin/
 ```
+
+## Quick Start
+
+### 1. Initialize
+
+```bash
+llm-cost init
+```
+
+This creates a `llm-cost.toml` manifest discovering your prompt files.
+
+### 2. Configure (Example)
+
+```toml
+[defaults]
+model = "gpt-4o-mini"
+
+[[prompts]]
+path = "prompts/search.txt"
+prompt_id = "search"
+tags = { team = "prod" }
+```
+
+### 3. CI/CD Integration (GitHub Action)
+
+Add `.github/workflows/llm-cost.yml` to enforce budgets in PRs.
+
+```yaml
+name: LLM Cost Check
+on: [pull_request]
+
+permissions:
+  contents: read
+  pull-requests: write # Required for sticky comments
+
+jobs:
+  cost:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for git history baseline
+
+      - uses: llm-cost/action@v1
+        with:
+          budget: "10.00"
+          fail-on-increase: "true"
+```
+
+See [docs/guide/github-action.md](docs/guide/github-action.md) for full options.
 
 ## Usage
 
@@ -52,6 +102,12 @@ llm-cost estimate --model gpt-4o --input-tokens 5000 --output-tokens 200
 ```bash
 llm-cost report --model gpt-4o --json my_corpus.txt
 # Output: {"stats":{...}, "metrics":{"bytes_per_token":4.2, "tokens_per_word":1.3}}
+```
+
+**Analyze Differences (Git)**
+```bash
+# Compare cost of local changes vs main branch
+llm-cost diff --base main --format markdown
 ```
 
 **Pipeline Integration**
@@ -81,7 +137,7 @@ Project documentation follows the [Diátaxis](https://diataxis.fr/) structure.
 
 | Type | Content |
 |------|---------|
-| **Guides** | [CI Integration](docs/guides/ci-integration.md), [Release Verification](docs/guides/verification.md) |
+| **Guides** | [GitHub Action](docs/guide/github-action.md), [CI Integration](docs/guides/ci-integration.md), [Release Verification](docs/guides/verification.md) |
 | **Reference** | [CLI Commands](docs/explanation/cli.md), [Benchmarks](docs/reference/benchmarks.md), [Man Page](docs/reference/llm-cost.1) |
 | **Explanation** | [Architecture](docs/explanation/architecture.md), [Security Policy](SECURITY.md) |
 
