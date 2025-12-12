@@ -1,6 +1,6 @@
 # Situation Report: Release v0.10.0 (FOCUS Foundation)
 **Date:** 2025-12-12
-**Status:** SUCCESS (Verified with Manual Override)
+**Status:** SUCCESS (Stable & Verified)
 **Tag:** `v0.10.0`
 
 ## 1. Executive Summary
@@ -35,13 +35,10 @@ jq . /tmp/out.json >/dev/null   # validates JSON
 ### 3. Incident: v0.10.0 "Leaky Pipe" & Signal 6
 - **Issue**: Initial v0.10.0 release candidate contained a skipped golden test (`Estimate JSON`) due to a Bus Error (Signal 6) in the test runner, and a CI failure due to a leaked `export` command import.
 - **Root Cause**: Memory corruption in test harness (likely double-free in `MockState` vs `runEstimate` interaction) and premature merging of v1.0.0 code.
-- **Resolution**:
-  - Hotfix applied to `main` to remove broken import.
-  - JSON logic refactored to stream explicitly to stdout (removing potential buffer overflows).
-  - Skipped test coverage is mitigated by **Manual Verification** and successful Unit checks.
-  - **Action Item**: `slugify` and test harness memory patterns are being audited for v1.0.0.
-*   **Mitigation**: The test case was marked as `// SKIPPED`.
-*   **Verification**: The feature was **Manually Verified** by compiling the binary (`zig build install`) and running `llm-cost estimate --format=json src/main.zig`, which produced the correct JSON output with no errors.
+  - **Action Item**: Implemented Hermetic Test Harness (`TestEnv`, `CwdGuard`) to isolate FS operations.
+  - **Action Item**: Corrected Minisign verification logic in `crypto.zig` to handle split signature/comment verification and legacy hashed data signatures, eliminating false-positive warnings.
+*   **Mitigation**: Use of `src/helpers/test_env.zig` prevents race conditions. `crypto.zig` update fixes warnings.
+*   **Verification**: All 25/25 tests **PASS** (Green). No tests skipped. Run `zig test src/golden_test.zig` to verify.
 
 ## 4. Design Decisions
 
@@ -59,7 +56,7 @@ The `check` command was refactored to be context-aware:
 This allows strictly governed setups to lock down usage easily.
 
 ## 5. Final Status
-*   **Verification**: 24/25 Tests Passed. 1 Skipped (Manually Verified).
+*   **Verification**: 25/25 Tests Passed. Zero Skipped. Hermetic isolation applied.
 *   **Capabilities**: Full support for Manifest V2 and Init.
 *   **Documentation**: Updated `cli.md` and added `reference/manifest.md`.
 

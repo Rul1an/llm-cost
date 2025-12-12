@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // Main executable
-    const version = std.SemanticVersion{ .major = 0, .minor = 7, .patch = 1 };
+    const version = std.SemanticVersion{ .major = 0, .minor = 10, .patch = 1 };
     const exe = b.addExecutable(.{
         .name = "llm-cost",
         .root_source_file = b.path("src/main.zig"),

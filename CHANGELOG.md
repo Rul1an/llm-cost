@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.10.1] - Stability Patch
+### Fixed
+- **Golden Tests**: Resolved "Signal 6" crash by implementing hermetic test environments (`TestEnv`, `CWDAccess`).
+- **Security**: Fixed Minisign verification warning ("Trusted comment verification failed") by correctly handling legacy hashed signatures and "bare" comment signatures.
+- **Memory**: Fixed memory leak in test harness initialization.
+
 ## [v0.10.0] - FOCUS Foundation
 ### Added
 - **Manifest V2**: Upgraded `llm-cost.toml` schema to support `[[prompts]]` (Array of Tables), `[defaults]`, and `tags`.
