@@ -136,7 +136,7 @@ jobs:
             zig-out/bin/${{ matrix.binary }}
 
       - name: Attest Build Provenance
-        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aeb632205d63c5005 # v2.2.0
+        uses: actions/attest-build-provenance@v1
         with:
           subject-path: "zig-out/bin/${{ matrix.binary }}"
 
