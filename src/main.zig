@@ -8,8 +8,11 @@ const report = @import("report.zig");
 const analytics = @import("analytics/mod.zig");
 const update = @import("update.zig");
 const check = @import("check.zig");
+const init = @import("init.zig");
+const manifest = @import("core/manifest.zig");
+const resource_id = @import("core/resource_id.zig");
 
-pub const version_str = "0.9.0";
+pub const version_str = "0.10.0";
 
 // --- CLI State (Now Public) ---
 pub const GlobalState = struct {
@@ -80,6 +83,8 @@ pub fn main() !void {
     } else if (std.mem.eql(u8, command, "check")) {
         const exit_code = try check.run(state.allocator, args[2..], state.registry, state.stdout, state.stderr);
         if (exit_code != 0) std.process.exit(exit_code);
+    } else if (std.mem.eql(u8, command, "init")) {
+        try init.run(state.allocator, args[2..], std.io.getStdIn().reader(), state.stdout);
     } else {
         try stderr.print("Error: Unknown command '{s}'\n\n", .{command});
         try printUsage(stderr);
@@ -162,10 +167,12 @@ pub fn runModels(state: GlobalState, args: []const []const u8) !void {
 
 pub fn runEstimate(state: GlobalState, args: []const []const u8) !void {
     var model_name: []const u8 = "gpt-4o";
-    var file_path: ?[]const u8 = null;
     var input_tokens_arg: ?u64 = null;
     var output_tokens_arg: ?u64 = null;
     var reasoning_tokens_arg: u64 = 0;
+    var format_json = false;
+    var input_files = std.ArrayList([]const u8).init(state.allocator);
+    defer input_files.deinit();
 
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
@@ -186,44 +193,174 @@ pub fn runEstimate(state: GlobalState, args: []const []const u8) !void {
             if (i + 1 >= args.len) return error.MissingArgument;
             reasoning_tokens_arg = try std.fmt.parseInt(u64, args[i + 1], 10);
             i += 1;
+        } else if (std.mem.eql(u8, arg, "--format=json") or std.mem.eql(u8, arg, "--json")) {
+            format_json = true;
         } else if (!std.mem.startsWith(u8, arg, "-")) {
-            file_path = arg;
+            try input_files.append(arg);
         }
     }
+
+    // Load Manifest (for ResourceID resolution)
+    var policy = manifest.Policy{};
+    const cwd = std.fs.cwd();
+    if (cwd.readFileAlloc(state.allocator, "llm-cost.toml", 1024 * 1024)) |content| {
+        defer state.allocator.free(content);
+        policy = try manifest.parse(state.allocator, content);
+    } else |_| {}
+    defer policy.deinit(state.allocator);
 
     const price_def = state.registry.get(model_name) orelse {
         try state.stderr.print("Error: Unknown model '{s}'. Run 'llm-cost models' to list available models.\n", .{model_name});
         std.process.exit(1);
     };
 
-    var token_count: u64 = 0;
-    if (input_tokens_arg != null) {
-        token_count = input_tokens_arg.?;
-    } else {
-        const input_text = if (file_path) |path| blk: {
-            const file = try std.fs.cwd().openFile(path, .{});
-            defer file.close();
-            break :blk try file.readToEndAlloc(state.allocator, 1024 * 1024 * 10);
-        } else blk: {
-            // Testing note: this reads stdin. runEstimate test should mock this or use --input-tokens
-            break :blk try std.io.getStdIn().readToEndAlloc(state.allocator, 1024 * 1024 * 10);
-        };
+    var total_cost: f64 = 0.0;
+
+    // JSON Output Structures
+    const PromptResult = struct {
+        path: []const u8,
+        resource_id: []const u8,
+        resource_id_source: []const u8,
+        model: []const u8,
+        input_tokens: u64,
+        output_tokens: u64,
+        cost_usd: f64,
+    };
+    var results = std.ArrayList(PromptResult).init(state.allocator);
+    defer results.deinit();
+    // Note: contents of results refer to slices we need to manage if we duped them.
+    // For simplicity in CLI we rely on arena or careful duping.
+    // Here we will dupe resource_id strings.
+
+    // If no files provided, verify if stdin intended or error
+    if (input_files.items.len == 0 and input_tokens_arg == null) {
+        // Read from STDIN
+        const input_text = try std.io.getStdIn().readToEndAlloc(state.allocator, 1024 * 1024 * 10);
         defer state.allocator.free(input_text);
 
+        var token_count: u64 = 0;
         if (input_text.len > 0) {
+             const tokenizer_config = try engine.resolveConfig(model_name);
+             token_count = try engine.countTokens(state.allocator, input_text, tokenizer_config);
+        }
+
+        const cost = Pricing.Registry.calculate(price_def, token_count, output_tokens_arg orelse 0, reasoning_tokens_arg);
+        total_cost += cost;
+
+        // ResourceID for STDIN
+        var rid = try resource_id.derive(state.allocator, null, null, input_text);
+        defer rid.deinit(state.allocator);
+
+        if (format_json) {
+            try results.append(.{
+                .path = "stdin",
+                .resource_id = try state.allocator.dupe(u8, rid.value), // Must own for results list? Or just leak to end?
+                .resource_id_source = @tagName(rid.source),
+                .model = model_name,
+                .input_tokens = token_count,
+                .output_tokens = output_tokens_arg orelse 0,
+                .cost_usd = cost,
+            });
+        } else {
+             try state.stdout.print("Model:       {s}\n", .{model_name});
+             try state.stdout.print("Tokens In:   {d}\n", .{token_count});
+             if ((output_tokens_arg orelse 0) > 0) try state.stdout.print("Tokens Out:  {d}\n", .{output_tokens_arg orelse 0});
+             try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
+             try state.stdout.print("Resource ID: {s} ({s})\n", .{rid.value, @tagName(rid.source)});
+        }
+    } else if (input_tokens_arg != null) {
+        // Direct token count mode
+         const cost = Pricing.Registry.calculate(price_def, input_tokens_arg.?, output_tokens_arg orelse 0, reasoning_tokens_arg);
+         total_cost += cost;
+         if (!format_json) {
+             try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
+         } else {
+             // JSON for explicit tokens?
+             try results.append(.{
+                .path = "manual-tokens",
+                .resource_id = "manual",
+                .resource_id_source = "manual",
+                .model = model_name,
+                .input_tokens = input_tokens_arg.?,
+                .output_tokens = output_tokens_arg orelse 0,
+                .cost_usd = cost,
+            });
+         }
+    } else {
+        // Process Files
+        for (input_files.items) |path| {
+            // Read file
+            const content = cwd.readFileAlloc(state.allocator, path, 10 * 1024 * 1024) catch |err| {
+                try state.stderr.print("Error reading {s}: {s}\n", .{ path, @errorName(err) });
+                continue;
+            };
+            defer state.allocator.free(content);
+
             const tokenizer_config = try engine.resolveConfig(model_name);
-            token_count = try engine.countTokens(state.allocator, input_text, tokenizer_config);
+            const token_count = try engine.countTokens(state.allocator, content, tokenizer_config);
+            const cost = Pricing.Registry.calculate(price_def, token_count, output_tokens_arg orelse 0, reasoning_tokens_arg);
+            total_cost += cost;
+
+            // ResourceID Resolution
+
+            // Check Manifest first
+            var manifest_id: ?[]const u8 = null;
+            if (policy.prompts) |prompts| {
+                for (prompts) |p| {
+                     if (std.mem.eql(u8, p.path, path)) {
+                         manifest_id = p.prompt_id;
+                         break;
+                     }
+                }
+            }
+
+            var rid = try resource_id.derive(state.allocator, manifest_id, path, content);
+            // We need to keep rid valid.
+            // For JSON list, we dup.
+
+            if (format_json) {
+                try results.append(.{
+                    .path = path,
+                    .resource_id = try state.allocator.dupe(u8, rid.value),
+                    .resource_id_source = @tagName(rid.source), // enum tag name is static
+                    .model = model_name,
+                    .input_tokens = token_count,
+                    .output_tokens = output_tokens_arg orelse 0,
+                    .cost_usd = cost,
+                });
+            } else {
+                 try state.stdout.print("File:        {s}\n", .{path});
+                 try state.stdout.print("Tokens In:   {d}\n", .{token_count});
+                 try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
+                 try state.stdout.print("Resource ID: {s} ({s})\n\n", .{rid.value, @tagName(rid.source)});
+            }
+            rid.deinit(state.allocator);
         }
     }
 
-    const out_tok = output_tokens_arg orelse 0;
-    const cost = Pricing.Registry.calculate(price_def, token_count, out_tok, reasoning_tokens_arg);
+    if (format_json) {
+        // Manual JSON construction to avoid struct serialization issues with derived values
+        try state.stdout.print("{{\n  \"prompts\": [\n", .{});
+        for (results.items, 0..) |res, idx| {
+            try state.stdout.print("    {{\n", .{});
+            try state.stdout.print("      \"path\": \"{s}\",\n", .{res.path});
+            try state.stdout.print("      \"resource_id\": \"{s}\",\n", .{res.resource_id});
+            try state.stdout.print("      \"resource_id_source\": \"{s}\",\n", .{res.resource_id_source});
+            try state.stdout.print("      \"model\": \"{s}\",\n", .{res.model});
+            try state.stdout.print("      \"input_tokens\": {d},\n", .{res.input_tokens});
+            try state.stdout.print("      \"output_tokens\": {d},\n", .{res.output_tokens});
+            try state.stdout.print("      \"cost_usd\": {d:.6}\n", .{res.cost_usd});
+            try state.stdout.print("    }}{s}\n", .{if (idx < results.items.len - 1) "," else ""});
 
-    try state.stdout.print("Model:       {s}\n", .{model_name});
-    try state.stdout.print("Tokens In:   {d}\n", .{token_count});
-    if (out_tok > 0) try state.stdout.print("Tokens Out:  {d}\n", .{out_tok});
-    if (reasoning_tokens_arg > 0) try state.stdout.print("Tokens Reas: {d}\n", .{reasoning_tokens_arg});
-    try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
+            // Cleanup duped strings
+            if (!std.mem.eql(u8, res.resource_id, "manual")) state.allocator.free(res.resource_id);
+        }
+        try state.stdout.print("  ],\n", .{});
+        try state.stdout.print("  \"total_cost_usd\": {d:.6}\n", .{total_cost});
+        try state.stdout.print("}}\n", .{});
+    } else if (input_files.items.len > 1) {
+         try state.stdout.print("Total Cost:  ${d:.6}\n", .{total_cost});
+    }
 }
 
 fn stringLessThan(_: void, a: []const u8, b: []const u8) bool {

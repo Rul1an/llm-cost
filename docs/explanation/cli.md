@@ -62,8 +62,21 @@ llm-cost estimate --model <model> [counts]
 # Estimate cost for a large job
 llm-cost estimate -m gpt-4o --input-tokens 1000000 --output-tokens 50000
 
-# High-reasoning workload
-llm-cost estimate -m o1 --input-tokens 500 --output-tokens 2000 --reasoning-tokens 5000
+# JSON output with Resource ID (FOCUS compatible)
+llm-cost estimate --format json prompts/login.txt
+# Output:
+# {
+#   "prompts": [
+#     {
+#       "path": "prompts/login.txt",
+#       "resource_id": "prompts-login-txt",
+#       "resource_id_source": "path_slug",
+#       "model": "gpt-4o",
+#       ...
+#     }
+#   ],
+#   "total_cost_usd": 0.005
+# }
 ```
 
 ### 3. `pipe`
@@ -132,8 +145,13 @@ llm-cost check [--model <model>] [files...]
 ```
 
 **Arguments:**
-*   `--model, -m`: (Optional) Override model for cost estimation (default: `gpt-4o` or as defined in manifest).
-*   `[files]`: List of prompt files to scan.
+*   `--model, -m`: (Optional) Override model for cost estimation (default: `[defaults].model` > `gpt-4o`).
+*   `[files]`: List of prompt files to scan. If omitted, scans all prompts listed in `llm-cost.toml`.
+
+**Behavior:**
+*   **Manifest Mode**: If no files are provided, iterates over `[[prompts]]` defined in `llm-cost.toml`.
+*   **Mixed Mode**: If files are provided, validates them using CLI model or default model. Manifest prompts are ignored unless explicitly passed.
+*   **Soft Check**: If no manifest exists, proceeds with CLI args. Can be bootstrapped via `llm-cost init`.
 
 **Exit Codes:**
 *   `0`: Success (Within budget/policy).
@@ -147,9 +165,25 @@ max_cost_usd = 5.00
 
 [policy]
 allowed_models = ["gpt-4o-mini", "claude-3-haiku"]
+
+[[prompts]]
+path = "prompts/search.txt"
+prompt_id = "search-prompt"
 ```
 
-### 7. `update-db`
+### 7. `init`
+Interactively scaffolds an `llm-cost.toml` configuration file. It scans the directory for prompt files, generates stable `prompt_id`s (slugs), and creates a best-practice configuration.
+
+**Usage:**
+```bash
+llm-cost init [--dir <path>] [--non-interactive]
+```
+
+**Arguments:**
+*   `--dir`: Directory to scan for prompts (default: current directory).
+*   `--non-interactive`: Skip confirmation prompts and write immediately.
+
+### 8. `update-db`
 Securely updates the pricing database from the official registry.
 
 **Usage:**
@@ -162,7 +196,7 @@ llm-cost update-db
 2.  Verifies the Ed25519 signature against the embedded public key.
 3.  Atomically upgrades the local cache (`~/.cache/llm-cost/` or equivalent).
 
-### 8. `models`
+### 9. `models`
 Lists all supported models and their current pricing rates (embedded in the binary).
 
 **Usage:**

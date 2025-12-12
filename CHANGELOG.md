@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.10.0] - FOCUS Foundation
+### Added
+- **Manifest V2**: Upgraded `llm-cost.toml` schema to support `[[prompts]]` (Array of Tables), `[defaults]`, and `tags`.
+- **Identity**: Implemented stable `resource_id` derivation (Manifest ID > Path Slug > Content Hash) for FOCUS compliance.
+- **Init Command**: New `llm-cost init` interactive wizard to discover prompts and generate configuration.
+- **Estimate JSON**: `llm-cost estimate --format json` now outputs structured data including `resource_id` and `cost_usd`.
+
+### Changed
+- **Check Command**: Now operates in "mixed mode" — supports both explicit manifest prompts and CLI inputs with policy validation.
+- **Docs**: Added `docs/reference/manifest.md` and updated `cli.md`.
+
 ## [v0.9.0] - Secure Updates & Governance
 ### Added
 - **Secure Updates**: `llm-cost update-db` command downloads and verifies pricing database via Minisign (Client-Side).
