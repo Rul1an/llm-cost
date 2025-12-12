@@ -169,7 +169,7 @@ fn parseMinisignFile(allocator: std.mem.Allocator, content: []const u8) !Minisig
     if (csig_line) |l| {
         // Try parsing as standard record first
         if (parseSigRecord74(l)) |csig_rec| {
-             if (csig_rec.key_id != sig_rec.key_id) {
+            if (csig_rec.key_id != sig_rec.key_id) {
                 std.log.warn("Minisign: comment signature key_id mismatch.", .{});
             } else {
                 comment_signature = csig_rec.sig;
@@ -177,10 +177,10 @@ fn parseMinisignFile(allocator: std.mem.Allocator, content: []const u8) !Minisig
         } else |_| {
             // Fallback: Try parsing as bare signature
             if (parseBareSig64(l)) |bare_sig| {
-                 comment_signature = bare_sig.toBytes();
+                comment_signature = bare_sig.toBytes();
             } else |_| {
                 // Both failed -> InvalidFormat
-                 return error.InvalidFormat;
+                return error.InvalidFormat;
             }
         }
     }
