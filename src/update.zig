@@ -44,7 +44,7 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !void {
 
     // 4. Verify Integrity (Security First)
     std.debug.print("Verifying signature... ", .{});
-    Pricing.Registry.verify(db_body, sig_body) catch |err| {
+    Pricing.Crypto.verify(allocator, db_body, sig_body) catch |err| {
         std.debug.print("FAILED!\n", .{});
         std.log.err("Security Integrity Check Failed: {s}", .{@errorName(err)});
         std.log.err("The downloaded update is invalid or tampered with. Aborting update.", .{});

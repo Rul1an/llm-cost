@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // Main executable
-    const version = std.SemanticVersion{ .major = 0, .minor = 7, .patch = 1 };
+    const version = std.SemanticVersion{ .major = 0, .minor = 10, .patch = 1 };
     const exe = b.addExecutable(.{
         .name = "llm-cost",
         .root_source_file = b.path("src/main.zig"),
@@ -87,10 +87,12 @@ pub fn build(b: *std.Build) void {
     parity_runner_step.dependOn(&run_parity_runner.step);
 
     // Golden Tests (CLI Contract)
+    // Golden Tests (CLI Contract)
     const golden_tests = b.addTest(.{
         .root_source_file = b.path("src/golden_test.zig"),
         .target = target,
         .optimize = optimize,
+        .single_threaded = true,
     });
     const run_golden_tests = b.addRunArtifact(golden_tests);
     const golden_step = b.step("test-golden", "Run CLI contract golden tests");

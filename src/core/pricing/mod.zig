@@ -1,10 +1,11 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-// Public Key (Base64) - Minisign
-const RELEASE_PUBKEY_B64 = "RWQlMFKYcN36NSyucoSch4tDfC/U/giAHdYklLaCOKZ+9PtYNdjO2Urw";
+pub const Crypto = @import("crypto.zig");
+// Public Key moved to crypto.zig
 
 // Time limits (seconds)
+
 const CRITICAL_AGE_SECONDS = 90 * 24 * 60 * 60; // 90 days
 
 const StaleStatus = enum { Fresh, Warning, Critical };
@@ -64,7 +65,7 @@ pub const Registry = struct {
         defer allocator.free(sig_content);
 
         // Security First: Verify before parsing
-        try verify(db_content, sig_content);
+        try Crypto.verify(allocator, db_content, sig_content);
 
         // Parse & Check Stale
         var parsed = try std.json.parseFromSlice(std.json.Value, allocator, db_content, .{});
@@ -98,7 +99,7 @@ pub const Registry = struct {
         const db_content = @embedFile("pricing_db.json");
         const sig_content = @embedFile("pricing_db.json.sig");
 
-        verify(db_content, sig_content) catch |err| {
+        Crypto.verify(allocator, db_content, sig_content) catch |err| {
             std.log.err("Minisign verification failed on EMBEDDED database! This indicates a corrupted binary or tampering.", .{});
             return err;
         };
@@ -139,6 +140,10 @@ pub const Registry = struct {
                 // Duplicate provider string because source buffer is transient (in loadFromCache)
                 if (!std.mem.eql(u8, def.value.provider, "Unknown")) {
                     def.value.provider = try allocator.dupe(u8, def.value.provider);
+                } else {
+                    // Critical: Point to static "Unknown" so it survives arena deinit
+                    // and matches the deinit check logic (which skips free for "Unknown")
+                    def.value.provider = "Unknown";
                 }
 
                 try map.put(try allocator.dupe(u8, entry.key_ptr.*), def.value);
@@ -172,84 +177,7 @@ pub const Registry = struct {
         return null;
     }
 
-    /// Step 1: Public Verify (Refactored)
-    pub fn verify(msg: []const u8, sig_file_content: []const u8) !void {
-        const Base64 = std.base64.standard.Decoder;
-        const Signature = std.crypto.sign.Ed25519.Signature;
-        const PublicKey = std.crypto.sign.Ed25519.PublicKey;
-
-        // 1. Parse Lines
-        var lines = std.mem.tokenizeSequence(u8, sig_file_content, "\n");
-        _ = lines.next(); // Skip Untrusted
-
-        const file_sig_b64 = lines.next() orelse return error.InvalidSignatureFormat;
-        const trusted_comment_line = lines.next() orelse return error.InvalidSignatureFormat;
-        const global_sig_b64 = lines.next() orelse return error.InvalidSignatureFormat;
-
-        // 2. Decode Crypto Material
-        var buf_256: [256]u8 = undefined;
-        var buf_128: [128]u8 = undefined;
-
-        // Public Key
-        const key_len = try Base64.calcSizeForSlice(RELEASE_PUBKEY_B64);
-        try Base64.decode(buf_128[0..key_len], RELEASE_PUBKEY_B64);
-        if (key_len < 42) return error.InvalidKeyLength;
-        const pub_key_id = buf_128[2..10];
-        const pub_key = try PublicKey.fromBytes(buf_128[10..42].*);
-
-        // File Sig
-        const file_sig_len = try Base64.calcSizeForSlice(file_sig_b64);
-        try Base64.decode(buf_256[0..file_sig_len], file_sig_b64);
-        if (file_sig_len < 74) return error.InvalidSignatureLength;
-
-        const raw_file_sig = buf_256[10..74];
-        const sig_of_file = Signature.fromBytes(raw_file_sig[0..64].*);
-
-        if (!std.mem.eql(u8, buf_256[2..10], pub_key_id)) return error.KeyIdMismatch;
-
-        // Global Sig
-        const global_sig_len = try Base64.calcSizeForSlice(global_sig_b64);
-        try Base64.decode(buf_256[0..global_sig_len], global_sig_b64);
-
-        var raw_global_sig: []const u8 = undefined;
-        if (global_sig_len == 64) {
-            raw_global_sig = buf_256[0..64];
-        } else if (global_sig_len == 74) {
-            if (!std.mem.eql(u8, buf_256[2..10], pub_key_id)) return error.KeyIdMismatch;
-            raw_global_sig = buf_256[10..74];
-        } else {
-            return error.InvalidSignatureLength;
-        }
-
-        const sig_of_global = Signature.fromBytes(raw_global_sig[0..64].*);
-
-        // 3. EXTRACT TRUSTED COMMENT
-        const prefix = "trusted comment: ";
-        if (!std.mem.startsWith(u8, trusted_comment_line, prefix)) return error.InvalidCommentPrefix;
-        const payload_raw = trusted_comment_line[prefix.len..];
-        const payload_trimmed = std.mem.trimRight(u8, payload_raw, " \t\r\n");
-
-        // 4. CRITICAL: VERIFY FILE INTEGRITY (Hash)
-        var hash: [64]u8 = undefined;
-        std.crypto.hash.blake2.Blake2b512.hash(msg, &hash, .{});
-        try sig_of_file.verify(&hash, pub_key);
-
-        // 5. SECONDARY: VERIFY METADATA (Global Chain)
-        // Assume pure signature + payload + newline
-        var global_buf: [512]u8 = undefined;
-        const total_len = 64 + payload_trimmed.len + 1;
-
-        if (total_len > global_buf.len) return error.CommentTooLarge;
-
-        std.mem.copyForwards(u8, global_buf[0..64], raw_file_sig); // Use raw_file_sig (64 bytes)
-        std.mem.copyForwards(u8, global_buf[64..][0..payload_trimmed.len], payload_trimmed);
-        global_buf[64 + payload_trimmed.len] = '\n'; // Add newline
-
-        sig_of_global.verify(global_buf[0..total_len], pub_key) catch {
-            // We treat this as a warning for now, as file integrity is verified handled
-            std.log.warn("Minisign: Trusted comment verification failed. Data is valid but metadata may be forged.", .{});
-        };
-    }
+    // Verify extracted to crypto.zig (Crypto.verify)
 
     pub fn deinit(self: *Registry) void {
         var it = self.models.iterator();

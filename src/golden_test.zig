@@ -4,24 +4,43 @@ const Pricing = @import("core/pricing/mod.zig");
 const pipe = @import("pipe.zig");
 const tokenizer_mod = @import("tokenizer/mod.zig");
 
-// --- Mock Infrastructure ---
+// Helper imports
+const TestEnv = @import("helpers/test_env.zig").TestEnv;
+const withTempCwd = @import("helpers/cwd_guard.zig").withTempCwd;
+
+// --- Hermetic Environments ---
 const MockState = struct {
     allocator: std.mem.Allocator,
     registry: *Pricing.Registry,
     stdout_buf: std.ArrayList(u8),
     stderr_buf: std.ArrayList(u8),
+    // Stable storage for Writer structs to safely point .any() to them
+    stdout_w: std.ArrayList(u8).Writer,
+    stderr_w: std.ArrayList(u8).Writer,
 
-    pub fn init(allocator: std.mem.Allocator) !MockState {
+    pub fn init(allocator: std.mem.Allocator) !*MockState {
+        // Usage: Return pointer to heap-allocated struct so internal writer pointers remain valid
+        const self = try allocator.create(MockState);
+        errdefer allocator.destroy(self);
+
         // Initialize real registry (triggers Minisign verification)
         const registry = try allocator.create(Pricing.Registry);
+        errdefer allocator.destroy(registry);
         registry.* = try Pricing.Registry.init(allocator, .{});
 
-        return MockState{
+        self.* = MockState{
             .allocator = allocator,
             .registry = registry,
             .stdout_buf = std.ArrayList(u8).init(allocator),
             .stderr_buf = std.ArrayList(u8).init(allocator),
+            .stdout_w = undefined,
+            .stderr_w = undefined,
         };
+
+        // Initialize writers pointing to the buffers (stable heap address)
+        self.stdout_w = self.stdout_buf.writer();
+        self.stderr_w = self.stderr_buf.writer();
+        return self;
     }
 
     pub fn deinit(self: *MockState) void {
@@ -29,14 +48,16 @@ const MockState = struct {
         self.allocator.destroy(self.registry);
         self.stdout_buf.deinit();
         self.stderr_buf.deinit();
+        self.allocator.destroy(self);
     }
 
     pub fn toGlobalState(self: *MockState) main_app.GlobalState {
         return .{
             .allocator = self.allocator,
             .registry = self.registry,
-            .stdout = self.stdout_buf.writer().any(),
-            .stderr = self.stderr_buf.writer().any(),
+            // Point to stable writer storage
+            .stdout = self.stdout_w.any(),
+            .stderr = self.stderr_w.any(),
         };
     }
 };
@@ -345,25 +366,29 @@ test "v0.10: Check with Manifest V2 (Arrays)" {
 }
 
 test "v0.10: Estimate JSON Output" {
-    // SKIPPED: Causes Bus Error in test runner environment (signal 6)
-    // Manually verified with: ./zig-out/bin/llm-cost estimate --format=json src/main.zig
-    // SKIPPED: Causes Bus Error in test runner environment (signal 6).
-    // Root cause likely test harness memory corruption.
-    // Feature Manually Verified (see Sitrep v0.10.0).
-    return;
-    // var mock = try MockState.init(std.testing.allocator);
-    // defer mock.deinit();
-    //
-    // try std.fs.cwd().writeFile(.{ .sub_path = "json_test.txt", .data = "abc" });
-    // defer std.fs.cwd().deleteFile("json_test.txt") catch {};
-    //
-    // const args = [_][]const u8{ "--format=json", "json_test.txt" };
-    //
-    // try main_app.runEstimate(mock.toGlobalState(), &args);
-    //
-    // const out = mock.stdout_buf.items;
-    //
-    // try std.testing.expect(std.mem.indexOf(u8, out, "\"prompts\": [") != null);
-    // try std.testing.expect(std.mem.indexOf(u8, out, "\"resource_id\": \"json-test-txt\"") != null);
-    // try std.testing.expect(std.mem.indexOf(u8, out, "\"resource_id_source\": \"path_slug\"") != null);
+    // HERMETIC FIX: Use isolated TestEnv + CwdGuard to prevent FS races and Bus Errors.
+    var env = TestEnv.init(std.testing.allocator);
+    defer env.deinit();
+
+    try env.write("json_test.txt", "abc");
+
+    var mock = try MockState.init(std.testing.allocator);
+    defer mock.deinit();
+
+    const args = [_][]const u8{ "--format=json", "json_test.txt" };
+
+    // Run in sub-process/temp-cwd environment
+    // Use main_app.runEstimate wrapper via withTempCwd
+    // But runEstimate takes GlobalState... we need to adapt it or just run logic.
+    // Actually, runEstimate logic does file reading. So we MUST be in the temp directory.
+
+    // Using withTempCwd to wrap the execution
+    try withTempCwd(std.testing.allocator, env.tmp.dir, main_app.runEstimate, .{ mock.toGlobalState(), &args });
+
+    const out = mock.stdout_buf.items;
+
+    // Minimal JSON check
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"prompts\": [") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"resource_id\": \"json-test-txt\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"resource_id_source\": \"path_slug\"") != null);
 }
