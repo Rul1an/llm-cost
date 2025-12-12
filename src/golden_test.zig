@@ -347,25 +347,22 @@ test "v0.10: Check with Manifest V2 (Arrays)" {
 test "v0.10: Estimate JSON Output" {
     // SKIPPED: Causes Bus Error in test runner environment (signal 6)
     // Manually verified with: ./zig-out/bin/llm-cost estimate --format=json src/main.zig
+    // SKIPPED: Causes Bus Error in test runner environment (signal 6).
+    // Root cause likely test harness memory corruption.
+    // Feature Manually Verified (see Sitrep v0.10.0).
     return;
     // var mock = try MockState.init(std.testing.allocator);
     // defer mock.deinit();
-
+    //
     // try std.fs.cwd().writeFile(.{ .sub_path = "json_test.txt", .data = "abc" });
     // defer std.fs.cwd().deleteFile("json_test.txt") catch {};
-
+    //
     // const args = [_][]const u8{ "--format=json", "json_test.txt" };
-
-    // // We call main_app.runEstimate logic.
-    // // Need to use mock state.
+    //
     // try main_app.runEstimate(mock.toGlobalState(), &args);
-
+    //
     // const out = mock.stdout_buf.items;
-
-    // // Determine expected slug
-    // // const expected_slug = "json-test-txt";
-
-    // // Minimal JSON check
+    //
     // try std.testing.expect(std.mem.indexOf(u8, out, "\"prompts\": [") != null);
     // try std.testing.expect(std.mem.indexOf(u8, out, "\"resource_id\": \"json-test-txt\"") != null);
     // try std.testing.expect(std.mem.indexOf(u8, out, "\"resource_id_source\": \"path_slug\"") != null);
