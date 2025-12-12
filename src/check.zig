@@ -174,7 +174,11 @@ pub fn run(
     }
 
     // 5. Evaluate Budget
-    try stdout.print("✓ {} prompts validated\n", .{prompts_checked});
+    if (prompts_checked == 1) {
+        try stdout.print("✓ {} prompt validated\n", .{prompts_checked});
+    } else {
+        try stdout.print("✓ {} prompts validated\n", .{prompts_checked});
+    }
 
     if (policy.max_cost_usd) |limit| {
         const percent = (total_cost / limit) * 100.0;
