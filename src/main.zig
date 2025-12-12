@@ -85,7 +85,6 @@ pub fn main() !void {
         if (exit_code != 0) std.process.exit(exit_code);
     } else if (std.mem.eql(u8, command, "init")) {
         try init.run(state.allocator, args[2..], std.io.getStdIn().reader(), state.stdout);
-
     } else {
         try stderr.print("Error: Unknown command '{s}'\n\n", .{command});
         try printUsage(stderr);
