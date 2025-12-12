@@ -94,6 +94,8 @@ jobs:
           git checkout -- prompt_a.txt
 
           export GITHUB_TOKEN="fake"
+          export GITHUB_EVENT_PATH="${PWD}/event.json"
+          echo '{"repository":{"full_name":"Rul1an/llm-cost"},"pull_request":{"number":1}}' > event.json
           "$GITHUB_WORKSPACE/zig-out/bin/llm-cost" ci-action \
             --manifest llm-cost.toml \
             --base "$BASELINE_SHA" \
@@ -109,6 +111,8 @@ jobs:
 
           set +e
           export GITHUB_TOKEN="fake"
+          export GITHUB_EVENT_PATH="${PWD}/event.json"
+          echo '{"repository":{"full_name":"Rul1an/llm-cost"},"pull_request":{"number":1}}' > event.json
           "$GITHUB_WORKSPACE/zig-out/bin/llm-cost" ci-action \
             --manifest llm-cost.toml \
             --base "$BASELINE_SHA" \
