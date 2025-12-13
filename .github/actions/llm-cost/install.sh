@@ -110,8 +110,8 @@ detect_os_arch() {
   # URL structure: https://github.com/OWNER/REPO/releases/download/TAG/llm-cost-<suffix>
 
   if [ "${VERSION}" = "latest" ]; then
-     # Resolved later
-     bindownload_url=""
+     BIN_URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
+     CHECKSUMS_URL="https://github.com/${REPO}/releases/latest/download/checksums.txt"
   else
      BIN_URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET}"
      CHECKSUMS_URL="https://github.com/${REPO}/releases/download/${VERSION}/checksums.txt"
