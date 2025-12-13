@@ -122,14 +122,14 @@ Verify releases:
 gh attestation verify llm-cost-linux-amd64 --repo Rul1an/llm-cost
 ```
 
-See [docs/VERIFICATION.md](docs/VERIFICATION.md).
+See [docs/VERIFICATION.md](https://github.com/Rul1an/llm-cost/blob/main/docs/VERIFICATION.md).
 
 ## Documentation
 
-- [CLI Reference](docs/guides/cli.md)
-- [GitHub Action Guide](docs/guides/github-action.md)
-- [FOCUS Export](docs/focus.md)
-- [Security & Verification](docs/VERIFICATION.md)
+- [CLI Reference](https://github.com/Rul1an/llm-cost/blob/main/docs/guides/cli.md)
+- [GitHub Action Guide](https://github.com/Rul1an/llm-cost/blob/main/docs/guides/github-action.md)
+- [FOCUS Export](https://github.com/Rul1an/llm-cost/blob/main/docs/focus.md)
+- [Security & Verification](https://github.com/Rul1an/llm-cost/blob/main/docs/VERIFICATION.md)
 
 ## License
 
