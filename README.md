@@ -47,6 +47,7 @@ This creates a `llm-cost.toml` manifest discovering your prompt files.
 ```toml
 [defaults]
 model = "gpt-4o-mini"
+```
 
 ## GitHub Action
 
@@ -55,15 +56,15 @@ Integrate `llm-cost` into your CI workflow with zero configuration.
 ```yaml
 steps:
   - uses: actions/checkout@v4
-  - uses: Rul1an/llm-cost@v1.1.1
+  - uses: Rul1an/llm-cost/.github/actions/llm-cost@v1
     with:
-      budget: "5.00"          # Fail if total cost > $5.00
+      budget: "10.00"          # Fail if total cost > $10.00
       fail-on-increase: true  # Fail if cost increases vs base branch
-      post-comment: true      # Post cost breakdown as PR comment
 ```
 
 See [action.yml](action.yml) for all inputs (`manifest`, `github-token`, etc.).
 
+```toml
 [[prompts]]
 path = "prompts/search.txt"
 prompt_id = "search"
@@ -90,10 +91,16 @@ jobs:
         with:
           fetch-depth: 0 # Required for git history baseline
 
-      - uses: llm-cost/action@v1
+      # Pin to major version (auto-updates to latest v1.x.x)
+      - uses: Rul1an/llm-cost/.github/actions/llm-cost@v1
         with:
           budget: "10.00"
           fail-on-increase: "true"
+```
+
+**Security Tip**: For high-security pipelines, pin to the exact commit SHA:
+```yaml
+- uses: Rul1an/llm-cost/.github/actions/llm-cost@a1b2c3d4... # SHA of v1.1.2
 ```
 
 See [docs/guides/github-action.md](docs/guides/github-action.md) for full options.
