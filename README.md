@@ -1,87 +1,47 @@
 # llm-cost
 
-[![CI](https://github.com/Rul1an/llm-cost/actions/workflows/ci.yml/badge.svg)](https://github.com/Rul1an/llm-cost/actions/workflows/ci.yml)
-[![License](https://img.shields.io/github/license/Rul1an/llm-cost)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/Rul1an/llm-cost)](https://github.com/Rul1an/llm-cost/releases)
+Static cost analysis for LLM workloads. Estimate spend, enforce budgets, diff costs in CI/CD.
 
-**Offline token counter and cost estimator for LLM Engineering.**
+[![CI](https://github.com/Rul1an/llm-cost/actions/workflows/ci.yml/badge.svg)](https://github.com/Rul1an/llm-cost/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/Rul1an/llm-cost)](https://github.com/Rul1an/llm-cost/releases) [![License](https://img.shields.io/github/license/Rul1an/llm-cost)](LICENSE)
 
-`llm-cost` is a statically linked CLI tool written in Zig. It replicates OpenAI's `tiktoken` logic with memory safety and offline capability. Designed for integration into CI/CD pipelines and infrastructure scripts.
+## 30 Seconds to Value
+```bash
+# No config needed
+llm-cost estimate prompt.txt --model gpt-4o
+```
+```
+prompt.txt
+  Tokens: 1,847 input + 523 output (est.)
+  Cost:   $0.0041 (gpt-4o)
+```
 
-## Features
-
-- **Performance**: ~10 MB/s throughput on single core.
-- **Offline-First**: No API keys, no telemetry, and **no network calls** during estimation. Only the Pricing DB update requires network (explicit command).
-- **Portable**: Static binary distribution for Linux, macOS, and Windows.
-- **Parity**: Validated against `tiktoken` using edge-case corpora (Unicode, Whitespace).
-- **Control**: Enforce cost limits via pipe mode.
-- **FinOps**: Export deterministic cost data (FOCUS 1.0) for Chargeback/Showback.
-- **Governance**: Policy and budget enforcement for CI/CD (`llm-cost check`).
+## See Cache Impact
+```bash
+llm-cost estimate prompt.txt --model gpt-4o --scenario cached --cache-hit-ratio 0.6
+```
+```
+Scenario    Cost      Savings
+default     $0.0052   —
+cached@60%  $0.0033   -37%
+```
 
 ## Installation
-
-**Binaries**
-Stable releases available on [GitHub Releases](https://github.com/Rul1an/llm-cost/releases/latest).
-
-**Source**
-Requires [Zig 0.14.0](https://ziglang.org/download/).
 ```bash
-git clone https://github.com/Rul1an/llm-cost
-cd llm-cost
-zig build -Doptimize=ReleaseFast
-cp zig-out/bin/llm-cost /usr/local/bin/
+curl -sSfL https://get.llm-cost.dev | sh
 ```
 
-## Quick Start
+Or download from [Releases](../../releases).
 
-### 1. Initialize
+## CI/CD Integration
 
-```bash
-llm-cost init
-```
-
-This creates a `llm-cost.toml` manifest discovering your prompt files.
-
-### 2. Configure (Example)
-
-```toml
-[defaults]
-model = "gpt-4o-mini"
-```
-
-## GitHub Action
-
-Integrate `llm-cost` into your CI workflow with zero configuration.
-
-```yaml
-steps:
-  - uses: actions/checkout@v4
-  - uses: Rul1an/llm-cost/.github/actions/llm-cost@v1
-    with:
-      budget: "10.00"          # Fail if total cost > $10.00
-      fail-on-increase: true  # Fail if cost increases vs base branch
-```
-
-See [action.yml](action.yml) for all inputs (`manifest`, `github-token`, etc.).
-
-```toml
-[[prompts]]
-path = "prompts/search.txt"
-prompt_id = "search"
-tags = { team = "prod" }
-```
-
-### 3. CI/CD Integration (GitHub Action)
-
-Add `.github/workflows/llm-cost.yml` to enforce budgets in PRs.
-
+Add budget gates to your PR workflow:
 ```yaml
 name: LLM Cost Check
 on: [pull_request]
 
 permissions:
   contents: read
-  pull-requests: write # Required for sticky comments
+  pull-requests: write
 
 jobs:
   cost:
@@ -89,101 +49,88 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Required for git history baseline
+          fetch-depth: 0
 
-      # Pin to major version (auto-updates to latest v1.x.x)
-      - uses: Rul1an/llm-cost/.github/actions/llm-cost@v1
+      - uses: Rul1an/llm-cost@v1
         with:
           budget: "10.00"
           fail-on-increase: "true"
 ```
 
-**Security Tip**: For high-security pipelines, pin to the exact commit SHA:
+The action posts a sticky comment with cost breakdown and delta vs base branch.
+
+For high-security pipelines, pin to SHA:
 ```yaml
-- uses: Rul1an/llm-cost/.github/actions/llm-cost@74c902dcf4926ee1ff68d6dce70120db6dc3f26c # SHA of v1.1.2
+- uses: Rul1an/llm-cost@74c902dcf4926ee1ff68d6dce70120db6dc3f26c
 ```
 
-See [docs/guides/github-action.md](docs/guides/github-action.md) for full options.
-
-## Usage
-
-**Count Tokens**
+## Project Setup
 ```bash
-# Direct input
-llm-cost count --model gpt-4o --text "Hello world"
-
-# Pipe from file
-cat document.txt | llm-cost count --model gpt-4o
+llm-cost init                      # Generate manifest from prompt files
+llm-cost check --budget 5.00       # Local budget enforcement
+llm-cost diff --base main          # Compare costs vs branch
 ```
 
-**Estimate Cost**
+Example `llm-cost.toml`:
+```toml
+[defaults]
+model = "gpt-4o"
+
+[[prompts]]
+path = "prompts/search.txt"
+prompt_id = "search"
+tags = { team = "platform", app = "search" }
+```
+
+## FinOps Export
+
+Export FOCUS 1.0 CSV for Vantage, CloudZero, or any FOCUS-compliant tool:
 ```bash
-llm-cost estimate --model gpt-4o --input-tokens 5000 --output-tokens 200
+llm-cost export --format focus -o costs.csv
 ```
 
-**Analyze Corpus (Compression & Costs)**
-```bash
-llm-cost report --model gpt-4o --json my_corpus.txt
-# Output: {"stats":{...}, "metrics":{"bytes_per_token":4.2, "tokens_per_word":1.3}}
-```
+Filter and group by `Tags.team`, `Tags.app`, or `Tags.model` in your FinOps dashboard.
 
-**Analyze Differences (Git)**
-```bash
-# Compare cost of local changes vs main branch
-llm-cost diff --base main --format markdown
-```
+## Commands
 
-**Pipeline Integration**
-```bash
-# Fail if cost exceeds $1.00
-cat logs.jsonl | llm-cost pipe --model gpt-4o --max-cost 1.00
+| Command | Purpose |
+|---------|---------|
+| `estimate` | Cost estimate for prompt files |
+| `count` | Token count only |
+| `check` | Budget/policy enforcement |
+| `diff` | Cost comparison between git refs |
+| `export` | FOCUS CSV for FinOps tools |
+| `pipe` | Stream JSON usage → cost output |
+| `update-db` | Refresh pricing database |
 
-# CI/CD Governance (Check inputs against llm-cost.toml)
-llm-cost check prompts/*.txt
-```
+## How It Works
 
-**Maintenance**
-```bash
-# Update pricing database securely
-llm-cost update-db
-```
-
-**FinOps Cost Export**
-```bash
-# Generate deterministic FOCUS v1.0 CSV for Vantage
-llm-cost export --manifest llm-cost.toml > costs.csv
-```
-
-## Documentation
-
-Project documentation follows the [Diátaxis](https://diataxis.fr/) structure.
-
-| Type | Content |
-|------|---------|
-| **Guides** | [GitHub Action](docs/guides/github-action.md), [CI Integration](docs/guides/ci-integration.md), [Release Verification](docs/guides/verification.md) |
-| **Reference** | [CLI Commands](docs/explanation/cli.md), [Benchmarks](docs/reference/benchmarks.md), [Man Page](docs/reference/llm-cost.1) |
-| **Explanation** | [Architecture](docs/explanation/architecture.md), [Security Policy](SECURITY.md) |
-
-## Performance
-
-| Metric | Result (Apple Silicon) |
-|--------|------------------------|
-| **Throughput** | ~10.11 MB/s |
-| **Latency (P99)** | ~0.13 ms (Small Inputs) |
-| **Complexity** | O(N) Linear |
-
-See [docs/reference/benchmarks.md](docs/reference/benchmarks.md) for methodology.
+- **Offline**: No API keys, no telemetry. Network only for explicit `update-db`.
+- **Exact**: BPE tokenizer with tiktoken parity (o200k_base, cl100k_base).
+- **Signed**: Pricing updates verified via Ed25519/minisign.
+- **Fast**: ~10 MB/s throughput, O(N) complexity.
 
 ## Security
 
-Builds adhere to SLSA Level 2 standards.
-- **Secure Boot**: Pricing database verified at runtime via Ed25519 Minisign signatures.
-- **Artifacts**: Signed with Cosign (Keyless via OIDC).
-- **SBOM**: CycloneDX format provided.
-- **Reproducibility**: Deterministic builds.
+- SLSA Level 2 build provenance
+- Artifact attestations via Sigstore
+- Minisign-verified pricing database
+- Zero runtime network calls
 
-See [docs/guides/verification.md](docs/guides/verification.md) for verification steps.
+Verify releases:
+```bash
+gh attestation verify llm-cost-linux-amd64 --repo Rul1an/llm-cost
+```
+
+See [docs/VERIFICATION.md](docs/VERIFICATION.md).
+
+## Documentation
+
+- [CLI Reference](docs/cli.md)
+- [GitHub Action Guide](docs/guides/github-action.md)
+- [FOCUS Export](docs/focus.md)
+- [Security & Verification](docs/VERIFICATION.md)
 
 ## License
 
-MIT © [Rul1an](https://github.com/Rul1an)
+MIT
