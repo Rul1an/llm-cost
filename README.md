@@ -126,7 +126,7 @@ See [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
 ## Documentation
 
-- [CLI Reference](docs/cli.md)
+- [CLI Reference](docs/guides/cli.md)
 - [GitHub Action Guide](docs/guides/github-action.md)
 - [FOCUS Export](docs/focus.md)
 - [Security & Verification](docs/VERIFICATION.md)
