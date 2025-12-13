@@ -100,7 +100,7 @@ jobs:
 
 **Security Tip**: For high-security pipelines, pin to the exact commit SHA:
 ```yaml
-- uses: Rul1an/llm-cost/.github/actions/llm-cost@a1b2c3d4... # SHA of v1.1.2
+- uses: Rul1an/llm-cost/.github/actions/llm-cost@74c902dcf4926ee1ff68d6dce70120db6dc3f26c # SHA of v1.1.2
 ```
 
 See [docs/guides/github-action.md](docs/guides/github-action.md) for full options.
