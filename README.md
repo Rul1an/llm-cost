@@ -96,7 +96,7 @@ jobs:
           fail-on-increase: "true"
 ```
 
-See [docs/guide/github-action.md](docs/guide/github-action.md) for full options.
+See [docs/guides/github-action.md](docs/guides/github-action.md) for full options.
 
 ## Usage
 
@@ -153,7 +153,7 @@ Project documentation follows the [Diátaxis](https://diataxis.fr/) structure.
 
 | Type | Content |
 |------|---------|
-| **Guides** | [GitHub Action](docs/guide/github-action.md), [CI Integration](docs/guides/ci-integration.md), [Release Verification](docs/guides/verification.md) |
+| **Guides** | [GitHub Action](docs/guides/github-action.md), [CI Integration](docs/guides/ci-integration.md), [Release Verification](docs/guides/verification.md) |
 | **Reference** | [CLI Commands](docs/explanation/cli.md), [Benchmarks](docs/reference/benchmarks.md), [Man Page](docs/reference/llm-cost.1) |
 | **Explanation** | [Architecture](docs/explanation/architecture.md), [Security Policy](SECURITY.md) |
 
