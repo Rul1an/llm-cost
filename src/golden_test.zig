@@ -209,8 +209,8 @@ test "Contract: 'price' estimate uses Registry" {
 
     // 1000 tokens, pure input
     const cost = Pricing.Registry.calculate(def, 1000, 0, 0);
-    // 1000 * $5.00 / 1M = $0.005
-    try std.testing.expectApproxEqAbs(@as(f64, 0.005), cost, 0.0000001);
+    // 1000 * $5.00 / 1M = $0.005 = 5000 MicroUSD
+    try std.testing.expectEqual(@as(i128, 5000), cost);
 }
 
 // --- Governance / Check Tests ---

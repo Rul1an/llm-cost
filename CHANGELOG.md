@@ -1,5 +1,9 @@
 # Changelog
 
+## [v1.1.9] - 2025-12-14
+### Fixed
+- **Build**: Resolved compilation error in `src/golden_test.zig` where `i128` cost values were incorrectly compared against `f64` expectations, breaking `zig build test-golden` (and thus CI).
+
 ## [v1.1.8] - 2025-12-14
 ### Fixed
 - **CI Stability**: Restricted `Golden`, `Fuzz`, `Parity`, and `Bench` tests to run only on Linux CI runners (matching `ci.yml`), as they require specific environment consistency not present on Windows/MacOS runners. Unit tests and binary smoke tests remain cross-platform.
