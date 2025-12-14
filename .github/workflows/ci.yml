@@ -36,14 +36,21 @@ jobs:
         with:
           version: 0.14.0
 
-      - name: Run FinOps P0 suite
-        run: bash scripts/finops/run_finops_suite.sh p0
+      - name: Run FinOps Suite (P0)
+        run: ./scripts/finops/run_finops_suite.sh p0
+
+      - name: Render FinOps summary + audit.json
+        run: |
+          FINOPS_MAX_DRIFT_BPS=10 \
+          FINOPS_FOCUS_VERSION=1.1 \
+          FINOPS_FAIL_FAST=true \
+          python3 tools/finops/render_report.py
 
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: finops-reports
+          name: finops-reports-p0
           path: reports/
 
   finops_p1:
@@ -57,14 +64,21 @@ jobs:
         with:
           version: 0.14.0
 
-      - name: Run FinOps P1 suite
-        run: bash scripts/finops/run_finops_suite.sh p1
+      - name: Run FinOps Suite (P1)
+        run: ./scripts/finops/run_finops_suite.sh p1
+
+      - name: Render FinOps summary + audit.json
+        run: |
+          FINOPS_MAX_DRIFT_BPS=10 \
+          FINOPS_FOCUS_VERSION=1.1 \
+          FINOPS_FAIL_FAST=true \
+          python3 tools/finops/render_report.py
 
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: finops-p1-reports
+          name: finops-reports-p1
           path: reports/
 
   lint:
