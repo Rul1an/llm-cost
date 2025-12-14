@@ -1,5 +1,9 @@
 # Changelog
 
+## [v1.1.6] - 2025-12-14
+### Fixed
+- **Windows Support**: Hardened `git` execution by correctly propagating `Path` and `SystemRoot` environment variables, resolving CI test failures on Windows.
+
 ## [v1.1.5] - 2025-12-14
 ### Fixed
 - **Build**: Resolved `unused import` error in `src/determinism_test.zig` causing CI failure.

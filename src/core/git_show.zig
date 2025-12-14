@@ -53,10 +53,20 @@ pub const Context = struct {
         // We must copy PATH from current env if we want to find 'git' via PATH, OR we assume 'git' is absolute (which it isn't here).
         // A safer "SOTA" approach without reimplementing full env copy is strict inheritance or explicitly copying PATH.
         // Let's copy PATH if present.
-        if (std.process.getEnvVarOwned(allocator, "PATH")) |path_val| {
-            defer allocator.free(path_val);
-            try env_map.put("PATH", path_val);
-        } else |_| {} // PATH missing? weird but proceed.
+        // Copy PATH to find git (Cross-platform robust)
+        const path_keys = [_][]const u8{ "PATH", "Path", "path" };
+        for (path_keys) |key| {
+            if (std.process.getEnvVarOwned(allocator, key)) |val| {
+                defer allocator.free(val);
+                try env_map.put(key, val);
+            } else |_| {}
+        }
+
+        // Copy SystemRoot (Required for Windows internal tools/sockets)
+        if (std.process.getEnvVarOwned(allocator, "SystemRoot")) |val| {
+            defer allocator.free(val);
+            try env_map.put("SystemRoot", val);
+        } else |_| {}
 
         if (std.process.getEnvVarOwned(allocator, "HOME")) |home_val| {
             defer allocator.free(home_val);
