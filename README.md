@@ -135,6 +135,17 @@ Filter and group by `Tags.team`, `Tags.app`, or `Tags.model` in your FinOps dash
 - Minisign-verified pricing database
 - Zero runtime network calls
 
+## 🛡️ FinOps Certified (v1.2.2)
+
+`llm-cost` is engineered for **Enterprise FinOps**. It goes beyond simple estimation to provide audit-grade validation.
+
+- **P0/P1 Validation Suite**: Every commit is verified against a rigorous regression test suite covering determinism, schema integrity, and scale (1M+ rows).
+- **Cost Integrity Reporting**: Automated "Cost Integrity Cards" in GitHub Pull Requests report drift (BPS), logic hashes, and PII leakage.
+- **Fail-Fast Policy**: Strict exit codes (`2`) ensures no "garbage-in/garbage-out" in data pipelines.
+- **FOCUS Compliant**: Native support for the FinOps Open Cost & Usage Specification (v1.1).
+
+<img src="https://raw.githubusercontent.com/Rul1an/llm-cost/main/docs/images/finops-report-example.png" alt="FinOps Report" width="600">
+
 Verify releases:
 ```bash
 gh attestation verify llm-cost-linux-amd64 --repo Rul1an/llm-cost
