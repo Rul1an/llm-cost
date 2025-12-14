@@ -102,7 +102,7 @@ def main():
 
     commit = get_env("GITHUB_SHA", get_env("CI_COMMIT_SHA", ""))
     short_commit = commit[:7] if commit else ""
-    tool_version = get_env("LLM_COST_VERSION", "v1.2.2")
+    tool_version = get_env("LLM_COST_VERSION", "v1.3.0")
 
     # Markdown summary
     md_lines = []

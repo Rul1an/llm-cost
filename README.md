@@ -135,7 +135,7 @@ Filter and group by `Tags.team`, `Tags.app`, or `Tags.model` in your FinOps dash
 - Minisign-verified pricing database
 - Zero runtime network calls
 
-## 🛡️ FinOps Certified (v1.2.2)
+## 🛡️ FinOps Certified (v1.3.0)
 
 `llm-cost` is engineered for **Enterprise FinOps**. It goes beyond simple estimation to provide audit-grade validation.
 
