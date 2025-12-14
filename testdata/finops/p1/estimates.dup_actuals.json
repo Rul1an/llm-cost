@@ -1,0 +1,11 @@
+{
+    "version": "1",
+    "prompts": [
+        {
+            "resource_id": "search-query",
+            "model": "model-search-query",
+            "scenario": "default",
+            "cost_micro": 100000000
+        }
+    ]
+}

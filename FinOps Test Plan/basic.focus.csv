@@ -1,0 +1,6 @@
+ChargePeriodStart,ChargePeriodEnd,ResourceId,BilledCost,ChargeCategory,ServiceName,Tags
+2025-01-01,2025-01-31,search-query,62.50,Usage,LLM Inference,"{""team"":""discovery"",""app"":""search"",""model"":""gpt-4o"",""x-cache-hit-ratio"":""0.25"",""x-avg-output-tokens"":""580""}"
+2025-01-01,2025-01-31,summarize-article,48.00,Usage,LLM Inference,"{""team"":""content"",""app"":""cms"",""model"":""gpt-4o"",""x-cache-hit-ratio"":""0.40"",""x-avg-output-tokens"":""350""}"
+2025-01-01,2025-01-31,classify-intent,3.20,Usage,LLM Inference,"{""team"":""ml"",""app"":""router"",""model"":""gpt-4o-mini"",""x-cache-hit-ratio"":""0.70"",""x-avg-output-tokens"":""22""}"
+2025-01-01,2025-01-31,translate-content,102.00,Usage,LLM Inference,"{""team"":""i18n"",""app"":""localization"",""model"":""claude-3-5-sonnet"",""x-cache-hit-ratio"":""0.15"",""x-avg-output-tokens"":""720""}"
+2025-01-01,2025-01-31,code-review,78.00,Usage,LLM Inference,"{""team"":""platform"",""app"":""ci-tools"",""model"":""claude-3-5-sonnet"",""x-cache-hit-ratio"":""0.30"",""x-avg-output-tokens"":""1800""}"

@@ -1,0 +1,2 @@
+ChargePeriodStart,ChargePeriodEnd,ResourceId,BilledCost,ChargeCategory
+2025-01-01,2025-01-31,search,1000.000000,Usage

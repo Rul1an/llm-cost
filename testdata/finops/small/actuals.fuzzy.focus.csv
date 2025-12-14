@@ -1,0 +1,3 @@
+ChargePeriodStart,ChargePeriodEnd,ResourceId,BilledCost,ChargeCategory
+2025-01-01,2025-01-31,custom-llmcost/search-query,120.000000,Usage
+2025-01-01,2025-01-31,custom-llmcost/summarize,45.000000,Usage

@@ -1,0 +1,5 @@
+ChargePeriodStart,ChargePeriodEnd,ResourceId,BilledCost,ChargeCategory
+2025-01-01,2025-01-31,übersetzung-de,27.000000,Usage
+2025-01-01,2025-01-31,翻译-zh,33.000000,Usage
+2025-01-01,2025-01-31,prompt with spaces,16.000000,Usage
+2025-01-01,2025-01-31,prompt/with/slashes,22.000000,Usage

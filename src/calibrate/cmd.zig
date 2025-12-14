@@ -14,7 +14,7 @@ pub fn run(
     registry: *Pricing.Registry,
     stdout: anytype,
     stderr: anytype,
-) !void {
+) !u8 {
     _ = registry; // May use later for on-the-fly pricing if needed
 
     var estimates_path: ?[]const u8 = null;
@@ -22,6 +22,7 @@ pub fn run(
     var match_mode: join.IdNormalization = .strict;
     var include_timestamp = false;
     var validate_only = false; // v1.2.1 preparation
+    var max_groups: usize = 100_000;
 
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
@@ -49,6 +50,10 @@ pub fn run(
             include_timestamp = true;
         } else if (std.mem.eql(u8, arg, "--validate-only")) {
             validate_only = true;
+        } else if (std.mem.eql(u8, arg, "--max-groups")) {
+            if (i + 1 >= args.len) return error.MissingArgument;
+            max_groups = try std.fmt.parseInt(usize, args[i + 1], 10);
+            i += 1;
         }
     }
 
@@ -62,7 +67,6 @@ pub fn run(
     defer perm_arena.deinit();
     const perm = perm_arena.allocator();
 
-    // Read estimates content to hash it
     const est_content = try std.fs.cwd().readFileAlloc(allocator, estimates_path.?, 100 * 1024 * 1024);
     defer allocator.free(est_content);
 
@@ -71,7 +75,20 @@ pub fn run(
     const est_hash_hex = try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&est_hash)});
     defer allocator.free(est_hash_hex);
 
-    var estimates_map = try loadEstimatesFromMemory(allocator, perm, est_content, match_mode, stderr);
+    var estimates_map = loadEstimatesFromMemory(allocator, perm, est_content, match_mode, stderr) catch |err| {
+        switch (err) {
+            error.EstimateIdCollision, error.MissingField, error.InvalidCostFormat => return 2, // 2 = Schema/Data Error
+            error.DuplicateField => {
+                try stderr.print("Error: Duplicate field/ID in JSON estimates.\n", .{});
+                return 2;
+            },
+            error.InvalidEstimatesFormat => {
+                try stderr.print("Error: Invalid JSON structure in estimates.\n", .{});
+                return 2;
+            },
+            else => return err, // Use default handler for IO/OOM
+        }
+    };
     defer estimates_map.deinit(allocator);
 
     // 2. Setup Streaming Join & Hash Actuals
@@ -80,7 +97,7 @@ pub fn run(
 
     const join_opts = join.JoinOptions{
         .id_normalization = match_mode,
-        .max_groups = 100_000,
+        .max_groups = max_groups,
     };
 
     // Open CSV Input
@@ -100,7 +117,7 @@ pub fn run(
     var iterator = FocusIter.init(allocator, reader, .{}) catch |err| {
         if (err == error.InvalidColumnMapping) {
             try stderr.print("Error: CSV missing required columns (ResourceId, BilledCost, ChargePeriodStart).\n", .{});
-            return err;
+            return 2; // Schema validation failed
         }
         return err;
     };
@@ -127,8 +144,20 @@ pub fn run(
     // 4. Output Results
     // Validation check (v1.2.1)
     if (validate_only) {
+        if (result.stats.matched_rows == 0 and estimates_map.count() > 0) {
+            try stderr.print("Warning: 0 rows matched during validation.\n", .{});
+            // For --validate-only, should 0 matches be an error?
+            // User says: "3 (insufficient/joinable te laag)".
+            return 3;
+        }
         try stdout.print("Validation Complete. Estimates: {d}, Matched: {d}\n", .{ estimates_map.count(), result.stats.matched_rows });
-        return;
+        return 0;
+    }
+
+    if (result.stats.matched_rows == 0 and estimates_map.count() > 0) {
+        try stderr.print("Warning: 0 rows matched. Factors list is empty.\n", .{});
+        // Return 3 for 'insufficient'
+        return 3;
     }
 
     const metadata = factors.Metadata{
@@ -158,6 +187,8 @@ pub fn run(
             for (samples) |s| try stderr.print("  - {s}\n", .{s});
         }
     }
+
+    return 0; // Success
 }
 
 pub fn HashingReader(comptime ReaderType: type) type {
@@ -195,7 +226,6 @@ fn loadEstimatesFromMemory(gpa: Allocator, perm: Allocator, content: []const u8,
     var map = join.EstimateIndex{};
     errdefer map.deinit(gpa);
 
-    // Simple JSON parser
     const Parsed = try std.json.parseFromSlice(std.json.Value, gpa, content, .{
         .duplicate_field_behavior = .@"error",
     });
@@ -204,66 +234,139 @@ fn loadEstimatesFromMemory(gpa: Allocator, perm: Allocator, content: []const u8,
     const root = Parsed.value;
     if (root != .object) return error.InvalidEstimatesFormat;
 
-    var it = root.object.iterator();
-    while (it.next()) |entry| {
-        const id_raw = entry.key_ptr.*;
-        const val = entry.value_ptr.*;
+    // Detect Schema: "prompts" array vs Legacy Flat Map
+    if (root.object.get("prompts")) |prompts_val| {
+        // V2 Schema: {"prompts": [{"resource_id": "...", "cost_usd": ...}]}
+        if (prompts_val != .array) return error.InvalidEstimatesFormat;
 
-        // Normalize ID for lookup map
-        const id_norm = join.normalizeResourceId(id_raw, match_mode);
+        for (prompts_val.array.items) |item| {
+            if (item != .object) continue;
 
-        // Collision detection: If normalized ID already exists, we have ambiguity.
-        if (map.get(id_norm)) |existing| {
-            try diagnostic.print("Error: Estimate ID collision. '{s}' and '{s}' both normalize to '{s}' which is ambiguous.\n", .{ existing.original_id, id_raw, id_norm });
-            return error.EstimateIdCollision;
+            const id_val = item.object.get("resource_id") orelse continue;
+            const id_raw = switch (id_val) {
+                .string => |s| s,
+                else => continue,
+            };
+
+            const id_norm = join.normalizeResourceId(id_raw, match_mode);
+            if (map.get(id_norm)) |existing| {
+                try diagnostic.print("Error: Estimate ID collision. '{s}' and '{s}' both normalize to '{s}' which is ambiguous.\n", .{ existing.original_id, id_raw, id_norm });
+                return error.EstimateIdCollision;
+            }
+
+            var est_micro: i128 = 0;
+
+            if (item.object.get("cost_micro")) |cm| {
+                est_micro = switch (cm) {
+                    .integer => |i| i,
+                    else => {
+                        try diagnostic.print("Error: 'cost_micro' must be an integer for ID '{s}'\n", .{id_raw});
+                        return error.InvalidCostFormat;
+                    },
+                };
+            } else {
+                // Support 'cost_usd' (V2) or 'cost' (Legacy/Fallback)
+                const cost_val = item.object.get("cost_usd") orelse item.object.get("cost") orelse {
+                    try diagnostic.print("Error: Missing 'cost_usd' or 'cost_micro' for ID '{s}'\n", .{id_raw});
+                    return error.MissingField;
+                };
+                est_micro = try parseCost(cost_val, id_raw, diagnostic);
+            }
+
+            // Extract required model/scenario (default to "default" if missing? Or error?)
+            // Legacy schema required them. We should likely require them or default.
+            // For FinOps PoC with `estimate` output, they should be present.
+            // Let's error if missing for strictness, or default to "" if practical.
+            // Existing types are []const u8.
+            const model_val = item.object.get("model") orelse item.object.get("model_id"); // maybe model_id?
+            const model = if (model_val) |m| (switch (m) {
+                .string => |s| s,
+                else => "unknown",
+            }) else "unknown";
+
+            const scenario_val = item.object.get("scenario");
+            const scenario = if (scenario_val) |s| (switch (s) {
+                .string => |v| v,
+                else => "default",
+            }) else "default";
+
+            // Intern keys and strings into PERM allocator as they must survive this function
+            const key_interned = try perm.dupe(u8, id_norm);
+            const original_interned = try perm.dupe(u8, id_raw);
+
+            try map.put(gpa, key_interned, .{
+                .est_micro = est_micro,
+                .model = try perm.dupe(u8, model),
+                .scenario = try perm.dupe(u8, scenario),
+                .original_id = original_interned,
+            });
         }
+    } else {
+        // Legacy Schema: {"id": {"cost": ...}}
+        var it = root.object.iterator();
+        while (it.next()) |entry| {
+            const id_raw = entry.key_ptr.*;
+            const val = entry.value_ptr.*;
 
-        const cost_val = val.object.get("cost") orelse {
-            try diagnostic.print("Error: Missing 'cost' for ID '{s}'\n", .{id_raw});
-            return error.MissingField;
-        };
-        const est_micro: i128 = switch (cost_val) {
-            .float => |f| @intFromFloat(f * 1_000_000.0),
-            // Interpret integer as dollars, not microcents (Standardization)
-            .integer => |i| blk: {
-                if (i < 0) {
-                    try diagnostic.print("Error: Negative 'cost' integer value {d} for ID '{s}'\n", .{ i, id_raw });
-                    return error.InvalidCostFormat;
-                }
-                // Warn if integer is suspiciously small (likely user error thinking it's micro)
-                // < 1000 USD is reasonable for estimates, but < $1 is often weird if specified as integer 1?
-                // Copilot suggested < 1000. Let's strictly follow advice but make it non-fatal.
-                if (i > 0 and i < 1000) {
-                    // try std.io.getStdErr().writer().print("Warning: 'cost' integer value {d} for ID '{s}' is less than $1000. Did you mean to use a float for micro-cents?\n", .{i, id_raw});
-                    // Actually, let's keep it simple as requested without too much noise if user really has $5 cost.
-                    // But for now, let's just do the conversion.
-                }
-                break :blk @intCast(i * 1_000_000);
-            },
-            else => return error.InvalidCostFormat,
-        };
+            // Skip metadata keys
+            if (std.mem.eql(u8, id_raw, "version")) continue;
 
-        const model_val = val.object.get("model") orelse return error.MissingField;
-        const scenario_val = val.object.get("scenario") orelse return error.MissingField;
+            if (val != .object) continue;
 
-        const model = model_val.string;
-        const scenario = scenario_val.string;
+            const id_norm = join.normalizeResourceId(id_raw, match_mode);
 
-        // Perm Duplication for Safety (Prevent Use-After-Free)
-        const key_interned = try perm.dupe(u8, id_norm);
-        const original_interned = try perm.dupe(u8, id_raw);
+            if (map.get(id_norm)) |existing| {
+                try diagnostic.print("Error: Estimate ID collision. '{s}' and '{s}' both normalize to '{s}' which is ambiguous.\n", .{ existing.original_id, id_raw, id_norm });
+                return error.EstimateIdCollision;
+            }
 
-        const meta = join.EstimateMeta{
-            .est_micro = est_micro,
-            .model = try perm.dupe(u8, model),
-            .scenario = try perm.dupe(u8, scenario),
-            .original_id = original_interned,
-        };
+            const cost_val = val.object.get("cost") orelse {
+                try diagnostic.print("Error: Missing 'cost' for ID '{s}'\n", .{id_raw});
+                return error.MissingField;
+            };
+            const est_micro: i128 = try parseCost(cost_val, id_raw, diagnostic);
 
-        try map.put(gpa, key_interned, meta);
+            const model_val = val.object.get("model") orelse return error.MissingField;
+            const scenario_val = val.object.get("scenario") orelse return error.MissingField;
+
+            const model = model_val.string;
+            const scenario = scenario_val.string;
+
+            // Intern keys
+            const key_interned = try perm.dupe(u8, id_norm);
+            const original_interned = try perm.dupe(u8, id_raw);
+
+            try map.put(gpa, key_interned, .{
+                .est_micro = est_micro,
+                .model = try perm.dupe(u8, model),
+                .scenario = try perm.dupe(u8, scenario),
+                .original_id = original_interned,
+            });
+        }
     }
 
     return map;
+}
+
+fn parseCost(val: std.json.Value, id: []const u8, diagnostic: anytype) !i128 {
+    return switch (val) {
+        .float => |f| @intFromFloat(f * 1_000_000.0),
+        .integer => |i| blk: {
+            if (i < 0) {
+                try diagnostic.print("Error: Negative 'cost' integer value {d} for ID '{s}'\n", .{ i, id });
+                return error.InvalidCostFormat;
+            }
+            break :blk @intCast(i * 1_000_000);
+        },
+        .string => |s| blk: {
+            const f = std.fmt.parseFloat(f64, s) catch {
+                try diagnostic.print("Error: Invalid cost string '{s}' for ID '{s}'\n", .{ s, id });
+                return error.InvalidCostFormat;
+            };
+            break :blk @intFromFloat(f * 1_000_000.0);
+        },
+        else => return error.InvalidCostFormat,
+    };
 }
 
 test "Calibrate Command E2E" {
@@ -304,7 +407,8 @@ test "Calibrate Command E2E" {
 
     const args = [_][]const u8{ "calibrate", "--estimates", "test_estimates.json", "--csv", "test_actuals.csv" };
 
-    try run(allocator, &args, &registry, stdout_buf.writer(), stderr_buf.writer());
+    const exit_code = try run(allocator, &args, &registry, stdout_buf.writer(), stderr_buf.writer());
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
 
     const out = stdout_buf.items;
 
@@ -349,8 +453,9 @@ test "Calibrate - Validation Rules" {
     var stderr = std.ArrayList(u8).init(allocator);
     defer stderr.deinit();
 
-    const err = run(allocator, &args_dup, &registry, stdout.writer(), stderr.writer());
-    try std.testing.expectError(error.DuplicateField, err);
+    const exit_code = try run(allocator, &args_dup, &registry, stdout.writer(), stderr.writer());
+    try std.testing.expectEqual(@as(u8, 2), exit_code);
+    // DuplicateField error handling now returns 2, doesn't throw
 }
 
 test "Calibrate - Fuzzy Collision" {
@@ -378,7 +483,7 @@ test "Calibrate - Fuzzy Collision" {
 
     const args = [_][]const u8{ "calibrate", "--estimates", "test_collision.json", "--csv", "col_actuals.csv", "--match", "fuzzy" };
 
-    const err = run(allocator, &args, &reg, stdout.writer(), stderr.writer());
-    try std.testing.expectError(error.EstimateIdCollision, err);
+    const exit_code = try run(allocator, &args, &reg, stdout.writer(), stderr.writer());
+    try std.testing.expectEqual(@as(u8, 2), exit_code);
     try std.testing.expect(std.mem.indexOf(u8, stderr.items, "Estimate ID collision") != null);
 }

@@ -1,0 +1,8 @@
+ChargePeriodStart,ChargePeriodEnd,ResourceId,BilledCost,ChargeCategory
+2025-01-01,2025-01-01,search-query,15.000000,Usage
+2025-01-02,2025-01-02,search-query,18.000000,Usage
+2025-01-03,2025-01-03,search-query,12.000000,Usage
+2025-01-04,2025-01-04,search-query,22.000000,Usage
+2025-01-05,2025-01-05,search-query,14.000000,Usage
+2025-01-06,2025-01-06,search-query,8.000000,Usage
+2025-01-07,2025-01-07,search-query,11.000000,Usage

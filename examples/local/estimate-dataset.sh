@@ -37,7 +37,6 @@ fi
 cat "$INPUT_FILE" | \
     llm-cost pipe \
     --model openai/gpt-4o \
-    --mode price \
     --workers 8 \
     --summary \
     > "$OUTPUT_FILE"

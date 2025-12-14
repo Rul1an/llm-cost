@@ -20,7 +20,7 @@ const ci_action_cmd = @import("ci_action.zig");
 const verify_cmd = @import("verify.zig");
 const calibrate_cmd = @import("calibrate/cmd.zig");
 
-pub const version_str = "1.2.1";
+pub const version_str = "1.2.2";
 
 // Re-exporting GlobalState for backward compatibility if needed, but components use context.GlobalState
 pub const GlobalState = context.GlobalState;
@@ -99,7 +99,8 @@ pub fn main() !void {
     } else if (std.mem.eql(u8, command, "verify")) {
         try verify_cmd.run(state.allocator, args[2..], state.stdout, state.stderr);
     } else if (std.mem.eql(u8, command, "calibrate")) {
-        try calibrate_cmd.run(state.allocator, args[2..], state.registry, state.stdout, state.stderr);
+        const exit_code = try calibrate_cmd.run(state.allocator, args[2..], state.registry, state.stdout, state.stderr);
+        if (exit_code != 0) std.process.exit(exit_code);
     } else {
         try stderr.print("Error: Unknown command '{s}'\n\n", .{command});
         try printUsage(stderr);

@@ -26,6 +26,47 @@ jobs:
       - name: Run Golden Tests
         run: zig build test-golden
 
+  finops_p0:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1 # TODO: Pin SHA
+        with:
+          version: 0.14.0
+
+      - name: Run FinOps P0 suite
+        run: bash scripts/finops/run_finops_suite.sh p0
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: finops-reports
+          path: reports/
+
+  finops_p1:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1 # TODO: Pin SHA
+        with:
+          version: 0.14.0
+
+      - name: Run FinOps P1 suite
+        run: bash scripts/finops/run_finops_suite.sh p1
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: finops-p1-reports
+          path: reports/
+
   lint:
     runs-on: ubuntu-latest
     steps:

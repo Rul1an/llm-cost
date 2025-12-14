@@ -1,0 +1,11 @@
+{
+    "version": "1",
+    "prompts": [
+        {
+            "resource_id": "search",
+            "model": "gpt-4o",
+            "scenario": "default",
+            "cost_micro": 1000000
+        }
+    ]
+}
