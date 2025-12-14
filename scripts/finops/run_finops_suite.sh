@@ -186,12 +186,14 @@ run_extreme_drift_signal() {
 }
 
 run_p0() {
-  run_det_smoke
-  run_schema_missing_col
-  run_fuzzy_match
-  run_credits_negative
-  run_pii_guard
-  run_validate_only
+  { time {
+    run_det_smoke
+    run_schema_missing_col
+    run_fuzzy_match
+    run_credits_negative
+    run_pii_guard
+    run_validate_only
+  }; } 2> "${REPORT_DIR}/perf_metrics.txt"
 }
 
 run_p1() {
