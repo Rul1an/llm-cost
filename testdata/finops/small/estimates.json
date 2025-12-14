@@ -1,0 +1,17 @@
+{
+    "version": "1",
+    "prompts": [
+        {
+            "resource_id": "search-query",
+            "model": "gpt-4o",
+            "scenario": "default",
+            "cost_usd": 100.0
+        },
+        {
+            "resource_id": "summarize",
+            "model": "gpt-4o",
+            "scenario": "default",
+            "cost_usd": 50.0
+        }
+    ]
+}

@@ -1,0 +1,29 @@
+{
+    "version": "1",
+    "prompts": [
+        {
+            "resource_id": "übersetzung-de",
+            "model": "model-übersetzung-de",
+            "scenario": "default",
+            "cost_micro": 25000000
+        },
+        {
+            "resource_id": "翻译-zh",
+            "model": "model-翻译-zh",
+            "scenario": "default",
+            "cost_micro": 30000000
+        },
+        {
+            "resource_id": "prompt with spaces",
+            "model": "model-spaces",
+            "scenario": "default",
+            "cost_micro": 15000000
+        },
+        {
+            "resource_id": "prompt/with/slashes",
+            "model": "model-slashes",
+            "scenario": "default",
+            "cost_micro": 20000000
+        }
+    ]
+}

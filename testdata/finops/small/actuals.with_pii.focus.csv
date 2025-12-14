@@ -1,0 +1,2 @@
+ChargePeriodStart,ChargePeriodEnd,ResourceId,BilledCost,ChargeCategory,ChargeDescription
+2025-01-01,2025-01-31,search-query,100.00,Usage,"Query from user john.doe@company.com"

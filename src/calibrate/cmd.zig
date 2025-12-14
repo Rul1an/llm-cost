@@ -22,6 +22,7 @@ pub fn run(
     var match_mode: join.IdNormalization = .strict;
     var include_timestamp = false;
     var validate_only = false; // v1.2.1 preparation
+    var max_groups: usize = 100_000;
 
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
@@ -49,6 +50,10 @@ pub fn run(
             include_timestamp = true;
         } else if (std.mem.eql(u8, arg, "--validate-only")) {
             validate_only = true;
+        } else if (std.mem.eql(u8, arg, "--max-groups")) {
+            if (i + 1 >= args.len) return error.MissingArgument;
+            max_groups = try std.fmt.parseInt(usize, args[i + 1], 10);
+            i += 1;
         }
     }
 
@@ -92,7 +97,7 @@ pub fn run(
 
     const join_opts = join.JoinOptions{
         .id_normalization = match_mode,
-        .max_groups = 100_000,
+        .max_groups = max_groups,
     };
 
     // Open CSV Input
@@ -220,6 +225,7 @@ pub fn HashingReader(comptime ReaderType: type) type {
 fn loadEstimatesFromMemory(gpa: Allocator, perm: Allocator, content: []const u8, match_mode: join.IdNormalization, diagnostic: anytype) !join.EstimateIndex {
     var map = join.EstimateIndex{};
     errdefer map.deinit(gpa);
+    errdefer map.deinit(gpa);
 
     const Parsed = try std.json.parseFromSlice(std.json.Value, gpa, content, .{
         .duplicate_field_behavior = .@"error",
@@ -229,57 +235,139 @@ fn loadEstimatesFromMemory(gpa: Allocator, perm: Allocator, content: []const u8,
     const root = Parsed.value;
     if (root != .object) return error.InvalidEstimatesFormat;
 
-    var it = root.object.iterator();
-    while (it.next()) |entry| {
-        const id_raw = entry.key_ptr.*;
-        const val = entry.value_ptr.*;
+    // Detect Schema: "prompts" array vs Legacy Flat Map
+    if (root.object.get("prompts")) |prompts_val| {
+        // V2 Schema: {"prompts": [{"resource_id": "...", "cost_usd": ...}]}
+        if (prompts_val != .array) return error.InvalidEstimatesFormat;
 
-        const id_norm = join.normalizeResourceId(id_raw, match_mode);
+        for (prompts_val.array.items) |item| {
+            if (item != .object) continue;
 
-        if (map.get(id_norm)) |existing| {
-            try diagnostic.print("Error: Estimate ID collision. '{s}' and '{s}' both normalize to '{s}' which is ambiguous.\n", .{ existing.original_id, id_raw, id_norm });
-            return error.EstimateIdCollision;
+            const id_val = item.object.get("resource_id") orelse continue;
+            const id_raw = switch (id_val) {
+                .string => |s| s,
+                else => continue,
+            };
+
+            const id_norm = join.normalizeResourceId(id_raw, match_mode);
+            if (map.get(id_norm)) |existing| {
+                try diagnostic.print("Error: Estimate ID collision. '{s}' and '{s}' both normalize to '{s}' which is ambiguous.\n", .{ existing.original_id, id_raw, id_norm });
+                return error.EstimateIdCollision;
+            }
+
+            var est_micro: i128 = 0;
+
+            if (item.object.get("cost_micro")) |cm| {
+                est_micro = switch (cm) {
+                    .integer => |i| i,
+                    else => {
+                        try diagnostic.print("Error: 'cost_micro' must be an integer for ID '{s}'\n", .{id_raw});
+                        return error.InvalidCostFormat;
+                    },
+                };
+            } else {
+                // Support 'cost_usd' (V2) or 'cost' (Legacy/Fallback)
+                const cost_val = item.object.get("cost_usd") orelse item.object.get("cost") orelse {
+                    try diagnostic.print("Error: Missing 'cost_usd' or 'cost_micro' for ID '{s}'\n", .{id_raw});
+                    return error.MissingField;
+                };
+                est_micro = try parseCost(cost_val, id_raw, diagnostic);
+            }
+
+            // Extract required model/scenario (default to "default" if missing? Or error?)
+            // Legacy schema required them. We should likely require them or default.
+            // For FinOps PoC with `estimate` output, they should be present.
+            // Let's error if missing for strictness, or default to "" if practical.
+            // Existing types are []const u8.
+            const model_val = item.object.get("model") orelse item.object.get("model_id"); // maybe model_id?
+            const model = if (model_val) |m| (switch (m) {
+                .string => |s| s,
+                else => "unknown",
+            }) else "unknown";
+
+            const scenario_val = item.object.get("scenario");
+            const scenario = if (scenario_val) |s| (switch (s) {
+                .string => |v| v,
+                else => "default",
+            }) else "default";
+
+            // Intern keys and strings into PERM allocator as they must survive this function
+            const key_interned = try perm.dupe(u8, id_norm);
+            const original_interned = try perm.dupe(u8, id_raw);
+
+            try map.put(gpa, key_interned, .{
+                .est_micro = est_micro,
+                .model = try perm.dupe(u8, model),
+                .scenario = try perm.dupe(u8, scenario),
+                .original_id = original_interned,
+            });
         }
+    } else {
+        // Legacy Schema: {"id": {"cost": ...}}
+        var it = root.object.iterator();
+        while (it.next()) |entry| {
+            const id_raw = entry.key_ptr.*;
+            const val = entry.value_ptr.*;
 
-        const cost_val = val.object.get("cost") orelse {
-            try diagnostic.print("Error: Missing 'cost' for ID '{s}'\n", .{id_raw});
-            return error.MissingField;
-        };
-        const est_micro: i128 = switch (cost_val) {
-            .float => |f| @intFromFloat(f * 1_000_000.0),
-            .integer => |i| blk: {
-                if (i < 0) {
-                    try diagnostic.print("Error: Negative 'cost' integer value {d} for ID '{s}'\n", .{ i, id_raw });
-                    return error.InvalidCostFormat;
-                }
-                if (i > 0 and i < 1000) {
-                    // Warning suppressed per design decision
-                }
-                break :blk @intCast(i * 1_000_000);
-            },
-            else => return error.InvalidCostFormat,
-        };
+            // Skip metadata keys
+            if (std.mem.eql(u8, id_raw, "version")) continue;
 
-        const model_val = val.object.get("model") orelse return error.MissingField;
-        const scenario_val = val.object.get("scenario") orelse return error.MissingField;
+            if (val != .object) continue;
 
-        const model = model_val.string;
-        const scenario = scenario_val.string;
+            const id_norm = join.normalizeResourceId(id_raw, match_mode);
 
-        const key_interned = try perm.dupe(u8, id_norm);
-        const original_interned = try perm.dupe(u8, id_raw);
+            if (map.get(id_norm)) |existing| {
+                try diagnostic.print("Error: Estimate ID collision. '{s}' and '{s}' both normalize to '{s}' which is ambiguous.\n", .{ existing.original_id, id_raw, id_norm });
+                return error.EstimateIdCollision;
+            }
 
-        const meta = join.EstimateMeta{
-            .est_micro = est_micro,
-            .model = try perm.dupe(u8, model),
-            .scenario = try perm.dupe(u8, scenario),
-            .original_id = original_interned,
-        };
+            const cost_val = val.object.get("cost") orelse {
+                try diagnostic.print("Error: Missing 'cost' for ID '{s}'\n", .{id_raw});
+                return error.MissingField;
+            };
+            const est_micro: i128 = try parseCost(cost_val, id_raw, diagnostic);
 
-        try map.put(gpa, key_interned, meta);
+            const model_val = val.object.get("model") orelse return error.MissingField;
+            const scenario_val = val.object.get("scenario") orelse return error.MissingField;
+
+            const model = model_val.string;
+            const scenario = scenario_val.string;
+
+            // Intern keys
+            const key_interned = try perm.dupe(u8, id_norm);
+            const original_interned = try perm.dupe(u8, id_raw);
+
+            try map.put(gpa, key_interned, .{
+                .est_micro = est_micro,
+                .model = try perm.dupe(u8, model),
+                .scenario = try perm.dupe(u8, scenario),
+                .original_id = original_interned,
+            });
+        }
     }
 
     return map;
+}
+
+fn parseCost(val: std.json.Value, id: []const u8, diagnostic: anytype) !i128 {
+    return switch (val) {
+        .float => |f| @intFromFloat(f * 1_000_000.0),
+        .integer => |i| blk: {
+            if (i < 0) {
+                try diagnostic.print("Error: Negative 'cost' integer value {d} for ID '{s}'\n", .{ i, id });
+                return error.InvalidCostFormat;
+            }
+            break :blk @intCast(i * 1_000_000);
+        },
+        .string => |s| blk: {
+            const f = std.fmt.parseFloat(f64, s) catch {
+                try diagnostic.print("Error: Invalid cost string '{s}' for ID '{s}'\n", .{ s, id });
+                return error.InvalidCostFormat;
+            };
+            break :blk @intFromFloat(f * 1_000_000.0);
+        },
+        else => return error.InvalidCostFormat,
+    };
 }
 
 test "Calibrate Command E2E" {

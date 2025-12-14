@@ -136,11 +136,6 @@ pub fn build(b: *std.Build) void {
         .optimize = .ReleaseFast, // Always optimize for benchmarks
     });
 
-    // Provide access to tokenizer modules
-    // Add module imports if tokenizer/mod.zig depends on others (it uses local imports, so should be fine if paths are relative to mod.zig)
-
-    b.installArtifact(bench_exe);
-
     const bench_step = b.step("bench", "Run performance benchmarks");
     const run_bench = b.addRunArtifact(bench_exe);
 

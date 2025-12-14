@@ -1,0 +1,4 @@
+ChargePeriodStart,ChargePeriodEnd,ResourceId,BilledCost,ChargeCategory
+2025-01-01,2025-01-31,search-query,100.00,Usage
+2025-01-01,2025-01-31,search-query,-15.00,Credit
+2025-01-01,2025-01-31,free-tier-prompt,0.00,Usage
