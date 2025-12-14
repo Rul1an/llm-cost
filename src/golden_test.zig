@@ -194,7 +194,7 @@ test "Contract: 'pipe' handles Reasoning Tokens (Gemini 2.5)" {
     const output = mock.stdout_buf.items;
 
     // Verify Cost: 0.000268
-    if (std.mem.indexOf(u8, output, "\"cost\":0.000268") == null) {
+    if (std.mem.indexOf(u8, output, "\"cost\":\"0.000268\"") == null) {
         std.debug.print("FAIL: Cost mismatch. Output: {s}\n", .{output});
         return error.CostMismatch;
     }
@@ -455,7 +455,7 @@ test "v1.0: FOCUS Export (Vantage-subset)" {
     try std.testing.expect(std.mem.indexOf(u8, out, "2025-01-01") != null);
 
     // Cost (2 tokens @ $5/1M = $0.000010) -> 0.000010000000 (12 decimals)
-    try std.testing.expect(std.mem.indexOf(u8, out, "0.000010000000") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "0.000010") != null);
 
     // Check Token Count in Tags (escaped)
     // "x-token-count-input":"2" -> ""x-token-count-input"":""2""

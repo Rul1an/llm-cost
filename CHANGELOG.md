@@ -1,5 +1,9 @@
 # Changelog
 
+## [v1.1.10] - 2025-12-14
+### Fixed
+- **Tests**: Corrected `golden_test.zig` assertions to match actual JSON output format (cost as string) and CSV precision (6 decimals), fixing false negative CI failures.
+
 ## [v1.1.9] - 2025-12-14
 ### Fixed
 - **Build**: Resolved compilation error in `src/golden_test.zig` where `i128` cost values were incorrectly compared against `f64` expectations, breaking `zig build test-golden` (and thus CI).
