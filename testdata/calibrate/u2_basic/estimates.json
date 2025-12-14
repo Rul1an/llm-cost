@@ -1,0 +1,17 @@
+{
+    "req-1": {
+        "cost": 100,
+        "model": "gpt-4",
+        "scenario": "chat"
+    },
+    "req-2": {
+        "cost": 200,
+        "model": "gpt-4",
+        "scenario": "chat"
+    },
+    "req-3": {
+        "cost": 500,
+        "model": "claude-3-opus",
+        "scenario": "analysis"
+    }
+}

@@ -1,5 +1,20 @@
 # Changelog
 
+## [v1.2.0] - 2025-12-14
+### Added
+- **Command**: `llm-cost calibrate` for comparing estimates against actual billing data (Drift Analysis).
+- **Import**: FOCUS v1.0 CSV import support with Tags-based extensions (`x-cache-hit-ratio`, `x-call-count`).
+- **Output**: Cost multiplier output as TOML factors file (`factors.toml`).
+- **Matching**: Fuzzy ResourceId matching to handle FinOps tool ID transformations (prefix stripping).
+- **Stats**: Wilson Score confidence intervals for statistical significance.
+- **Export**: `llm-cost export --format=json` for generating compatibility estimates.
+
+### Technical
+- **Determinism**: Drift calculation uses integer basis points (bps) to eliminate floating-point non-determinism.
+- **Performance**: Streaming join architecture with O(N) memory relative to distinct keys (not dataset size).
+- **Unicode**: Robust `\uXXXX` surrogate pair support in JSON Tags for accurate parsing.
+- **Safety**: `max_groups` guardrail (100k default) prevents cardinality explosions.
+
 ## [v1.1.12] - 2025-12-14
 ### Fixed
 - **CI**: Restrict release workflow to trigger only on full semantic version tags (`v*.*.*`). This prevents build failures on major version alias tags (e.g., `v1`) which result in a version string ("1") that Zig cannot parse.

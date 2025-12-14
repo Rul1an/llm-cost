@@ -18,6 +18,7 @@ const context = @import("context.zig");
 const estimate_cmd = @import("commands/estimate.zig");
 const ci_action_cmd = @import("ci_action.zig");
 const verify_cmd = @import("verify.zig");
+const calibrate_cmd = @import("calibrate/cmd.zig");
 
 pub const version_str = "0.10.0";
 
@@ -97,6 +98,8 @@ pub fn main() !void {
         if (exit_code != 0) std.process.exit(exit_code);
     } else if (std.mem.eql(u8, command, "verify")) {
         try verify_cmd.run(state.allocator, args[2..], state.stdout, state.stderr);
+    } else if (std.mem.eql(u8, command, "calibrate")) {
+        try calibrate_cmd.run(state.allocator, args[2..], state.registry, state.stdout, state.stderr);
     } else {
         try stderr.print("Error: Unknown command '{s}'\n\n", .{command});
         try printUsage(stderr);
@@ -274,6 +277,7 @@ fn printUsage(w: anytype) !void {
         \\  llm-cost diff      [OPTIONS]              Show cost difference against git ref
         \\  llm-cost ci-action [OPTIONS]              Run CI checks and post comment
         \\  llm-cost verify    [FILE]                 Verify artifact integrity
+        \\  llm-cost calibrate [OPTIONS]              Calibrate prices against FOCUS data
         \\  llm-cost update-db                        Update pricing database
         \\  llm-cost version                          Show version
         \\
@@ -289,4 +293,6 @@ test "imports" {
     _ = tokenizer;
     _ = Pricing;
     _ = engine;
+    _ = calibrate_cmd;
+    _ = @import("calibrate/golden_test.zig");
 }

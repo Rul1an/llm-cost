@@ -18,6 +18,7 @@ pub fn run(
     var cache_hit_ratio: ?f64 = null;
 
     var test_date: ?[]const u8 = null;
+    var format_json: bool = false;
 
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
@@ -38,6 +39,8 @@ pub fn run(
             if (i + 1 >= args.len) return error.MissingArgument;
             test_date = args[i + 1];
             i += 1;
+        } else if (std.mem.eql(u8, arg, "--format=json") or std.mem.eql(u8, arg, "--json")) {
+            format_json = true;
         }
     }
 
@@ -126,8 +129,57 @@ pub fn run(
     std.mem.sort(Schema.FocusRow, rows.items, {}, sortRows);
 
     // 5. Write Sorted Rows
-    for (rows.items) |row| {
-        try csv.writeRow(row);
+    // If format is CSV
+    if (!format_json) {
+        for (rows.items) |row| {
+            try csv.writeRow(row);
+        }
+    } else {
+        // Write JSON Map: { "ResourceId": { "cost": X, "model": "Y", "scenario": "Z" } }
+        // We iterate sorted rows to maintain determinism in map order (though JSON maps are unordered logically,
+        // byte-for-byte output matters).
+        try stream.print("{{\n", .{});
+        for (rows.items, 0..) |row, idx| {
+            // Extract model/scenario from tags
+            // Tags is a JSON string. We don't want to double-parse if possible,
+            // but FocusRow.tags.model is available in the struct if we kept the `Tags` struct?
+            // FocusRow struct has `tags: Tags` struct, not string!
+            // Wait, look at schema.zig: `tags: Tags` struct.
+            // But MapContext creates it.
+            // Let's verify if `row.tags` is accessible.
+
+            // row is `Schema.FocusRow`.
+            // field `tags` is `Tags` struct.
+            // `Tags` has `model`, `user_tags` (scenario?).
+
+            var scenario: []const u8 = "chat"; // Default for now if not found?
+            if (row.tags.user_tags.get("scenario")) |s| {
+                scenario = s;
+            }
+
+            // Cost is formatted string in `billed_cost`.
+            // We need raw micro-usd integer for calibration accuracy?
+            // `row.billed_cost` is string "0.001500".
+            // `calibrate` can parse floats.
+
+            // We need to parse billed_cost string back to number OR use the original calculation if we had it.
+            // We don't have original cost here easily.
+            // Let's output cost as number (from string parse).
+            const cost_f = std.fmt.parseFloat(f64, row.billed_cost) catch 0;
+            const cost_micro = @as(i64, @intFromFloat(cost_f * 1_000_000));
+
+            try stream.print("  \"{s}\": {{\n", .{row.resource_id});
+            try stream.print("    \"cost\": {d},\n", .{cost_micro});
+            try stream.print("    \"model\": \"{s}\",\n", .{row.tags.model});
+            try stream.print("    \"scenario\": \"{s}\"\n", .{scenario});
+
+            if (idx < rows.items.len - 1) {
+                try stream.print("  }},\n", .{});
+            } else {
+                try stream.print("  }}\n", .{});
+            }
+        }
+        try stream.print("}}\n", .{});
     }
 }
 

@@ -89,7 +89,7 @@ jobs:
             do_sign: true
           - os: macos-latest
             target: aarch64-macos
-            suffix: darwin-arm64
+            suffix: macos-arm64
             binary: llm-cost
             do_sbom: false
             do_sign: false
