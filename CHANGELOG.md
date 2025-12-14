@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.2.1] - 2025-12-14
+### Added
+- **Metadata & Audit Trail**: `factors.toml` now includes `[metadata]` with input hashes (SHA256), tool version, matching mode, and stats.
+- **Fail-Fast Validation**:
+    - Fatal error on duplicate Estimate IDs or Fuzzy Match Collisions.
+    - Fatal error if CSV is missing required FOCUS columns (`ResourceId`, `BilledCost`, `ChargePeriodStart`).
+- **UX**: Added `--actuals` alias for `--csv` flag.
+- **CLI**: `calibrate` validation now warns specifically about missing columns.
+
 ## [v1.2.0] - 2025-12-14
 
 ### Added

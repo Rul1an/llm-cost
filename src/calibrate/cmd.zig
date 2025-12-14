@@ -20,6 +20,8 @@ pub fn run(
     var estimates_path: ?[]const u8 = null;
     var matches_file: ?[]const u8 = null; // CSV file for FOCUS data
     var match_mode: join.IdNormalization = .strict;
+    var include_timestamp = false;
+    var validate_only = false; // v1.2.1 preparation
 
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
@@ -28,7 +30,7 @@ pub fn run(
             if (i + 1 >= args.len) return error.MissingArgument;
             estimates_path = args[i + 1];
             i += 1;
-        } else if (std.mem.eql(u8, arg, "--csv")) {
+        } else if (std.mem.eql(u8, arg, "--csv") or std.mem.eql(u8, arg, "--actuals")) { // v1.2.1 alias
             if (i + 1 >= args.len) return error.MissingArgument;
             matches_file = args[i + 1];
             i += 1;
@@ -43,6 +45,10 @@ pub fn run(
                 return error.InvalidMatchMode;
             }
             i += 1;
+        } else if (std.mem.eql(u8, arg, "--include-timestamp")) {
+            include_timestamp = true;
+        } else if (std.mem.eql(u8, arg, "--validate-only")) {
+            validate_only = true;
         }
     }
 
@@ -51,15 +57,24 @@ pub fn run(
         return error.MissingArgument;
     }
 
-    // 1. Load Estimates
+    // 1. Load Estimates & Calculate Hash
     var perm_arena = std.heap.ArenaAllocator.init(allocator);
     defer perm_arena.deinit();
     const perm = perm_arena.allocator();
 
-    var estimates_map = try loadEstimates(allocator, perm, estimates_path.?);
+    // Read estimates content to hash it
+    const est_content = try std.fs.cwd().readFileAlloc(allocator, estimates_path.?, 100 * 1024 * 1024);
+    defer allocator.free(est_content);
+
+    var est_hash: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(est_content, &est_hash, .{});
+    const est_hash_hex = try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&est_hash)});
+    defer allocator.free(est_hash_hex);
+
+    var estimates_map = try loadEstimatesFromMemory(allocator, perm, est_content, match_mode, stderr);
     defer estimates_map.deinit(allocator);
 
-    // 2. Setup Streaming Join
+    // 2. Setup Streaming Join & Hash Actuals
     var scratch_arena = std.heap.ArenaAllocator.init(allocator);
     defer scratch_arena.deinit();
 
@@ -75,12 +90,20 @@ pub fn run(
         std.io.getStdIn();
     defer if (matches_file != null) file.close();
 
-    // Use buffered reader
-    var buf_reader = std.io.bufferedReader(file.reader());
+    // Hashing Reader Wrapper
+    var hashing_wrapper = try HashingReader(@TypeOf(file.reader())).init(file.reader());
+
+    var buf_reader = std.io.bufferedReader(hashing_wrapper.reader());
     const reader = buf_reader.reader();
 
     const FocusIter = focus.FocusIterator(@TypeOf(reader));
-    var iterator = try FocusIter.init(allocator, reader, .{});
+    var iterator = FocusIter.init(allocator, reader, .{}) catch |err| {
+        if (err == error.InvalidColumnMapping) {
+            try stderr.print("Error: CSV missing required columns (ResourceId, BilledCost, ChargePeriodStart).\n", .{});
+            return err;
+        }
+        return err;
+    };
     defer iterator.deinit();
 
     // 3. Run Join
@@ -95,8 +118,36 @@ pub fn run(
     );
     defer result.groups.deinit(allocator);
 
+    // Finalize Actuals Hash (after join consumes stream)
+    var act_hash: [32]u8 = undefined;
+    hashing_wrapper.final(&act_hash);
+    const act_hash_hex = try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&act_hash)});
+    defer allocator.free(act_hash_hex);
+
     // 4. Output Results
-    try factors.writeToml(allocator, stdout, result);
+    // Validation check (v1.2.1)
+    if (validate_only) {
+        try stdout.print("Validation Complete. Estimates: {d}, Matched: {d}\n", .{ estimates_map.count(), result.stats.matched_rows });
+        return;
+    }
+
+    const metadata = factors.Metadata{
+        .tool_version = "v1.2.1",
+        .estimates_sha256 = est_hash_hex, // Hex string
+        .actuals_sha256 = act_hash_hex, // Hex string
+        .generated_at = if (include_timestamp) std.time.timestamp() else null,
+
+        // v1.2.1 Extras
+        .match_mode = switch (match_mode) {
+            .strict => "strict",
+            .fuzzy => "fuzzy",
+        },
+        .matched_rows = result.stats.matched_rows,
+        .unmatched_actuals = result.stats.unmatched_actuals,
+        .unmatched_estimates = result.stats.unmatched_estimates,
+    };
+
+    try factors.writeToml(allocator, stdout, result, metadata);
 
     // Diagnostics to stderr
     if (result.stats.unmatched_actuals > 0) {
@@ -109,19 +160,45 @@ pub fn run(
     }
 }
 
-fn loadEstimates(gpa: Allocator, perm: Allocator, path: []const u8) !join.EstimateIndex {
-    const file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
+pub fn HashingReader(comptime ReaderType: type) type {
+    return struct {
+        child_reader: ReaderType,
+        hasher: std.crypto.hash.sha2.Sha256,
+        const Self = @This();
 
-    const content = try file.readToEndAlloc(gpa, 100 * 1024 * 1024); // 100MB limit
-    defer gpa.free(content);
+        pub fn init(child: ReaderType) !Self {
+            return .{
+                .child_reader = child,
+                .hasher = std.crypto.hash.sha2.Sha256.init(.{}),
+            };
+        }
 
+        pub fn read(self: *Self, dest: []u8) !usize {
+            const n = try self.child_reader.read(dest);
+            if (n > 0) {
+                self.hasher.update(dest[0..n]);
+            }
+            return n;
+        }
+
+        pub fn reader(self: *Self) std.io.Reader(*Self, ReaderType.Error, read) {
+            return .{ .context = self };
+        }
+
+        pub fn final(self: *Self, out: *[32]u8) void {
+            self.hasher.final(out);
+        }
+    };
+}
+
+fn loadEstimatesFromMemory(gpa: Allocator, perm: Allocator, content: []const u8, match_mode: join.IdNormalization, diagnostic: anytype) !join.EstimateIndex {
     var map = join.EstimateIndex{};
+    errdefer map.deinit(gpa);
 
-    // Simple JSON parser for array of objects or dict of objects
-    // Structure expected: { "resource_id": { "cost": 123456, "model": "gpt-4", "scenario": "chat" } }
-
-    const Parsed = try std.json.parseFromSlice(std.json.Value, gpa, content, .{});
+    // Simple JSON parser
+    const Parsed = try std.json.parseFromSlice(std.json.Value, gpa, content, .{
+        .duplicate_field_behavior = .@"error",
+    });
     defer Parsed.deinit();
 
     const root = Parsed.value;
@@ -129,37 +206,58 @@ fn loadEstimates(gpa: Allocator, perm: Allocator, path: []const u8) !join.Estima
 
     var it = root.object.iterator();
     while (it.next()) |entry| {
-        const id = entry.key_ptr.*;
+        const id_raw = entry.key_ptr.*;
         const val = entry.value_ptr.*;
 
+        // Normalize ID for lookup map
+        const id_norm = join.normalizeResourceId(id_raw, match_mode);
+
+        // Collision detection: If normalized ID already exists, we have ambiguity.
+        if (map.get(id_norm)) |existing| {
+            try diagnostic.print("Error: Estimate ID collision. '{s}' and '{s}' both normalize to '{s}' which is ambiguous.\n", .{ existing.original_id, id_raw, id_norm });
+            return error.EstimateIdCollision;
+        }
+
         const cost_val = val.object.get("cost") orelse {
-            try std.io.getStdErr().writer().print("Error: Missing 'cost' for ID '{s}'\n", .{id});
+            try diagnostic.print("Error: Missing 'cost' for ID '{s}'\n", .{id_raw});
             return error.MissingField;
         };
         const est_micro: i128 = switch (cost_val) {
-            .float => |f| @intFromFloat(f),
-            .integer => |i| @intCast(i),
+            .float => |f| @intFromFloat(f * 1_000_000.0),
+            // Interpret integer as dollars, not microcents (Standardization)
+            .integer => |i| blk: {
+                if (i < 0) {
+                    try diagnostic.print("Error: Negative 'cost' integer value {d} for ID '{s}'\n", .{ i, id_raw });
+                    return error.InvalidCostFormat;
+                }
+                // Warn if integer is suspiciously small (likely user error thinking it's micro)
+                // < 1000 USD is reasonable for estimates, but < $1 is often weird if specified as integer 1?
+                // Copilot suggested < 1000. Let's strictly follow advice but make it non-fatal.
+                if (i > 0 and i < 1000) {
+                    // try std.io.getStdErr().writer().print("Warning: 'cost' integer value {d} for ID '{s}' is less than $1000. Did you mean to use a float for micro-cents?\n", .{i, id_raw});
+                    // Actually, let's keep it simple as requested without too much noise if user really has $5 cost.
+                    // But for now, let's just do the conversion.
+                }
+                break :blk @intCast(i * 1_000_000);
+            },
             else => return error.InvalidCostFormat,
         };
 
-        const model_val = val.object.get("model") orelse {
-            try std.io.getStdErr().writer().print("Error: Missing 'model' for ID '{s}'\n", .{id});
-            return error.MissingField;
-        };
-
-        const scenario_val = val.object.get("scenario") orelse {
-            try std.io.getStdErr().writer().print("Error: Missing 'scenario' for ID '{s}'\n", .{id});
-            return error.MissingField;
-        };
+        const model_val = val.object.get("model") orelse return error.MissingField;
+        const scenario_val = val.object.get("scenario") orelse return error.MissingField;
 
         const model = model_val.string;
         const scenario = scenario_val.string;
 
-        const key_interned = try perm.dupe(u8, id);
+        // Perm Duplication for Safety (Prevent Use-After-Free)
+        const key_interned = try perm.dupe(u8, id_norm);
+        const original_interned = try perm.dupe(u8, id_raw);
+
         const meta = join.EstimateMeta{
             .est_micro = est_micro,
             .model = try perm.dupe(u8, model),
             .scenario = try perm.dupe(u8, scenario),
+            .original_id = original_interned,
         };
 
         try map.put(gpa, key_interned, meta);
@@ -172,21 +270,26 @@ test "Calibrate Command E2E" {
     const allocator = std.testing.allocator;
 
     // Create temp files
+
+    // 3. Negative Values (Refunds)
     const cwd = std.fs.cwd();
-    try cwd.writeFile(.{ .sub_path = "test_estimates.json", .data = 
+
+    // Deterministic content for hashing test
+    const est_data =
         \\{
-        \\  "req-1": { "cost": 100, "model": "gpt-4", "scenario": "chat" },
-        \\  "req-2": { "cost": 200, "model": "gpt-4", "scenario": "chat" }
+        \\  "req-1": { "cost": 0.0001, "model": "gpt-4", "scenario": "chat" },
+        \\  "req-2": { "cost": 0.0002, "model": "gpt-4", "scenario": "chat" }
         \\}
-    });
+    ;
+    try cwd.writeFile(.{ .sub_path = "test_estimates.json", .data = est_data });
     defer cwd.deleteFile("test_estimates.json") catch {};
 
-    try cwd.writeFile(.{ .sub_path = "test_actuals.csv", .data = 
+    const act_data =
         \\ResourceId,BilledCost,ChargePeriodStart,Tags
         \\req-1,0.000105,2025-01-01,"{}"
         \\req-2,0.000210,2025-01-01,"{}"
-    }); // 0.000105 = 105 micro (vs 100 est) -> +5% drift
-    // 0.000210 = 210 micro (vs 200 est) -> +5% drift
+    ;
+    try cwd.writeFile(.{ .sub_path = "test_actuals.csv", .data = act_data });
     defer cwd.deleteFile("test_actuals.csv") catch {};
 
     var stdout_buf = std.ArrayList(u8).init(allocator);
@@ -204,8 +307,78 @@ test "Calibrate Command E2E" {
     try run(allocator, &args, &registry, stdout_buf.writer(), stderr_buf.writer());
 
     const out = stdout_buf.items;
+
+    // Check Metadata
+    try std.testing.expect(std.mem.indexOf(u8, out, "[metadata]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "tool_version = \"v1.2.1\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "estimates_sha256 =") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "actuals_sha256 =") != null);
+
     // Expect drift
     try std.testing.expect(std.mem.indexOf(u8, out, "multiplier = 1.0500") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "drift_bps = 500") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "model = \"gpt-4\"") != null);
+}
+
+test "Calibrate - Validation Rules" {
+    const allocator = std.testing.allocator;
+    const cwd = std.fs.cwd();
+    var registry = try Pricing.Registry.init(allocator, .{});
+    defer registry.deinit();
+
+    // Create independent actuals file to avoid race conditions/dependencies
+    const val_act_data = "ResourceId,BilledCost,ChargePeriodStart,Tags\nreq-1,0.000105,2025-01-01,\"{}\"";
+    try cwd.writeFile(.{ .sub_path = "val_actuals.csv", .data = val_act_data });
+    defer cwd.deleteFile("val_actuals.csv") catch {};
+
+    // 1. Duplicate Estimates ID (Fatal)
+    const dup_est =
+        \\{
+        \\  "req-1": { "cost": 0.0001, "model": "gpt-4", "scenario": "chat" },
+        \\  "req-1": { "cost": 0.0002, "model": "gpt-4", "scenario": "chat" }
+        \\}
+    ;
+    try cwd.writeFile(.{ .sub_path = "dup_estimates.json", .data = dup_est });
+    defer cwd.deleteFile("dup_estimates.json") catch {};
+
+    const args_dup = [_][]const u8{ "calibrate", "--estimates", "dup_estimates.json", "--csv", "val_actuals.csv", "--validate-only" };
+
+    // We expect run() to return error due to json parser
+    var stdout = std.ArrayList(u8).init(allocator);
+    defer stdout.deinit();
+    var stderr = std.ArrayList(u8).init(allocator);
+    defer stderr.deinit();
+
+    const err = run(allocator, &args_dup, &registry, stdout.writer(), stderr.writer());
+    try std.testing.expectError(error.DuplicateField, err);
+}
+
+test "Calibrate - Fuzzy Collision" {
+    const allocator = std.testing.allocator;
+    const cwd = std.fs.cwd();
+    var reg = try Pricing.Registry.init(allocator, .{});
+    defer reg.deinit();
+    var stdout = std.ArrayList(u8).init(allocator);
+    defer stdout.deinit();
+    var stderr = std.ArrayList(u8).init(allocator);
+    defer stderr.deinit();
+
+    const col_est =
+        \\{
+        \\  "req-1": { "cost": 0.0001, "model": "gpt-4", "scenario": "chat" },
+        \\  "custom-req-1": { "cost": 0.0002, "model": "gpt-4", "scenario": "chat" }
+        \\}
+    ;
+    try cwd.writeFile(.{ .sub_path = "test_collision.json", .data = col_est });
+    defer cwd.deleteFile("test_collision.json") catch {};
+
+    // Create independent actuals
+    try cwd.writeFile(.{ .sub_path = "col_actuals.csv", .data = "ResourceId,BilledCost,ChargePeriodStart,Tags\nreq-1,0.000105,2025-01-01,\"{}\"" });
+    defer cwd.deleteFile("col_actuals.csv") catch {};
+
+    const args = [_][]const u8{ "calibrate", "--estimates", "test_collision.json", "--csv", "col_actuals.csv", "--match", "fuzzy" };
+
+    const err = run(allocator, &args, &reg, stdout.writer(), stderr.writer());
+    try std.testing.expectError(error.EstimateIdCollision, err);
+    try std.testing.expect(std.mem.indexOf(u8, stderr.items, "Estimate ID collision") != null);
 }

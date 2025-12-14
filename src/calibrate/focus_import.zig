@@ -438,7 +438,14 @@ pub fn FocusIterator(comptime ReaderType: type) type {
 
             const header_line = (try p.nextLine()) orelse return error.EmptyFile;
             const cols = try resolveColumns(p.tokenizer(header_line));
-            if (!cols.isReady()) return error.InvalidColumnMapping;
+            if (!cols.isReady()) {
+                const w = std.io.getStdErr().writer();
+                try w.print("Error: CSV missing required columns:\n", .{});
+                if (cols.resource_id == null) try w.print("  - ResourceId\n", .{});
+                if (cols.billed_cost == null) try w.print("  - BilledCost\n", .{});
+                if (cols.period_start == null) try w.print("  - ChargePeriodStart\n", .{});
+                return error.InvalidColumnMapping;
+            }
 
             return .{ .parser = p, .cols = cols, .header_done = true };
         }

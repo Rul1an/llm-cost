@@ -1,6 +1,6 @@
 {
     "req-1": {
-        "cost": 100,
+        "cost": 0.0001,
         "model": "gpt-4",
         "scenario": "chat"
     }

@@ -7,6 +7,7 @@ pub const EstimateMeta = struct {
     model: []const u8, // interned
     scenario: []const u8, // interned
     matched: bool = false,
+    original_id: []const u8, // interned (for error reporting)
 };
 
 pub const EstimateIndex = std.StringHashMapUnmanaged(EstimateMeta);
@@ -180,7 +181,7 @@ pub fn runJoin(
     };
 }
 
-fn normalizeResourceId(id: []const u8, mode: IdNormalization) []const u8 {
+pub fn normalizeResourceId(id: []const u8, mode: IdNormalization) []const u8 {
     if (mode == .strict) return id;
 
     // Strip known prefixes (longest first)
