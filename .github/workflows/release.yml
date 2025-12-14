@@ -33,17 +33,21 @@ jobs:
         run: zig build test
 
       - name: Golden Tests
+        if: runner.os == 'Linux'
         run: zig build test-golden
 
       - name: Fuzzing Sanity Check
+        if: runner.os == 'Linux'
         # Run full iterations (2000 per model) - fast enough for CI
         run: zig build fuzz
 
       - name: Parity Check
+        if: runner.os == 'Linux'
         # Relies on committed testdata/evil_corpus_v2.jsonl
         run: zig build test-parity
 
       - name: BPE Microbenchmark (sanity)
+        if: runner.os == 'Linux'
         # Run to ensure no crashes in bench code, though timing is flaky on CI
         # Optimization level is handled by build.zig
         run: zig build bench

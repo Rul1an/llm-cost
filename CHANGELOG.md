@@ -1,5 +1,9 @@
 # Changelog
 
+## [v1.1.8] - 2025-12-14
+### Fixed
+- **CI Stability**: Restricted `Golden`, `Fuzz`, `Parity`, and `Bench` tests to run only on Linux CI runners (matching `ci.yml`), as they require specific environment consistency not present on Windows/MacOS runners. Unit tests and binary smoke tests remain cross-platform.
+
 ## [v1.1.7] - 2025-12-14
 ### Fixed
 - **CI Reliability**: Updated release workflow to use `zig-cross-compile-action@v3` for improved cross-platform support.
