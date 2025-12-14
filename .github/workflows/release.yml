@@ -110,8 +110,10 @@ jobs:
         with:
           cosign-release: 'v2.2.4'
 
-      - name: Set SOURCE_DATE_EPOCH
-        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> $GITHUB_ENV
+      - name: Set Environment
+        run: |
+          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> $GITHUB_ENV
+          echo "APP_VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
 
       - name: Build
         uses: Rul1an/zig-cross-compile-action@v3
@@ -120,7 +122,7 @@ jobs:
           strict_version: true
           target: ${{ matrix.target }}
           project-type: zig
-          cmd: "-Doptimize=ReleaseFast -Dversion=${GITHUB_REF_NAME#v}"
+          cmd: "-Doptimize=ReleaseFast -Dversion=${{ env.APP_VERSION }}"
           use_cache: true
           sbom: false # Using anchore/sbom-action instead
           sign: false # Using manual cosign step

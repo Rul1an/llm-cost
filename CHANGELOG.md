@@ -1,5 +1,9 @@
 # Changelog
 
+## [v1.1.11] - 2025-12-14
+### Fixed
+- **CI**: Fixed `zig build` panic caused by improper shell variable expansion of the version string in `release.yml`. Now pre-calculating `APP_VERSION` in the workflow env to pass a clean semantic version to the build action.
+
 ## [v1.1.10] - 2025-12-14
 ### Fixed
 - **Tests**: Corrected `golden_test.zig` assertions to match actual JSON output format (cost as string) and CSV precision (6 decimals), fixing false negative CI failures.
