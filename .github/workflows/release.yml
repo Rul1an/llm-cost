@@ -110,7 +110,7 @@ jobs:
         run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> $GITHUB_ENV
 
       - name: Build
-        uses: Rul1an/zig-cross-compile-action@66076af8e44f186b08e2d05b5a1aa7c91c8042d6
+        uses: Rul1an/zig-cross-compile-action@v3
         with:
           version: "0.14.0"
           strict_version: true

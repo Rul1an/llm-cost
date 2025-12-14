@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.1.7] - 2025-12-14
+### Fixed
+- **CI Reliability**: Updated release workflow to use `zig-cross-compile-action@v3` for improved cross-platform support.
+- **Determinism**: Enforced `LF` line endings via `.gitattributes` to prevent test failures on Windows (CRLF mismatches).
+
 ## [v1.1.6] - 2025-12-14
 ### Fixed
 - **Windows Support**: Hardened `git` execution by correctly propagating `Path` and `SystemRoot` environment variables, resolving CI test failures on Windows.
