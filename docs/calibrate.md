@@ -78,8 +78,24 @@ You can use this file to adjust future estimates or update your `llm-cost.toml` 
 
 > **Note**: When using the CLI, `strict` is the default matching mode if you do not specify `--match`.
 
+## Join Semantics
+
+The calibration process performs a **Streaming Left Join** (Estimates + Actuals -> Factors).
+
+1.  **Normalization**: Both Estimates and Actuals `ResourceId`s are normalized based on `--match` mode (`strict` or `fuzzy`).
+2.  **Aggregation**:
+    *   Multiple Actuals rows matching a single Estimate ID are **SUMMED**.
+    *   Example: Estimate `req-1` ($1.00) vs Actuals `req-1` (Jan 1, $0.50) + `req-1` (Jan 2, $0.60).
+    *   Result: Estimate $1.00 vs Actual $1.10. Drift +10%.
+3.  **Grouping**: Results are grouped by unique `(model, scenario)` pairs from the **Estimates**.
+    *   Drift = (Sum of Actuals for Group / Sum of Estimates for Group) - 1.
+
 ## Troubleshooting
 
-*   **Warning: 0 rows matched**: Check your `ResourceId` format. Try `--match fuzzy`. Ensure your estimates JSON covers the same time period as your billing CSV.
-*   **Drift is 0 bps**: Perfect alignment! Or, you might be comparing estimates against themselves.
-*   **Error: TooManyGroups**: If your data has extremely high cardinality (unique model/scenario pairs > 100k), the tool will exit to prevent memory exhaustion. Filter your input or aggregate tags.
+| Issue | Cause | Solution |
+| :--- | :--- | :--- |
+| **Error: DuplicateField** | Your `estimates.json` contains duplicate IDs, OR you have a **Fuzzy Match Collision** (e.g. `foo` and `custom-foo` both normalize to `foo`). | Remove duplicates or use distinct IDs that don't collide after prefix stripping. |
+| **Error: CSV missing required columns** | Your CSV lacks `ResourceId`, `BilledCost`, or `ChargePeriodStart`. | Ensure your CSV matches FOCUS v1.0 spec. |
+| **Warning: 0 rows matched** | No rows in your CSV matched any ID in your estimates. | Check `ResourceId` formats. Try `--match fuzzy`. Ensure coverage periods overlap. |
+| **Drift is 0 bps** | Exact match or comparing estimates to themselves. | Verify you are using the correct actuals CSV. |
+| **Error: TooManyGroups** | Unique `(model, scenario)` pairs > 100k. | Filter your input or consolidate tags. |

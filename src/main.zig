@@ -20,7 +20,7 @@ const ci_action_cmd = @import("ci_action.zig");
 const verify_cmd = @import("verify.zig");
 const calibrate_cmd = @import("calibrate/cmd.zig");
 
-pub const version_str = "1.2.0";
+pub const version_str = "1.2.1";
 
 // Re-exporting GlobalState for backward compatibility if needed, but components use context.GlobalState
 pub const GlobalState = context.GlobalState;
