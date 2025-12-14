@@ -225,7 +225,6 @@ pub fn HashingReader(comptime ReaderType: type) type {
 fn loadEstimatesFromMemory(gpa: Allocator, perm: Allocator, content: []const u8, match_mode: join.IdNormalization, diagnostic: anytype) !join.EstimateIndex {
     var map = join.EstimateIndex{};
     errdefer map.deinit(gpa);
-    errdefer map.deinit(gpa);
 
     const Parsed = try std.json.parseFromSlice(std.json.Value, gpa, content, .{
         .duplicate_field_behavior = .@"error",
