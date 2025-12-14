@@ -1,5 +1,9 @@
 # Changelog
 
+## [v1.1.12] - 2025-12-14
+### Fixed
+- **CI**: Restrict release workflow to trigger only on full semantic version tags (`v*.*.*`). This prevents build failures on major version alias tags (e.g., `v1`) which result in a version string ("1") that Zig cannot parse.
+
 ## [v1.1.11] - 2025-12-14
 ### Fixed
 - **CI**: Fixed `zig build` panic caused by improper shell variable expansion of the version string in `release.yml`. Now pre-calculating `APP_VERSION` in the workflow env to pass a clean semantic version to the build action.
