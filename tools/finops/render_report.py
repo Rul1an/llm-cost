@@ -33,10 +33,8 @@ def extract_global_drift_bps(toml_obj: dict) -> float | None:
     # Pas keys aan aan jullie daadwerkelijke schema.
     # Probeert meerdere paden zodat het niet brittle is.
     candidates = [
-        ("global", "drift_bps"),
-        ("global", "drift", "bps"),
-        ("global", "stats", "drift_bps"),
-        ("metadata", "stats", "drift_bps"),
+        ("metadata", "stats", "global_drift_bps"), # Canonical v1.3+
+        ("global", "drift_bps"), # Legacy
     ]
     for path in candidates:
         cur = toml_obj

@@ -30,10 +30,27 @@ pub fn writeToml(allocator: std.mem.Allocator, writer: anytype, result: join.Joi
         try writer.print("generated_at = {d}\n", .{ts});
     }
 
+    // Calculate Global Drift (Weighted Average)
+    var total_est_micro: i128 = 0;
+    var total_act_micro: i128 = 0;
+    var it_calc = result.groups.iterator();
+    while (it_calc.next()) |entry| {
+        total_est_micro += entry.value_ptr.sum_est_micro;
+        total_act_micro += entry.value_ptr.sum_act_micro;
+    }
+
+    var global_drift_bps: i64 = 0;
+    if (total_est_micro > 0) {
+        // drift = (act - est) / est * 10000
+        const diff = total_act_micro - total_est_micro;
+        global_drift_bps = @intCast(@divTrunc(diff * 10000, total_est_micro));
+    }
+
     try writer.print("\n[metadata.stats]\n", .{});
     try writer.print("matched_rows = {d}\n", .{meta.matched_rows});
     try writer.print("unmatched_actuals = {d}\n", .{meta.unmatched_actuals});
     try writer.print("unmatched_estimates = {d}\n", .{meta.unmatched_estimates});
+    try writer.print("global_drift_bps = {d}\n", .{global_drift_bps});
 
     try writer.print("\n", .{});
 
