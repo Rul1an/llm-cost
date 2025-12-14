@@ -41,12 +41,13 @@ pub fn writeToml(allocator: std.mem.Allocator, writer: anytype, result: join.Joi
 
             // Multiplier float for TOML
             // ratio = num/den
-            const mult_f = @as(f64, @floatFromInt(ag.sum_act_micro)) / @as(f64, @floatFromInt(ag.sum_est_micro));
+            std.debug.assert(ag.sum_est_micro != 0);
+            const multiplier = @as(f64, @floatFromInt(ag.sum_act_micro)) / @as(f64, @floatFromInt(ag.sum_est_micro));
 
             try writer.print("[[factor]]\n", .{});
             try writer.print("model = \"{s}\"\n", .{key.model});
             try writer.print("scenario = \"{s}\"\n", .{key.scenario});
-            try writer.print("multiplier = {d:.4}\n", .{mult_f});
+            try writer.print("multiplier = {d:.4}\n", .{multiplier});
             try writer.print("drift_bps = {d}\n", .{drift.drift_bps});
             try writer.print("confidence = \"{s}\"\n", .{confidence});
             try writer.print("samples = {d}\n", .{ag.n_rows});

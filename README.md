@@ -82,6 +82,23 @@ prompt_id = "search"
 tags = { team = "platform", app = "search" }
 ```
 
+## Calibration (Drift Analysis)
+
+Close the loop by comparing your estimates against actual billing data (FOCUS v1.0 CSV).
+
+```bash
+# 1. Generate estimates map
+llm-cost export --format=json > estimates.json
+
+# 2. Compare against actuals (with fuzzy matching)
+llm-cost calibrate \
+  --estimates estimates.json \
+  --actuals billing-data.csv \
+  --match fuzzy > factors.toml
+```
+
+Output `factors.toml` contains drift multipliers (e.g., `1.05` for +5% drift) and confidence scores.
+
 ## FinOps Export
 
 Export FOCUS 1.0 CSV for Vantage, CloudZero, or any FOCUS-compliant tool:

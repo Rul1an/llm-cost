@@ -73,8 +73,10 @@ You can use this file to adjust future estimates or update your `llm-cost.toml` 
 
 ## Matching Rules (`--match`)
 
-*   `strict` (default): `ResourceId` must match exactly (case-sensitive).
+*   `strict` (default for CLI): `ResourceId` must match exactly (case-sensitive).
 *   `fuzzy`: Attempts to strip common prefixes (e.g., `custom-`, `llm-cost/`) from the CSV ResourceIds to find a match in your estimates.
+
+> **Note**: When using the CLI, `strict` is the default matching mode if you do not specify `--match`.
 
 ## Troubleshooting
 

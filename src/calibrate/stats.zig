@@ -199,7 +199,7 @@ test "Drift Robustness" {
     try std.testing.expectEqual(@as(i64, 1000), d_huge.drift_bps);
 
     // 3. Negative Values (Refunds)
-    // Est: -100, Act: -90. (Recieved less refund than expected -> Cost "Drift" relative to baseline?)
+    // Est: -100, Act: -90. (Received less refund than expected -> Cost "Drift" relative to baseline?)
     // Math: (-90 - (-100)) / -100 = 10 / -100 = -10%.
     // Our logic normalizes den to 100, num to 90.
     // 90 - 100 = -10. -10/100 = -10%.

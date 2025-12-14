@@ -132,15 +132,28 @@ fn loadEstimates(gpa: Allocator, perm: Allocator, path: []const u8) !join.Estima
         const id = entry.key_ptr.*;
         const val = entry.value_ptr.*;
 
-        const cost_val = val.object.get("cost").?;
+        const cost_val = val.object.get("cost") orelse {
+            try std.io.getStdErr().writer().print("Error: Missing 'cost' for ID '{s}'\n", .{id});
+            return error.MissingField;
+        };
         const est_micro: i128 = switch (cost_val) {
             .float => |f| @intFromFloat(f),
             .integer => |i| @intCast(i),
             else => return error.InvalidCostFormat,
         };
 
-        const model = val.object.get("model").?.string;
-        const scenario = val.object.get("scenario").?.string;
+        const model_val = val.object.get("model") orelse {
+            try std.io.getStdErr().writer().print("Error: Missing 'model' for ID '{s}'\n", .{id});
+            return error.MissingField;
+        };
+
+        const scenario_val = val.object.get("scenario") orelse {
+            try std.io.getStdErr().writer().print("Error: Missing 'scenario' for ID '{s}'\n", .{id});
+            return error.MissingField;
+        };
+
+        const model = model_val.string;
+        const scenario = scenario_val.string;
 
         const key_interned = try perm.dupe(u8, id);
         const meta = join.EstimateMeta{

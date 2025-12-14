@@ -143,6 +143,8 @@ fn parseCostMicroUsd(raw_in: []const u8) !i128 {
         raw = raw[1..];
     }
 
+    if (raw.len == 0) return error.InvalidCost; // Sign only?
+
     // split on '.'
     const dot_opt = std.mem.indexOfScalar(u8, raw, '.');
     const int_str = if (dot_opt) |d| raw[0..d] else raw;
@@ -327,7 +329,7 @@ fn unescapeJsonString(alloc: Allocator, raw: []const u8) ![]const u8 {
     // We'll operate on a fixed buffer if possible, but emojis might expand.
     // Let's use ArrayList for simplicity and correctness.
     var list = std.ArrayList(u8).init(alloc);
-    defer list.deinit(); // wait, we return list.toOwnedSlice?
+    // No defer deinit, ownership transferred via toOwnedSlice()
     // allocator must match `alloc`.
 
     var i: usize = 0;

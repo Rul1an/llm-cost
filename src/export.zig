@@ -165,6 +165,9 @@ pub fn run(
             // We need to parse billed_cost string back to number OR use the original calculation if we had it.
             // We don't have original cost here easily.
             // Let's output cost as number (from string parse).
+            // Cost is formatted string in `billed_cost`.
+            // We parse as float then convert to micro-USD.
+            // TODO: Use fixed-point parsing to avoid potential float precision loss for large numbers.
             const cost_f = std.fmt.parseFloat(f64, row.billed_cost) catch 0;
             const cost_micro = @as(i64, @intFromFloat(cost_f * 1_000_000));
 
