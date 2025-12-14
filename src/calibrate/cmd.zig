@@ -144,9 +144,9 @@ fn loadEstimates(gpa: Allocator, perm: Allocator, path: []const u8) !join.Estima
 
         const key_interned = try perm.dupe(u8, id);
         const meta = join.EstimateMeta{
-             .est_micro = est_micro,
-             .model = try perm.dupe(u8, model),
-             .scenario = try perm.dupe(u8, scenario),
+            .est_micro = est_micro,
+            .model = try perm.dupe(u8, model),
+            .scenario = try perm.dupe(u8, scenario),
         };
 
         try map.put(gpa, key_interned, meta);
@@ -160,7 +160,7 @@ test "Calibrate Command E2E" {
 
     // Create temp files
     const cwd = std.fs.cwd();
-    try cwd.writeFile(.{ .sub_path = "test_estimates.json", .data =
+    try cwd.writeFile(.{ .sub_path = "test_estimates.json", .data = 
         \\{
         \\  "req-1": { "cost": 100, "model": "gpt-4", "scenario": "chat" },
         \\  "req-2": { "cost": 200, "model": "gpt-4", "scenario": "chat" }
@@ -168,12 +168,12 @@ test "Calibrate Command E2E" {
     });
     defer cwd.deleteFile("test_estimates.json") catch {};
 
-    try cwd.writeFile(.{ .sub_path = "test_actuals.csv", .data =
+    try cwd.writeFile(.{ .sub_path = "test_actuals.csv", .data = 
         \\ResourceId,BilledCost,ChargePeriodStart,Tags
         \\req-1,0.000105,2025-01-01,"{}"
         \\req-2,0.000210,2025-01-01,"{}"
     }); // 0.000105 = 105 micro (vs 100 est) -> +5% drift
-       // 0.000210 = 210 micro (vs 200 est) -> +5% drift
+    // 0.000210 = 210 micro (vs 200 est) -> +5% drift
     defer cwd.deleteFile("test_actuals.csv") catch {};
 
     var stdout_buf = std.ArrayList(u8).init(allocator);

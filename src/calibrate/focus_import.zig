@@ -1,4 +1,3 @@
-
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const csv = @import("csv.zig");
@@ -7,8 +6,8 @@ const csv = @import("csv.zig");
 /// Slices are valid only until the next call to nextLine() on the CSV parser.
 pub const RowView = struct {
     resource_id: []const u8,
-    billed_cost: i128,          // MicroUSD
-    period_start: []const u8,   // ISO8601
+    billed_cost: i128, // MicroUSD
+    period_start: []const u8, // ISO8601
     call_count: ?u64 = null,
     cache_hit_ratio: ?u64 = null, // Parts-Per-Million (0..1_000_000)
 
@@ -24,8 +23,7 @@ pub const RowView = struct {
 };
 
 // Maps CSV header name to internal column index
-pub const ImportOptions = struct {
-};
+pub const ImportOptions = struct {};
 
 pub const ColumnIndex = struct {
     resource_id: ?usize = null,
@@ -106,7 +104,7 @@ pub fn parseRow(scratch_allocator: Allocator, row_tokenizer: csv.Tokenizer, indi
         } else if (current_idx == idx_cost) {
             rec.billed_cost = try parseCostMicroUsd(field.raw);
         } else if (current_idx == idx_start) {
-             if (field.has_escapes) {
+            if (field.has_escapes) {
                 rec.period_start = try field.toOwned(scratch_allocator);
             } else {
                 rec.period_start = field.raw;
@@ -121,9 +119,9 @@ pub fn parseRow(scratch_allocator: Allocator, row_tokenizer: csv.Tokenizer, indi
 
             extractTagsAllowlist(scratch_allocator, json_body, &rec);
         } else if (indices.x_call_count != null and current_idx == indices.x_call_count.?) {
-             rec.call_count = std.fmt.parseInt(u64, field.raw, 10) catch null;
+            rec.call_count = std.fmt.parseInt(u64, field.raw, 10) catch null;
         } else if (indices.x_cache_hit_ratio != null and current_idx == indices.x_cache_hit_ratio.?) {
-             rec.cache_hit_ratio = parseRatioPpm(field.raw) catch null;
+            rec.cache_hit_ratio = parseRatioPpm(field.raw) catch null;
         }
     }
 
@@ -138,13 +136,17 @@ fn parseCostMicroUsd(raw_in: []const u8) !i128 {
     if (raw.len == 0) return error.InvalidCost;
 
     var sign: i128 = 1;
-    if (raw[0] == '-') { sign = -1; raw = raw[1..]; }
-    else if (raw[0] == '+') { raw = raw[1..]; }
+    if (raw[0] == '-') {
+        sign = -1;
+        raw = raw[1..];
+    } else if (raw[0] == '+') {
+        raw = raw[1..];
+    }
 
     // split on '.'
     const dot_opt = std.mem.indexOfScalar(u8, raw, '.');
     const int_str = if (dot_opt) |d| raw[0..d] else raw;
-    const frac_str = if (dot_opt) |d| raw[d+1..] else "";
+    const frac_str = if (dot_opt) |d| raw[d + 1 ..] else "";
 
     var int_part: i128 = 0;
     if (int_str.len != 0) {
@@ -187,7 +189,7 @@ fn parseRatioPpm(raw_in: []const u8) !u64 {
     // Handle integer 0 or 1 edge cases quickly or generally
     const dot_opt = std.mem.indexOfScalar(u8, raw, '.');
     const int_str = if (dot_opt) |d| raw[0..d] else raw;
-    const frac_str = if (dot_opt) |d| raw[d+1..] else "";
+    const frac_str = if (dot_opt) |d| raw[d + 1 ..] else "";
 
     var int_val: u64 = 0;
     if (int_str.len > 0) {
@@ -209,8 +211,8 @@ fn parseRatioPpm(raw_in: []const u8) !u64 {
         }
         // Rounding logic for 7th digit (half up)
         if (frac_str.len > 6) {
-             const c7 = frac_str[6];
-             if (c7 >= '5') ppm += 1;
+            const c7 = frac_str[6];
+            if (c7 >= '5') ppm += 1;
         }
     }
 
@@ -248,9 +250,13 @@ fn extractTagsAllowlist(scratch: Allocator, json_in: []const u8, rec: *RowView) 
         // parse value
         if (json[i] == '"') {
             const val = parseJsonString(scratch, json, &i) catch return;
-            if (need_model and std.mem.eql(u8, key, "model")) { rec.model = val; need_model = false; }
-            else if (need_scenario and std.mem.eql(u8, key, "scenario")) { rec.scenario = val; need_scenario = false; }
-            else if (need_count and std.mem.eql(u8, key, "x-call-count")) {
+            if (need_model and std.mem.eql(u8, key, "model")) {
+                rec.model = val;
+                need_model = false;
+            } else if (need_scenario and std.mem.eql(u8, key, "scenario")) {
+                rec.scenario = val;
+                need_scenario = false;
+            } else if (need_count and std.mem.eql(u8, key, "x-call-count")) {
                 rec.call_count = std.fmt.parseInt(u64, val, 10) catch null;
                 need_count = false;
             } else if (need_hit and std.mem.eql(u8, key, "x-cache-hit-ratio")) {
@@ -271,7 +277,10 @@ fn extractTagsAllowlist(scratch: Allocator, json_in: []const u8, rec: *RowView) 
         if (!need_model and !need_scenario and !need_count and !need_hit) return;
 
         skipWs(json, &i);
-        if (i < json.len and json[i] == ',') { i += 1; continue; }
+        if (i < json.len and json[i] == ',') {
+            i += 1;
+            continue;
+        }
         if (i < json.len and json[i] == '}') return;
     }
 }
@@ -297,7 +306,11 @@ fn parseJsonString(scratch: Allocator, s: []const u8, i: *usize) ![]const u8 {
 
     while (i.* < s.len) : (i.* += 1) {
         const c = s[i.*];
-        if (c == '\\') { has_esc = true; i.* += 1; continue; }
+        if (c == '\\') {
+            has_esc = true;
+            i.* += 1;
+            continue;
+        }
         if (c == '"') break;
     }
     if (i.* >= s.len) return error.InvalidJson;
@@ -345,7 +358,7 @@ fn unescapeJsonString(alloc: Allocator, raw: []const u8) ![]const u8 {
                 // Check for surrogate pairs (High Surrogate followed by Low Surrogate)
                 if (cp1 >= 0xD800 and cp1 <= 0xDBFF) {
                     // Expect next to be \uXXXX representing low surrogate
-                    if (i + 2 < raw.len and raw[i+1] == '\\' and raw[i+2] == 'u') {
+                    if (i + 2 < raw.len and raw[i + 1] == '\\' and raw[i + 2] == 'u') {
                         // Peek safe? parseHex4 increments i.
                         // We must first verify and consume \u
                         // i is currently at last digit of first escape.
@@ -404,12 +417,11 @@ fn parseHex4(raw: []const u8, i: *usize) !u16 {
     if (i.* + 4 >= raw.len) return error.InvalidJson;
 
     // chars at i+1, i+2, i+3, i+4
-    const s = raw[i.*+1..i.*+5];
+    const s = raw[i.* + 1 .. i.* + 5];
     i.* += 4; // Advance iterator to last digit
 
     return std.fmt.parseInt(u16, s, 16);
 }
-
 
 pub fn FocusIterator(comptime ReaderType: type) type {
     return struct {

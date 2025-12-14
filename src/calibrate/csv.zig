@@ -87,7 +87,7 @@ pub fn Parser(comptime ReaderType: type) type {
                     // Handle CRLF or just LF
                     var trimmed = line;
                     if (trimmed.len > 0 and trimmed[trimmed.len - 1] == '\r') {
-                        trimmed = trimmed[0..trimmed.len - 1];
+                        trimmed = trimmed[0 .. trimmed.len - 1];
                     }
 
                     // In lenient mode, skip empty lines
@@ -134,7 +134,7 @@ pub const Tokenizer = struct {
             while (i < self.raw.len) : (i += 1) {
                 result[j] = self.raw[i];
                 j += 1;
-                if (self.raw[i] == '"' and i + 1 < self.raw.len and self.raw[i+1] == '"') {
+                if (self.raw[i] == '"' and i + 1 < self.raw.len and self.raw[i + 1] == '"') {
                     i += 1; // Skip escaped quote
                 }
             }
@@ -219,7 +219,7 @@ pub const Tokenizer = struct {
 
             if (self.line[i] == '"') {
                 // Check if escaped ""
-                if (i + 1 < self.line.len and self.line[i+1] == '"') {
+                if (i + 1 < self.line.len and self.line[i + 1] == '"') {
                     has_escapes = true;
                     i += 1; // Skip next quote
                     if ((i - (start + 1)) > self.config.max_field_length) return error.FieldTooLong;
@@ -229,8 +229,8 @@ pub const Tokenizer = struct {
                 // End of quote
                 // Must be followed by comma or EOF
                 if (i + 1 < self.line.len) {
-                    if (self.line[i+1] == ',') {
-                        const content = self.line[start+1..i];
+                    if (self.line[i + 1] == ',') {
+                        const content = self.line[start + 1 .. i];
                         self.cursor = i + 2;
                         return Field{ .raw = content, .is_quoted = true, .has_escapes = has_escapes };
                     }
@@ -240,7 +240,7 @@ pub const Tokenizer = struct {
                 }
 
                 // EOF right after quote
-                const content = self.line[start+1..i];
+                const content = self.line[start + 1 .. i];
                 self.cursor = self.line.len;
                 return Field{ .raw = content, .is_quoted = true, .has_escapes = has_escapes };
             }
@@ -339,4 +339,3 @@ test "CSV Parser - Lenient Empty Lines" {
     const l2 = (try parser.nextLine()).?; // Should skip \n\n and get "c,d"
     try std.testing.expectEqualStrings("c,d", l2);
 }
-

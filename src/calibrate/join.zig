@@ -4,8 +4,8 @@ const focus = @import("focus_import.zig");
 
 pub const EstimateMeta = struct {
     est_micro: i128,
-    model: []const u8,      // interned
-    scenario: []const u8,   // interned
+    model: []const u8, // interned
+    scenario: []const u8, // interned
     matched: bool = false,
 };
 

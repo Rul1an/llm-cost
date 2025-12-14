@@ -59,11 +59,11 @@ test "Calibrate Guardrails - Max Groups" {
     const res = join.runJoin(SyntheticIter, allocator, perm_arena.allocator(), &arena, &estimates, &iter, opts);
 
     if (res) |r| {
-         // passed? check if limited
-         // If implementation doesn't strictly error but stops aggregating, that's one behavior.
-         // If it errors `error.TooManyGroups`, we catch it.
-         var mutable_r = r;
-         mutable_r.groups.deinit(allocator); // Fix leak
+        // passed? check if limited
+        // If implementation doesn't strictly error but stops aggregating, that's one behavior.
+        // If it errors `error.TooManyGroups`, we catch it.
+        var mutable_r = r;
+        mutable_r.groups.deinit(allocator); // Fix leak
     } else |err| {
         try std.testing.expect(err == error.TooManyGroups);
     }

@@ -3,13 +3,13 @@ const Allocator = std.mem.Allocator;
 
 /// Rational representation of multiplier (no floats)
 pub const Ratio = struct {
-    num: i128,  // actual
-    den: i128,  // estimate (never 0 if Ratio exists)
+    num: i128, // actual
+    den: i128, // estimate (never 0 if Ratio exists)
 };
 
 pub const GroupKey = struct {
-    model: []const u8,      // interned in perm arena
-    scenario: []const u8,   // interned in perm arena
+    model: []const u8, // interned in perm arena
+    scenario: []const u8, // interned in perm arena
 
     pub const Context = struct {
         pub fn hash(_: Context, k: GroupKey) u64 {
@@ -22,7 +22,7 @@ pub const GroupKey = struct {
 
         pub fn eql(_: Context, a: GroupKey, b: GroupKey) bool {
             return std.mem.eql(u8, a.model, b.model) and
-                   std.mem.eql(u8, a.scenario, b.scenario);
+                std.mem.eql(u8, a.scenario, b.scenario);
         }
     };
 };
@@ -30,13 +30,13 @@ pub const GroupKey = struct {
 pub const Aggregate = struct {
     sum_est_micro: i128 = 0,
     sum_act_micro: i128 = 0,
-    n_rows: u64 = 0,           // FOCUS line items
-    n_calls: u64 = 0,          // x-call-count sum (for confidence)
+    n_rows: u64 = 0, // FOCUS line items
+    n_calls: u64 = 0, // x-call-count sum (for confidence)
     sum_abs_err_micro: i128 = 0,
 
     // Cache statistics
     cache_hit_calls: u64 = 0, // Sum of (call_count * hit_ratio)
-    cache_calls: u64 = 0,     // Sum of call_count where ratio was present
+    cache_calls: u64 = 0, // Sum of call_count where ratio was present
 
     /// Add a matched pair to this aggregate
     pub fn add(self: *Aggregate, est: i128, act: i128, call_count: u64) !void {
@@ -92,7 +92,7 @@ pub const StringInterner = struct {
 
     pub fn intern(self: *StringInterner, gpa: Allocator, perm: Allocator, s: []const u8) ![]const u8 {
         if (self.map.get(s)) |v| return v; // lookup by bytes is ok
-        const dup = try perm.dupe(u8, s);  // key must be perm-lived
+        const dup = try perm.dupe(u8, s); // key must be perm-lived
         try self.map.put(gpa, dup, dup);
         return dup;
     }

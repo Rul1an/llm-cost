@@ -31,9 +31,7 @@ pub fn driftFromRatio(r: ?agg.Ratio) Drift {
     const bps_i128: i128 = @divTrunc(diff * 10_000, den);
 
     // clamp into i64 (very extreme multipliers)
-    const bps: i64 = if (bps_i128 > std.math.maxInt(i64)) std.math.maxInt(i64)
-        else if (bps_i128 < std.math.minInt(i64)) std.math.minInt(i64)
-        else @intCast(bps_i128);
+    const bps: i64 = if (bps_i128 > std.math.maxInt(i64)) std.math.maxInt(i64) else if (bps_i128 < std.math.minInt(i64)) std.math.minInt(i64) else @intCast(bps_i128);
 
     const abs_bps: u64 = @intCast(@abs(bps));
     const status: DriftStatus =
@@ -134,9 +132,15 @@ fn isqrt_u128(x: u128) u128 {
     while (true) {
         // Safe check for overflow x*x using @sqrt approximation
         if (r <= 18446744073709551615) { // maxInt(u64), so (r+1)^2 might fit u128
-             if ((r + 1) * (r + 1) <= x) { r += 1; continue; }
+            if ((r + 1) * (r + 1) <= x) {
+                r += 1;
+                continue;
+            }
         }
-        if (r * r > x) { r -= 1; continue; }
+        if (r * r > x) {
+            r -= 1;
+            continue;
+        }
         break;
     }
     return r;
