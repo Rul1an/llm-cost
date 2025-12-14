@@ -1,6 +1,7 @@
 # Changelog
 
 ## [v1.2.0] - 2025-12-14
+
 ### Added
 - **Command**: `llm-cost calibrate` for comparing estimates against actual billing data (Drift Analysis).
 - **Import**: FOCUS v1.0 CSV import support with Tags-based extensions (`x-cache-hit-ratio`, `x-call-count`).
@@ -9,9 +10,12 @@
 - **Stats**: Wilson Score confidence intervals for statistical significance.
 - **Export**: `llm-cost export --format=json` for generating compatibility estimates.
 
+### Changed
+- **CLI**: `llm-cost export` now defaults to CSV but supports JSON map output for calibration integration.
+- **Performance**: Optimized streaming join for low memory footprint on large datasets.
+
 ### Technical
 - **Determinism**: Drift calculation uses integer basis points (bps) to eliminate floating-point non-determinism.
-- **Performance**: Streaming join architecture with O(N) memory relative to distinct keys (not dataset size).
 - **Unicode**: Robust `\uXXXX` surrogate pair support in JSON Tags for accurate parsing.
 - **Safety**: `max_groups` guardrail (100k default) prevents cardinality explosions.
 
