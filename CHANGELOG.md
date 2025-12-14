@@ -1,5 +1,9 @@
 # Changelog
 
+## [v1.1.5] - 2025-12-14
+### Fixed
+- **Build**: Resolved `unused import` error in `src/determinism_test.zig` causing CI failure.
+
 ## [v1.1.4] - 2025-12-14
 
 ### Changed

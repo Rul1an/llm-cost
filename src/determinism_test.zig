@@ -1,7 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
 const Schema = @import("core/focus/schema.zig");
-const Csv = @import("core/focus/csv.zig");
 
 // --- 1. Test Deterministic Cost Formatting ---
 test "Format Cost MicroUSD" {
