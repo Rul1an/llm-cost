@@ -102,9 +102,6 @@ pub fn run(
 
         // Validate Model exists
         const price_def = registry.get(model.?) orelse {
-            // 3. Negative Values (Refunds)
-            // Est: -100, Act: -90. (Received less refund than expected -> Cost "Drift" relative to baseline?)
-            // Math: (-90 - (-100)) / -100 = 10 / -100 = -10%.
             std.log.warn("Skipping '{s}': Unknown model '{s}'", .{ prompt.path, model.? });
             continue;
         };

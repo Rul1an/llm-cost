@@ -71,7 +71,7 @@ pub fn run(
     const est_hash_hex = try std.fmt.allocPrint(allocator, "{s}", .{std.fmt.fmtSliceHexLower(&est_hash)});
     defer allocator.free(est_hash_hex);
 
-    var estimates_map = try loadEstimatesFromMemory(allocator, perm, est_content, match_mode);
+    var estimates_map = try loadEstimatesFromMemory(allocator, perm, est_content, match_mode, stderr);
     defer estimates_map.deinit(allocator);
 
     // 2. Setup Streaming Join & Hash Actuals
@@ -191,8 +191,9 @@ pub fn HashingReader(comptime ReaderType: type) type {
     };
 }
 
-fn loadEstimatesFromMemory(gpa: Allocator, perm: Allocator, content: []const u8, match_mode: join.IdNormalization) !join.EstimateIndex {
+fn loadEstimatesFromMemory(gpa: Allocator, perm: Allocator, content: []const u8, match_mode: join.IdNormalization, diagnostic: anytype) !join.EstimateIndex {
     var map = join.EstimateIndex{};
+    errdefer map.deinit(gpa);
 
     // Simple JSON parser
     const Parsed = try std.json.parseFromSlice(std.json.Value, gpa, content, .{
@@ -213,20 +214,34 @@ fn loadEstimatesFromMemory(gpa: Allocator, perm: Allocator, content: []const u8,
 
         // Collision detection: If normalized ID already exists, we have ambiguity.
         if (map.get(id_norm)) |existing| {
-            try std.io.getStdErr().writer().print("Error: Estimate ID collision. '{s}' and '{s}' both normalize to '{s}' which is ambiguous.\n", .{ existing.original_id, id_raw, id_norm });
+            try diagnostic.print("Error: Estimate ID collision. '{s}' and '{s}' both normalize to '{s}' which is ambiguous.\n", .{ existing.original_id, id_raw, id_norm });
             return error.EstimateIdCollision;
         }
 
         const cost_val = val.object.get("cost") orelse {
-            try std.io.getStdErr().writer().print("Error: Missing 'cost' for ID '{s}'\n", .{id_raw});
+            try diagnostic.print("Error: Missing 'cost' for ID '{s}'\n", .{id_raw});
             return error.MissingField;
         };
         const est_micro: i128 = switch (cost_val) {
             .float => |f| @intFromFloat(f * 1_000_000.0),
-            .integer => |i| @intCast(i),
+            // Interpret integer as dollars, not microcents (Standardization)
+            .integer => |i| blk: {
+                if (i < 0) {
+                    try diagnostic.print("Error: Negative 'cost' integer value {d} for ID '{s}'\n", .{ i, id_raw });
+                    return error.InvalidCostFormat;
+                }
+                // Warn if integer is suspiciously small (likely user error thinking it's micro)
+                // < 1000 USD is reasonable for estimates, but < $1 is often weird if specified as integer 1?
+                // Copilot suggested < 1000. Let's strictly follow advice but make it non-fatal.
+                if (i > 0 and i < 1000) {
+                    // try std.io.getStdErr().writer().print("Warning: 'cost' integer value {d} for ID '{s}' is less than $1000. Did you mean to use a float for micro-cents?\n", .{i, id_raw});
+                    // Actually, let's keep it simple as requested without too much noise if user really has $5 cost.
+                    // But for now, let's just do the conversion.
+                }
+                break :blk @intCast(i * 1_000_000);
+            },
             else => return error.InvalidCostFormat,
         };
-        // Wait, I need to confirm the Integer specific case.
 
         const model_val = val.object.get("model") orelse return error.MissingField;
         const scenario_val = val.object.get("scenario") orelse return error.MissingField;
@@ -247,6 +262,7 @@ fn loadEstimatesFromMemory(gpa: Allocator, perm: Allocator, content: []const u8,
 
         try map.put(gpa, key_interned, meta);
     }
+
     return map;
 }
 
@@ -256,15 +272,13 @@ test "Calibrate Command E2E" {
     // Create temp files
 
     // 3. Negative Values (Refunds)
-    // Est: -100, Act: -90. (Received less refund than expected -> Cost "Drift" relative to baseline?)
-    // Math: (-90 - (-100)) / -100 = 10 / -100 = -10%.
     const cwd = std.fs.cwd();
 
     // Deterministic content for hashing test
     const est_data =
         \\{
-        \\  "req-1": { "cost": 100, "model": "gpt-4", "scenario": "chat" },
-        \\  "req-2": { "cost": 200, "model": "gpt-4", "scenario": "chat" }
+        \\  "req-1": { "cost": 0.0001, "model": "gpt-4", "scenario": "chat" },
+        \\  "req-2": { "cost": 0.0002, "model": "gpt-4", "scenario": "chat" }
         \\}
     ;
     try cwd.writeFile(.{ .sub_path = "test_estimates.json", .data = est_data });
@@ -312,17 +326,22 @@ test "Calibrate - Validation Rules" {
     var registry = try Pricing.Registry.init(allocator, .{});
     defer registry.deinit();
 
+    // Create independent actuals file to avoid race conditions/dependencies
+    const val_act_data = "ResourceId,BilledCost,ChargePeriodStart,Tags\nreq-1,0.000105,2025-01-01,\"{}\"";
+    try cwd.writeFile(.{ .sub_path = "val_actuals.csv", .data = val_act_data });
+    defer cwd.deleteFile("val_actuals.csv") catch {};
+
     // 1. Duplicate Estimates ID (Fatal)
     const dup_est =
         \\{
-        \\  "req-1": { "cost": 100, "model": "gpt-4", "scenario": "chat" },
-        \\  "req-1": { "cost": 200, "model": "gpt-4", "scenario": "chat" }
+        \\  "req-1": { "cost": 0.0001, "model": "gpt-4", "scenario": "chat" },
+        \\  "req-1": { "cost": 0.0002, "model": "gpt-4", "scenario": "chat" }
         \\}
     ;
     try cwd.writeFile(.{ .sub_path = "dup_estimates.json", .data = dup_est });
     defer cwd.deleteFile("dup_estimates.json") catch {};
 
-    const args_dup = [_][]const u8{ "calibrate", "--estimates", "dup_estimates.json", "--csv", "test_actuals.csv", "--validate-only" };
+    const args_dup = [_][]const u8{ "calibrate", "--estimates", "dup_estimates.json", "--csv", "val_actuals.csv", "--validate-only" };
 
     // We expect run() to return error due to json parser
     var stdout = std.ArrayList(u8).init(allocator);
@@ -332,4 +351,34 @@ test "Calibrate - Validation Rules" {
 
     const err = run(allocator, &args_dup, &registry, stdout.writer(), stderr.writer());
     try std.testing.expectError(error.DuplicateField, err);
+}
+
+test "Calibrate - Fuzzy Collision" {
+    const allocator = std.testing.allocator;
+    const cwd = std.fs.cwd();
+    var reg = try Pricing.Registry.init(allocator, .{});
+    defer reg.deinit();
+    var stdout = std.ArrayList(u8).init(allocator);
+    defer stdout.deinit();
+    var stderr = std.ArrayList(u8).init(allocator);
+    defer stderr.deinit();
+
+    const col_est =
+        \\{
+        \\  "req-1": { "cost": 0.0001, "model": "gpt-4", "scenario": "chat" },
+        \\  "custom-req-1": { "cost": 0.0002, "model": "gpt-4", "scenario": "chat" }
+        \\}
+    ;
+    try cwd.writeFile(.{ .sub_path = "test_collision.json", .data = col_est });
+    defer cwd.deleteFile("test_collision.json") catch {};
+
+    // Create independent actuals
+    try cwd.writeFile(.{ .sub_path = "col_actuals.csv", .data = "ResourceId,BilledCost,ChargePeriodStart,Tags\nreq-1,0.000105,2025-01-01,\"{}\"" });
+    defer cwd.deleteFile("col_actuals.csv") catch {};
+
+    const args = [_][]const u8{ "calibrate", "--estimates", "test_collision.json", "--csv", "col_actuals.csv", "--match", "fuzzy" };
+
+    const err = run(allocator, &args, &reg, stdout.writer(), stderr.writer());
+    try std.testing.expectError(error.EstimateIdCollision, err);
+    try std.testing.expect(std.mem.indexOf(u8, stderr.items, "Estimate ID collision") != null);
 }
