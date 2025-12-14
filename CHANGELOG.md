@@ -1,5 +1,14 @@
 # Changelog
 
+## [v1.2.2] - 2025-12-14
+### Changed
+- **CLI**: `calibrate` now returns stable exit codes (0=Success, 2=Schema/Data Error, 3=Insufficient/Zero Match).
+- **Docs**: Updated `README.md` and examples to use best practices and include `calibrate` command.
+- **CI**: Hardened `examples/` workflows (SHA-pinning, installer script).
+
+### Fixed
+- **Tests**: Fixed `golden_test.zig` to correctly assert on exit codes.
+
 ## [v1.2.1] - 2025-12-14
 ### Added
 - **Metadata & Audit Trail**: `factors.toml` now includes `[metadata]` with input hashes (SHA256), tool version, matching mode, and stats.

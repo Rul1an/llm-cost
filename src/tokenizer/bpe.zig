@@ -107,7 +107,7 @@ pub const BpeEngine = struct {
                 // Special tokens bypass BPE split/merge.
                 // Depending on upstream logic, they might already have IDs assigned or need lookup.
                 // For `llm-cost` counting, we typically handle them before BPE or assume 1 token.
-                // Here we append 0 (UNK) or a specific ID if we had a special_map.
+                // Append 0 (UNK) or specific ID if special_map exists.
                 // TODO: Wire up real special token ID lookup if needed for full encoding parity.
                 try tokens.append(0);
             } else {

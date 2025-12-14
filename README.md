@@ -116,6 +116,7 @@ Filter and group by `Tags.team`, `Tags.app`, or `Tags.model` in your FinOps dash
 | `count` | Token count only |
 | `check` | Budget/policy enforcement |
 | `diff` | Cost comparison between git refs |
+| `calibrate` | Drift analysis vs actual billing data |
 | `export` | FOCUS CSV for FinOps tools |
 | `pipe` | Stream JSON usage → cost output |
 | `update-db` | Refresh pricing database |

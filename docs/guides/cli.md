@@ -54,6 +54,34 @@ llm-cost estimate --manifest llm-cost.toml --format=json
 
 ---
 
+### calibrate
+Validate and compare estimates against actual billing data (FOCUS CSV).
+
+```bash
+llm-cost calibrate [OPTIONS]
+```
+
+**Options**
+
+| Option | Description |
+|--------|-------------|
+| `--estimates` | **Required**. Path to JSON estimates file (from `export`). |
+| `--actuals` | **Required**. Path to FOCUS CSV billing data. |
+| `--match` | Matching mode: `strict` (default) or `fuzzy`. |
+| `--validate-only` | Run validation checks without generating factors. |
+
+**Examples**
+
+```bash
+# Standard calibration
+llm-cost calibrate --estimates est.json --actuals bill.csv > factors.toml
+
+# Validation check (CI/CD)
+llm-cost calibrate --estimates est.json --actuals bill.csv --validate-only
+```
+
+---
+
 ### check
 
 Validate budget and policy compliance. Returns exit code 0 (Pass), 2 (Budget Exceeded), or 3 (Policy Violation).

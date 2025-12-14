@@ -31,7 +31,8 @@ test "Golden Test - U2 Basic" {
     const args = [_][]const u8{ "calibrate", "--estimates", est_path, "--csv", csv_path };
 
     // Run 1
-    try cmd.run(allocator, &args, &registry, stdout_buf.writer(), stderr_buf.writer());
+    const exit1 = try cmd.run(allocator, &args, &registry, stdout_buf.writer(), stderr_buf.writer());
+    try std.testing.expectEqual(@as(u8, 0), exit1);
 
     // Read Expected
     const expected = try cwd.readFileAlloc(allocator, expected_path, 1024 * 1024);
@@ -44,7 +45,8 @@ test "Golden Test - U2 Basic" {
     stdout_buf.clearRetainingCapacity();
     stderr_buf.clearRetainingCapacity();
 
-    try cmd.run(allocator, &args, &registry, stdout_buf.writer(), stderr_buf.writer());
+    const exit2 = try cmd.run(allocator, &args, &registry, stdout_buf.writer(), stderr_buf.writer());
+    try std.testing.expectEqual(@as(u8, 0), exit2);
     try std.testing.expectEqualStrings(expected, stdout_buf.items);
 }
 
@@ -72,7 +74,8 @@ test "Golden Test - U2 Fuzzy Match" {
     // Use --match fuzzy
     const args = [_][]const u8{ "calibrate", "--estimates", est_path, "--csv", csv_path, "--match", "fuzzy" };
 
-    try cmd.run(allocator, &args, &registry, stdout_buf.writer(), stderr_buf.writer());
+    const exit3 = try cmd.run(allocator, &args, &registry, stdout_buf.writer(), stderr_buf.writer());
+    try std.testing.expectEqual(@as(u8, 0), exit3);
 
     const expected = try cwd.readFileAlloc(allocator, expected_path, 1024 * 1024);
     defer allocator.free(expected);
