@@ -12,7 +12,7 @@ pub const ReportStats = struct {
     file_size_bytes: u64 = 0,
     token_count: u64 = 0,
     word_count: u64 = 0,
-    cost_usd: f64 = 0.0,
+    cost_micro: i128 = 0,
 
     // Derived Metrics
     pub fn bytesPerToken(self: ReportStats) f64 {
@@ -70,11 +70,17 @@ pub fn run(
 
     // Cost (Input Only assumption for corpus analysis)
     if (registry.get(config.model)) |def| {
-        stats.cost_usd = Pricing.Registry.calculate(def, stats.token_count, 0, 0);
+        stats.cost_micro = Pricing.Registry.calculate(def, stats.token_count, 0, 0);
     }
 
     // 4. Report
     if (config.format == .json) {
+        // Deterministic decimal string
+        const sign = if (stats.cost_micro < 0) "-" else "";
+        const abs_val = @abs(stats.cost_micro);
+        const whole = abs_val / 1_000_000;
+        const frac = abs_val % 1_000_000;
+
         try stdout.print(
             \\{{
             \\  "model": "{s}",
@@ -82,7 +88,7 @@ pub fn run(
             \\    "bytes": {d},
             \\    "tokens": {d},
             \\    "words": {d},
-            \\    "cost_usd": {d:.6}
+            \\    "cost_usd": "{s}{d}.{d:0>6}"
             \\  }},
             \\  "metrics": {{
             \\    "bytes_per_token": {d:.2},
@@ -90,13 +96,14 @@ pub fn run(
             \\  }}
             \\}}
             \\
-        , .{ config.model, stats.file_size_bytes, stats.token_count, stats.word_count, stats.cost_usd, stats.bytesPerToken(), stats.tokensPerWord() });
+        , .{ config.model, stats.file_size_bytes, stats.token_count, stats.word_count, sign, whole, @as(u64, @intCast(frac)), stats.bytesPerToken(), stats.tokensPerWord() });
     } else {
+        const cost_usd = Pricing.PriceDef.toUsd(stats.cost_micro);
         try stdout.print("\n=== Tokenizer Report: {s} ===\n", .{config.model});
         try stdout.print("Corpus Size:    {d} bytes\n", .{stats.file_size_bytes});
         try stdout.print("Word Count:     {d} words\n", .{stats.word_count});
         try stdout.print("Token Count:    {d} tokens\n", .{stats.token_count});
-        try stdout.print("Est. Cost:      ${d:.6}\n", .{stats.cost_usd});
+        try stdout.print("Est. Cost:      ${d:.6}\n", .{cost_usd});
         try stdout.print("\n--- Efficiency Metrics ---\n", .{});
         try stdout.print("Compression:    {d:.2} bytes/token  (Higher is better)\n", .{stats.bytesPerToken()});
         try stdout.print("Fertility:      {d:.2} tokens/word  (Lower is better)\n", .{stats.tokensPerWord()});

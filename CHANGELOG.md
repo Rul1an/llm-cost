@@ -1,5 +1,29 @@
 # Changelog
 
+## [v1.1.4] - 2025-12-14
+
+### Changed
+- **Internal Cost Representation**: Refactored `f64` floats to `i128` MicroUSD (1e-6) for deterministic integer arithmetic.
+- **FOCUS Export**: Rows stable-sorted by `(ChargePeriodStart, ResourceId, ServiceName)`.
+- **JSON Output**: Costs emitted as fixed-precision strings (e.g., "0.000005") instead of floats.
+
+### Added
+- **Verification**: `llm-cost verify <artifact>` command for SHA256 integrity and provenance checks.
+- **Supply Chain**: CycloneDX SBOM and SLSA-aligned build provenance included in releases.
+
+### Security
+- **Pinning**: GitHub Actions pinned to immutable commit SHAs.
+- **Reproducible Builds**: Timestamps normalized via `SOURCE_DATE_EPOCH`.
+
+### Fixed
+- **Safety**: Resolved double-free segfault in `estimate` and `models` commands.
+- **Formatting**: Fixed negative cost formatting bug (e.g. refunds).
+
+## [v1.1.3] - 2025-12-??
+### Added
+- (Content from previous check...)
+
+## [v1.1.2] ...
 ## [v1.1.1] - Hardening
 ### Added
 - **Determinism (RFC 8785-inspired)**:
@@ -16,7 +40,7 @@
 ### Fixed
 - **Determinism**: Eliminated non-deterministic JSON field ordering in `diff` and `estimate` commands.
 
-## [v1.0.1] - FOCUS Hardening
+## [v1.0.1] - FOCUS Hardening (Backport base)
 ### Added
 - **Deterministic FOCUS Export**:
     - Fixed-point cost precision (12 decimals) using `pico-USD`.

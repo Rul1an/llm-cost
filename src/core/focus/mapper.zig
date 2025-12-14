@@ -9,7 +9,7 @@ pub fn mapContext(
     price_def: Pricing.PriceDef,
     resource_id: []const u8,
     model_name: []const u8,
-    cost: f64,
+    cost: Pricing.MicroUsd,
     tokens_in: u64,
     tokens_out: u64,
     cache_hit_ratio: ?f64,
@@ -29,20 +29,23 @@ pub fn mapContext(
         }
     }
 
-    // 3. Content Hash (Placeholder for now, or derived from prompt content if we had it here)
-    // For now, we don't have content passed in easily aside from what caller might provide.
-    // Let's assume empty or "calculated" if we added content hashing to pipeline.
-    // The previous implementation didn't have content hash in the mapper args.
-    // We'll use a placeholder "TODO" or passed arg.
-    // Wait, the user's snippet showed "x-content-hash".
-    // I will add a placeholder for now to satisfy the struct.
+    // 3. Content Hash (Placeholder for now)
     const content_hash = try allocator.dupe(u8, "todo-hash");
+
+    // 4. Format BilledCost as deterministic decimal string (6 decimals)
+    // MicroUsd is 1e-6.
+    const sign = if (cost < 0) "-" else "";
+    const abs_val = @abs(cost);
+    const whole = abs_val / 1_000_000;
+    const frac = abs_val % 1_000_000;
+
+    const cost_str = try std.fmt.allocPrint(allocator, "{s}{d}.{d:0>6}", .{ sign, whole, @as(u64, @intCast(frac)) });
 
     return Schema.FocusRow{
         .allocator = allocator,
         .charge_period_start = today,
         .charge_category = try allocator.dupe(u8, "Usage"),
-        .billed_cost = cost,
+        .billed_cost = cost_str,
         .resource_id = try allocator.dupe(u8, resource_id),
         .resource_type = try allocator.dupe(u8, "LLM"),
         .region_id = try allocator.dupe(u8, ""),
@@ -52,7 +55,7 @@ pub fn mapContext(
         .consumed_unit = try allocator.dupe(u8, "Tokens"),
         .resource_name = try allocator.dupe(u8, prompt.path),
         .tags = .{
-            .provider = try allocator.dupe(u8, price_def.provider),
+            .provider = try allocator.dupe(u8, price_def.provider.toString()),
             .model = try allocator.dupe(u8, model_name),
             .token_count_input = tokens_in,
             .token_count_output = tokens_out,

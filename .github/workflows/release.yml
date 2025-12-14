@@ -14,7 +14,11 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
     steps:
@@ -102,6 +106,9 @@ jobs:
         with:
           cosign-release: 'v2.2.4'
 
+      - name: Set SOURCE_DATE_EPOCH
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> $GITHUB_ENV
+
       - name: Build
         uses: Rul1an/zig-cross-compile-action@66076af8e44f186b08e2d05b5a1aa7c91c8042d6
         with:
@@ -109,7 +116,7 @@ jobs:
           strict_version: true
           target: ${{ matrix.target }}
           project-type: zig
-          cmd: "-Doptimize=ReleaseFast"
+          cmd: "-Doptimize=ReleaseFast -Dversion=${GITHUB_REF_NAME#v}"
           use_cache: true
           sbom: false # Using anchore/sbom-action instead
           sign: false # Using manual cosign step
@@ -136,7 +143,7 @@ jobs:
             zig-out/bin/${{ matrix.binary }}
 
       - name: Attest Build Provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@897ed5eab6ed058a474202017ada7f40bfa52940 # v1.4.3
         with:
           subject-path: "zig-out/bin/${{ matrix.binary }}"
 

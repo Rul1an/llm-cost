@@ -50,8 +50,7 @@ pub const CsvWriter = struct {
         try self.writer.writeByte(',');
 
         // BilledCost (deterministic fixed-point string)
-        const billed_cost_str = try self.costToString(row.billed_cost);
-        defer self.allocator.free(billed_cost_str);
+        const billed_cost_str = row.billed_cost;
         try self.writer.writeAll(billed_cost_str);
         try self.writer.writeByte(',');
 
@@ -109,24 +108,6 @@ pub const CsvWriter = struct {
         } else {
             try self.writer.writeAll(value);
         }
-    }
-
-    /// Convert cost to deterministic string:
-    /// - Convert f64 -> pico-USD (1 USD = 1e12 pico) with rounding
-    /// - Print as {dollars}.{fraction:0>12}
-    fn costToString(self: *CsvWriter, cost_usd: f64) ![]const u8 {
-        const scale: f64 = 1_000_000_000_000.0; // 1e12
-        const sign: i128 = if (cost_usd < 0) -1 else 1;
-        const abs = @abs(cost_usd);
-        const pico_f = abs * scale;
-        const pico_abs: i128 = @intFromFloat(@round(pico_f));
-        const pico: i128 = pico_abs * sign;
-
-        const dollars: i128 = @divTrunc(pico, 1_000_000_000_000);
-        var frac: i128 = @mod(pico, 1_000_000_000_000);
-        if (frac < 0) frac = -frac;
-
-        return try std.fmt.allocPrint(self.allocator, "{d}.{d:0>12}", .{ @as(i64, @intCast(dollars)), @as(u64, @intCast(frac)) });
     }
 
     fn tagsToJson(self: *CsvWriter, row: schema.FocusRow, billed_cost_str: []const u8) ![]const u8 {

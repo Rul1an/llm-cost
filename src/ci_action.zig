@@ -49,7 +49,7 @@ pub const Env = struct {
 pub const ProcessEnv = struct {
     pub fn env() Env {
         return .{
-            .ctx = @constCast(@ptrCast(@alignCast(&@as(u8, 0)))),
+            .ctx = @ptrCast(@alignCast(@constCast(&@as(u8, 0)))),
             .vtable = &.{
                 .getOwned = getOwned,
             },
@@ -259,14 +259,14 @@ fn estimateHeadTotalUsd(state: context.GlobalState, manifest_path: []const u8) !
 
     const Out = struct {
         summary: struct {
-            total_cost_usd: f64,
+            total_cost_usd: []const u8,
         },
     };
 
     var parsed = try std.json.parseFromSlice(Out, state.allocator, buf.items, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
 
-    return parsed.value.summary.total_cost_usd;
+    return std.fmt.parseFloat(f64, parsed.value.summary.total_cost_usd);
 }
 
 pub fn run(state: context.GlobalState, argv: []const []const u8) !u8 {
@@ -332,7 +332,7 @@ pub fn run(state: context.GlobalState, argv: []const []const u8) !u8 {
             for (deltas) |d| {
                 sum_delta += d.delta;
             }
-            total_delta_usd = @as(f64, @floatFromInt(sum_delta)) / 1e12;
+            total_delta_usd = @as(f64, @floatFromInt(sum_delta)) / 1_000_000.0;
             diff_calculated = true;
 
             if (cfg.fail_on_increase and total_delta_usd > 0) {

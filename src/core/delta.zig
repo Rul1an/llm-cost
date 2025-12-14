@@ -21,8 +21,8 @@ pub const ChangeStatus = enum {
 pub const CostDelta = struct {
     resource_id: []const u8,
     file_path: []const u8,
-    base_cost: ?i128, // pico-USD, null = didn't exist
-    head_cost: ?i128, // pico-USD, null = removed
+    base_cost: ?i128, // MicroUsd, null = didn't exist
+    head_cost: ?i128, // MicroUsd, null = removed
     delta: i128, // head - base (treating null as 0)
     status: ChangeStatus,
 

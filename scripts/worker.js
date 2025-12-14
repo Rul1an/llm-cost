@@ -7,7 +7,7 @@ export default {
         const script = `#!/bin/sh
 set -eu
 
-# llm-cost Installer (hardened, dumb)
+# llm-cost Installer (Self-healing SOTA)
 # Usage:
 #   curl -sSfL https://get.llm-cost.dev | sh
 #   LLM_COST_VERSION=v1.1.1 curl -sSfL https://get.llm-cost.dev | sh
@@ -30,34 +30,59 @@ need() { command -v "$1" >/dev/null 2>&1 || error "Missing: $1"; }
 need curl
 need uname
 
-detect_platform() {
-  OS="\$(uname -s 2>/dev/null || true)"
-  ARCH="\$(uname -m 2>/dev/null || true)"
+# Probe URL existence (HEAD request)
+url_exists() {
+  curl -fSsI --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 10 "$1" >/dev/null 2>&1
+}
 
-  case "\$OS" in
-    Linux)  OS="linux" ;;
-    Darwin) OS="darwin" ;;  # MUST match release asset naming
-    *) error "Unsupported OS: \$OS" ;;
+resolve_platform_and_asset() {
+  OS_RAW="\$(uname -s 2>/dev/null || true)"
+  ARCH_RAW="\$(uname -m 2>/dev/null || true)"
+
+  # Define candidate aliases
+  case "\$OS_RAW" in
+    Linux)  OS_CANDS="linux" ;;
+    Darwin) OS_CANDS="macos darwin" ;; # Probe both (legacy=macos, new=darwin)
+    *) error "Unsupported OS: \$OS_RAW" ;;
   esac
 
-  case "\$ARCH" in
-    x86_64|amd64) ARCH="x86_64" ;;
-    aarch64|arm64) ARCH="arm64" ;;
-    *) error "Unsupported arch: \$ARCH" ;;
+  case "\$ARCH_RAW" in
+    x86_64|amd64) ARCH_CANDS="x86_64 amd64" ;;
+    aarch64|arm64) ARCH_CANDS="arm64 aarch64" ;;
+    *) error "Unsupported arch: \$ARCH_RAW" ;;
   esac
 
-  # Only keep this if you actually publish -musl artifacts.
   SUFFIX=""
-  if [ "\$OS" = "linux" ] && [ -f /etc/alpine-release ]; then
+  if [ "\$OS_RAW" = "Linux" ] && [ -f /etc/alpine-release ]; then
     SUFFIX="-musl"
   fi
 
-  ASSET="llm-cost-\${OS}-\${ARCH}\${SUFFIX}"
+  # Resolve Base URL
+  if [ "\$VERSION" = "latest" ]; then
+    BASE="https://github.com/\${REPO}/releases/latest/download"
+  else
+    BASE="https://github.com/\${REPO}/releases/download/\${VERSION}"
+  fi
+
+  # Probe candidates
+  echo "Probing for assets..." >&2
+  for o in \$OS_CANDS; do
+    for a in \$ARCH_CANDS; do
+       CAND="llm-cost-\${o}-\${a}\${SUFFIX}"
+       if url_exists "\$BASE/\$CAND"; then
+          ASSET="\$CAND"
+          echo "Found compatible asset: \$ASSET"
+          return 0
+       fi
+    done
+  done
+
+  error "No asset found for \$OS_RAW/\$ARCH_RAW in release \$VERSION"
 }
 
 curl_get() {
   curl -fSsL --proto '=https' --tlsv1.2 \\
-    --retry 3 --retry-delay 1 --connect-timeout 10 --max-time 120 \\
+    --retry 3 --retry-delay 1 --connect-timeout 10 --max-time 60 \\
     "\$1" -o "\$2"
 }
 
@@ -67,25 +92,12 @@ sha256_file() {
   elif command -v sha256sum >/dev/null 2>&1; then
     set -- \$(sha256sum "\$1"); echo "\$1"
   else
-    error "No sha256 util found (need shasum or sha256sum)"
-  fi
-}
-
-resolve_base_url() {
-  # Official GitHub pattern for latest asset download:
-  # /releases/latest/download/<asset>
-  if [ "\$VERSION" = "latest" ]; then
-    BASE="https://github.com/\${REPO}/releases/latest/download"
-  else
-    BASE="https://github.com/\${REPO}/releases/download/\${VERSION}"
+    error "No sha256 util found"
   fi
 }
 
 pick_install_dir() {
-  if [ -n "\$INSTALL_DIR" ]; then
-    return 0
-  fi
-
+  if [ -n "\$INSTALL_DIR" ]; then return 0; fi
   if [ -d /usr/local/bin ] && [ -w /usr/local/bin ]; then
     INSTALL_DIR="/usr/local/bin"
   else
@@ -106,35 +118,24 @@ mktemp_dir() {
 extract_expected_checksum() {
   sums_file="\$1"
   expected=""
-
-  # Accept:
-  #   <hash>  filename
-  #   <hash> *filename
   while IFS= read -r line; do
     set -- \$line || continue
-    h="\$1"
-    f="\${2:-}"
+    h="\$1"; f="\${2:-}"
     [ -n "\$h" ] || continue
     [ -n "\$f" ] || continue
     f="\${f#\\*}"
-    if [ "\$f" = "\$ASSET" ]; then
-      expected="\$h"
-      break
-    fi
+    if [ "\$f" = "\$ASSET" ]; then expected="\$h"; break; fi
   done < "\$sums_file"
-
   [ -n "\$expected" ] || error "Checksum NOT found for \$ASSET"
   echo "\$expected"
 }
 
 main() {
-  # Keep temp private; fix final perms explicitly with chmod 0755.
   umask 077
 
-  detect_platform
-  resolve_base_url
-  pick_install_dir
+  resolve_platform_and_asset  # Sets ASSET and BASE
 
+  pick_install_dir
   mkdir -p "\$INSTALL_DIR" 2>/dev/null || true
 
   TMP="\$(mktemp_dir)"
@@ -154,7 +155,7 @@ main() {
   fi
 
   ACTUAL="\$(sha256_file "\$BIN")"
-  [ "\$EXPECTED" = "\$ACTUAL" ] || error "Checksum mismatch! Expected: \$EXPECTED Got: \$ACTUAL"
+  [ "\$EXPECTED" = "\$ACTUAL" ] || error "Checksum mismatch! Exp: \$EXPECTED Got: \$ACTUAL"
 
   chmod 0755 "\$BIN"
 

@@ -17,6 +17,7 @@ const diff_cmd = @import("diff.zig");
 const context = @import("context.zig");
 const estimate_cmd = @import("commands/estimate.zig");
 const ci_action_cmd = @import("ci_action.zig");
+const verify_cmd = @import("verify.zig");
 
 pub const version_str = "0.10.0";
 
@@ -94,6 +95,8 @@ pub fn main() !void {
     } else if (std.mem.eql(u8, command, "ci-action")) {
         const exit_code = try ci_action_cmd.run(state, args[2..]);
         if (exit_code != 0) std.process.exit(exit_code);
+    } else if (std.mem.eql(u8, command, "verify")) {
+        try verify_cmd.run(state.allocator, args[2..], state.stdout, state.stderr);
     } else {
         try stderr.print("Error: Unknown command '{s}'\n\n", .{command});
         try printUsage(stderr);
@@ -132,15 +135,18 @@ pub fn runModels(state: GlobalState, args: []const []const u8) !void {
             const def = state.registry.models.get(key).?;
             // Handling potential alias fields if PriceDef uses input_cost vs input_price
             // The User's PriceDef in mod.zig has input_price_per_mtok
-            const in_p = if (def.input_price_per_mtok > 0) def.input_price_per_mtok else def.input_cost_per_mtok;
-            const out_p = if (def.output_price_per_mtok > 0) def.output_price_per_mtok else def.output_cost_per_mtok;
+            const in_p = Pricing.PriceDef.toUsd(def.input_price_per_mtok);
+            const out_p = Pricing.PriceDef.toUsd(def.output_price_per_mtok);
 
             try state.stdout.print("  {{\n", .{});
             try state.stdout.print("    \"id\": \"{s}\",\n", .{key});
             try state.stdout.print("    \"cost_in\": {d},\n", .{in_p});
             try state.stdout.print("    \"cost_out\": {d}", .{out_p});
-            if (def.output_reasoning_price_per_mtok > 0) {
-                try state.stdout.print(",\n    \"cost_reasoning\": {d}", .{def.output_reasoning_price_per_mtok});
+            if (def.output_reasoning_price_per_mtok) |reas_val| {
+                if (reas_val > 0) {
+                    const reas_p = Pricing.PriceDef.toUsd(reas_val);
+                    try state.stdout.print(",\n    \"cost_reasoning\": {d}", .{reas_p});
+                }
             }
             try state.stdout.print("\n", .{});
             if (i < keys.items.len - 1) {
@@ -156,17 +162,20 @@ pub fn runModels(state: GlobalState, args: []const []const u8) !void {
 
         for (keys.items) |key| {
             const def = state.registry.models.get(key).?;
-            const in_p = if (def.input_price_per_mtok > 0) def.input_price_per_mtok else def.input_cost_per_mtok;
-            const out_p = if (def.output_price_per_mtok > 0) def.output_price_per_mtok else def.output_cost_per_mtok;
+            const in_p = Pricing.PriceDef.toUsd(def.input_price_per_mtok);
+            const out_p = Pricing.PriceDef.toUsd(def.output_price_per_mtok);
 
-            const reas_str = if (def.output_reasoning_price_per_mtok > 0)
-                try std.fmt.allocPrint(state.allocator, "${d:.2}", .{def.output_reasoning_price_per_mtok})
-            else
-                "-";
+            const reas_str = if (def.output_reasoning_price_per_mtok) |r| blk: {
+                if (r > 0) {
+                    break :blk try std.fmt.allocPrint(state.allocator, "${d:.2}", .{Pricing.PriceDef.toUsd(r)});
+                } else {
+                    break :blk "-";
+                }
+            } else "-";
             // Note: In runModels we allocPrint, we should free it.
             // But for simple CLI output, arena or defer is fine.
             // But we are using GPA in main... so we must free.
-            defer if (def.output_reasoning_price_per_mtok > 0) state.allocator.free(reas_str);
+            defer if ((def.output_reasoning_price_per_mtok orelse 0) > 0) state.allocator.free(reas_str);
 
             try state.stdout.print("{s:<20} ${d:<14.2} ${d:<14.2} {s:<14}\n", .{ key, in_p, out_p, reas_str });
         }
@@ -264,6 +273,7 @@ fn printUsage(w: anytype) !void {
         \\  llm-cost export    [OPTIONS]              Export forecast to FOCUS v1.0 CSV
         \\  llm-cost diff      [OPTIONS]              Show cost difference against git ref
         \\  llm-cost ci-action [OPTIONS]              Run CI checks and post comment
+        \\  llm-cost verify    [FILE]                 Verify artifact integrity
         \\  llm-cost update-db                        Update pricing database
         \\  llm-cost version                          Show version
         \\

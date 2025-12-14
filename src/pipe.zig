@@ -2,10 +2,7 @@ const std = @import("std");
 const root = @import("root");
 const Pricing = @import("core/pricing/mod.zig");
 const tokenizer_mod = @import("tokenizer/mod.zig");
-const engine = @import("core/engine.zig"); // Needed for tokenizer resolving if we use engine directly?
-// Actually we use 'TokenizerWrapper' which wraps 'OpenAITokenizer'.
-// User snippet suggested engine.countTokens.
-// I'll reuse my 'TokenizerWrapper' as it's already instantiated.
+const engine = @import("core/engine.zig");
 
 // --- Config & Stats ---
 pub const InputMode = enum { Auto, Raw, JsonField };
@@ -25,7 +22,7 @@ pub const PipeConfig = struct {
 pub const PipeStats = struct {
     lines: u64 = 0,
     tokens_total: u64 = 0,
-    cost_total: f64 = 0.0,
+    cost_total: i128 = 0,
 };
 
 /// Efficient struct for partial parsing of logs (LLM Usage)
@@ -103,9 +100,8 @@ pub const StreamProcessor = struct {
             };
 
             self.stats.lines += 1;
-            self.stats.tokens_total += stats.tokens; // Just sum input + output? Or total?
-            // stats.tokens_total usually implies processed tokens. I'll sum total.
-            self.stats.cost_total += stats.cost;
+            self.stats.tokens_total += stats.tokens;
+            self.stats.cost_total = std.math.add(i128, self.stats.cost_total, stats.cost) catch return error.Overflow;
 
             if (self.checkQuota()) {
                 try buf_writer.flush();
@@ -119,7 +115,7 @@ pub const StreamProcessor = struct {
         }
     }
 
-    const LineStats = struct { tokens: u64, cost: f64 };
+    const LineStats = struct { tokens: u64, cost: i128 };
 
     fn processLine(self: *StreamProcessor, arena: std.mem.Allocator, line: []const u8, writer: anytype) !LineStats {
         var tokens_in: u64 = 0;
@@ -168,32 +164,38 @@ pub const StreamProcessor = struct {
             // Count input tokens
             const count = try self.tokenizer.count(text_to_count);
             tokens_in = @intCast(count);
-            // Output/Reas is 0 for raw prompt
         }
 
         // Calculate Cost using Registry logic
         const cost = Pricing.Registry.calculate(self.price_def, tokens_in, tokens_out, tokens_reas);
 
+        // Format cost string (Canonical)
+        // Format cost string (Canonical)
+        const sign = if (cost < 0) "-" else "";
+        const abs_val = @abs(cost);
+        const whole = abs_val / 1_000_000;
+        const frac = abs_val % 1_000_000;
+
         // Output
         if (is_log_entry) {
             // Echo usage + cost in NDJSON
-            // We construct a new JSON or just print structure?
-            // Simplest: {"input":..., "output":..., "reasoning":..., "cost":...}
-            // Or better: Preserve original line?
-            // User snippet: stdout.print("{{\"input\":...}}")
-            try writer.print("{{\"input\":{d},\"output\":{d},\"reasoning\":{d},\"cost\":{d:.6}}}\n", .{ tokens_in, tokens_out, tokens_reas, cost });
+            try writer.print("{{\"input\":{d},\"output\":{d},\"reasoning\":{d},\"cost\":\"{s}{d}.{d:0>6}\"}}\n", .{ tokens_in, tokens_out, tokens_reas, sign, whole, @as(u64, @intCast(frac)) });
         } else {
             if (original_json != null) {
                 // Enrich original JSON
                 var usage_map = std.json.ObjectMap.init(arena);
                 try usage_map.put("input_tokens", std.json.Value{ .integer = @intCast(tokens_in) });
-                try usage_map.put("cost_usd", std.json.Value{ .float = cost });
+
+                // Use string for canonical cost in JSON
+                const cost_str = try std.fmt.allocPrint(arena, "{s}{d}.{d:0>6}", .{ sign, whole, @as(u64, @intCast(frac)) });
+                try usage_map.put("cost_usd", std.json.Value{ .string = cost_str });
+
                 try original_json.?.object.put("usage", std.json.Value{ .object = usage_map });
                 try std.json.stringify(original_json.?, .{}, writer);
                 try writer.writeByte('\n');
             } else {
                 // Raw text -> JSON Output
-                try writer.print("{{\"tokens\":{d},\"cost\":{d:.6}}}\n", .{ tokens_in, cost });
+                try writer.print("{{\"tokens\":{d},\"cost\":\"{s}{d}.{d:0>6}\"}}\n", .{ tokens_in, sign, whole, @as(u64, @intCast(frac)) });
             }
         }
 
@@ -211,14 +213,19 @@ pub const StreamProcessor = struct {
         if (self.config.max_tokens) |limit| {
             if (self.stats.tokens_total >= limit) return true;
         }
-        if (self.config.max_cost) |limit| {
-            if (self.stats.cost_total >= limit) return true;
+        if (self.config.max_cost) |limit_usd| {
+            // Convert limit (f64) to MicroUsd (i128)
+            const limit_micro = @as(i128, @intFromFloat(@round(limit_usd * 1_000_000.0)));
+            if (self.stats.cost_total >= limit_micro) return true;
         }
         return false;
     }
 
     fn printSummary(self: *StreamProcessor) void {
         const stderr = std.io.getStdErr().writer();
+        // Convert accrued MicroUsd to f64 for summary (human readable)
+        const cost_f = @as(f64, @floatFromInt(self.stats.cost_total)) / 1_000_000.0;
+
         stderr.print(
             \\
             \\--- Summary ---
@@ -227,7 +234,7 @@ pub const StreamProcessor = struct {
             \\Cost: ${d:.6}
             \\
             \\
-        , .{ self.stats.lines, self.stats.tokens_total, self.stats.cost_total }) catch {};
+        , .{ self.stats.lines, self.stats.tokens_total, cost_f }) catch {};
     }
 };
 

@@ -65,7 +65,7 @@ pub fn run(
     }
 
     // 4. Calculate Total Cost
-    var total_cost: f64 = 0.0;
+    var total_cost: i128 = 0;
     var prompts_checked: usize = 0;
 
     // Helper to process a single file
@@ -168,7 +168,8 @@ pub fn run(
         const tokens = try engine.countTokens(allocator, content, tokenizer_config);
 
         if (price_def) |def| {
-            total_cost += Pricing.Registry.calculate(def, tokens, 0, 0);
+            const cost = Pricing.Registry.calculate(def, tokens, 0, 0);
+            total_cost = std.math.add(i128, total_cost, cost) catch return error.Overflow;
         }
         prompts_checked += 1;
     }
@@ -180,16 +181,18 @@ pub fn run(
         try stdout.print("✓ {} prompts validated\n", .{prompts_checked});
     }
 
-    if (policy.max_cost_usd) |limit| {
-        const percent = (total_cost / limit) * 100.0;
-        try stdout.print("Budget Usage: ${d:.4} / ${d:.4} ({d:.1}%)\n", .{ total_cost, limit, percent });
+    const total_usd = Pricing.PriceDef.toUsd(total_cost);
 
-        if (total_cost > limit) {
-            try stderr.print("BUDGET EXCEEDED: Cost ${d:.4} exceeds limit ${d:.4}\n", .{ total_cost, limit });
+    if (policy.max_cost_usd) |limit| {
+        const percent = (total_usd / limit) * 100.0;
+        try stdout.print("Budget Usage: ${d:.4} / ${d:.4} ({d:.1}%)\n", .{ total_usd, limit, percent });
+
+        if (total_usd > limit) {
+            try stderr.print("BUDGET EXCEEDED: Cost ${d:.4} exceeds limit ${d:.4}\n", .{ total_usd, limit });
             return @intFromEnum(ExitCode.BudgetExceeded);
         }
     } else {
-        try stdout.print("Total Est. Cost: ${d:.4} (No budget limit set)\n", .{total_cost});
+        try stdout.print("Total Est. Cost: ${d:.4} (No budget limit set)\n", .{total_usd});
     }
 
     return @intFromEnum(ExitCode.Ok);

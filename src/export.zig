@@ -73,6 +73,15 @@ pub fn run(
     var csv = Csv.CsvWriter.init(allocator, stream);
     try csv.writeHeader();
 
+    // Buffer rows for sorting (Determinism)
+    var rows = std.ArrayList(Schema.FocusRow).init(allocator);
+    defer {
+        for (rows.items) |*row| {
+            row.deinit();
+        }
+        rows.deinit();
+    }
+
     // 3. Process Prompts
     for (prompts) |prompt| {
         // Read prompt content relative to CWD (or manifest dir? Assuming CWD per spec)
@@ -98,10 +107,6 @@ pub fn run(
         const tokenizer_config = try Engine.resolveConfig(model.?);
         const input_tokens = try Engine.countTokens(allocator, content, tokenizer_config);
         const output_tokens = 0; // Static analysis focuses on input. Output is unknown.
-        // TODO: Support --output-tokens global arg or prompt tag override?
-        // User spec doesn't specify how to guess output tokens for static export.
-        // We assume 0 for static cost, or maybe estimation based on input?
-        // Let's stick to strict input-only cost for now unless 'usage' data is available (which is not in manifest).
 
         // Calculate Cost
         const cost = Pricing.Registry.calculate(price_def, input_tokens, output_tokens, 0);
@@ -111,9 +116,28 @@ pub fn run(
         defer rid.deinit(allocator);
 
         // Map to FOCUS Row
-        var row = try Mapper.mapContext(allocator, prompt, price_def, rid.value, model.?, cost, input_tokens, output_tokens, cache_hit_ratio, test_date);
-        defer row.deinit();
+        const row = try Mapper.mapContext(allocator, prompt, price_def, rid.value, model.?, cost, input_tokens, output_tokens, cache_hit_ratio, test_date);
+        // Ownership transferred to 'rows' list
+        try rows.append(row);
+    }
 
+    // 4. Sort Rows (Deterministic Output)
+    // Sort by: ChargePeriodStart, ResourceId, ServiceName
+    std.mem.sort(Schema.FocusRow, rows.items, {}, sortRows);
+
+    // 5. Write Sorted Rows
+    for (rows.items) |row| {
         try csv.writeRow(row);
     }
+}
+
+fn sortRows(_: void, lhs: Schema.FocusRow, rhs: Schema.FocusRow) bool {
+    const period_order = std.mem.order(u8, lhs.charge_period_start, rhs.charge_period_start);
+    if (period_order != .eq) return period_order == .lt;
+
+    const rid_order = std.mem.order(u8, lhs.resource_id, rhs.resource_id);
+    if (rid_order != .eq) return rid_order == .lt;
+
+    const service_order = std.mem.order(u8, lhs.service_name, rhs.service_name);
+    return service_order == .lt;
 }

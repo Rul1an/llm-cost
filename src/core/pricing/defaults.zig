@@ -4,6 +4,11 @@ const schema = @import("schema.zig");
 // File is copied to this directory.
 const EMBEDDED_JSON = @embedFile("pricing_db.json");
 
+// Helper to safely convert float price (USD) to MicroUSD (i128)
+fn toMicroUsd(val: f64) schema.MicroUsdPerMTok {
+    return @intFromFloat(@round(val * 1_000_000.0));
+}
+
 pub fn loadEmbedded(allocator: std.mem.Allocator) !schema.PricingDB {
     const parsed = try std.json.parseFromSlice(std.json.Value, allocator, EMBEDDED_JSON, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
@@ -46,16 +51,16 @@ pub fn loadEmbedded(allocator: std.mem.Allocator) !schema.PricingDB {
                 if (val != .object) continue;
 
                 var def = schema.PriceDef{
-                    .input_price_per_mtok = 0.0,
-                    .output_price_per_mtok = 0.0,
+                    .input_price_per_mtok = 0,
+                    .output_price_per_mtok = 0,
                 };
 
-                // Helper to get float
-                if (getFloat(val, "input_price_per_mtok")) |f| def.input_price_per_mtok = f;
-                if (getFloat(val, "output_price_per_mtok")) |f| def.output_price_per_mtok = f;
-                if (getFloat(val, "output_reasoning_price_per_mtok")) |f| def.output_reasoning_price_per_mtok = f;
-                if (getFloat(val, "cache_read_price_per_mtok")) |f| def.cache_read_price_per_mtok = f;
-                if (getFloat(val, "cache_write_price_per_mtok")) |f| def.cache_write_price_per_mtok = f;
+                // Manual parsing with conversion
+                if (getFloat(val, "input_price_per_mtok")) |f| def.input_price_per_mtok = toMicroUsd(f);
+                if (getFloat(val, "output_price_per_mtok")) |f| def.output_price_per_mtok = toMicroUsd(f);
+                if (getFloat(val, "output_reasoning_price_per_mtok")) |f| def.output_reasoning_price_per_mtok = toMicroUsd(f);
+                if (getFloat(val, "cache_read_price_per_mtok")) |f| def.cache_read_price_per_mtok = toMicroUsd(f);
+                if (getFloat(val, "cache_write_price_per_mtok")) |f| def.cache_write_price_per_mtok = toMicroUsd(f);
 
                 // Context window
                 if (getInt(val, "context_window")) |i| def.context_window = i;

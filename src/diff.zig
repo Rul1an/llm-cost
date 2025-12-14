@@ -117,11 +117,9 @@ fn calculateCost(
     const price_def = registry.get(model_id) orelse return 0;
 
     // We only know input tokens from static analysis
-    const cost_usd = Pricing.Registry.calculate(price_def, tokens, 0, 0);
+    const cost_micro = Pricing.Registry.calculate(price_def, tokens, 0, 0);
 
-    // Convert to pico-USD (i128)
-    const scale: f64 = 1_000_000_000_000.0;
-    return @intFromFloat(@round(cost_usd * scale));
+    return cost_micro;
 }
 
 // --- Formatter ---
@@ -140,12 +138,12 @@ pub fn formatTable(allocator: std.mem.Allocator, deltas: []const DeltaModel.Cost
             .unchanged => "UNCHANGED",
         };
 
-        // Convert to USD strings (naive div 1e12)
-        const delta_f = @as(f64, @floatFromInt(d.delta)) / 1e12;
+        // Convert to USD strings
+        const delta_f = Pricing.PriceDef.toUsd(d.delta);
 
         // Handle Optionals: if null, print "-"
-        const base_f = if (d.base_cost) |c| @as(f64, @floatFromInt(c)) / 1e12 else 0.0;
-        const head_f = if (d.head_cost) |c| @as(f64, @floatFromInt(c)) / 1e12 else 0.0;
+        const base_f = if (d.base_cost) |c| Pricing.PriceDef.toUsd(c) else 0.0;
+        const head_f = if (d.head_cost) |c| Pricing.PriceDef.toUsd(c) else 0.0;
 
         // Use a small buffer to format optional strings if we wanted strict alignment,
         // but for now printing 0.000000 is okay for numeric columns,
@@ -212,9 +210,9 @@ pub fn formatMarkdown(allocator: std.mem.Allocator, deltas: []const DeltaModel.C
             .unchanged => "UNCHANGED",
         };
 
-        const delta_f = @as(f64, @floatFromInt(d.delta)) / 1e12;
-        const base_f = if (d.base_cost) |c| @as(f64, @floatFromInt(c)) / 1e12 else 0.0;
-        const head_f = if (d.head_cost) |c| @as(f64, @floatFromInt(c)) / 1e12 else 0.0;
+        const delta_f = Pricing.PriceDef.toUsd(d.delta);
+        const base_f = if (d.base_cost) |c| Pricing.PriceDef.toUsd(c) else 0.0;
+        const head_f = if (d.head_cost) |c| Pricing.PriceDef.toUsd(c) else 0.0;
 
         try writer.print("| {s} | `{s}` | `{d:.6}` | ", .{ icon, d.resource_id, delta_f });
 
@@ -300,9 +298,9 @@ test "diff command table format" {
     defer buf.deinit();
 
     const deltas = &[_]DeltaModel.CostDelta{
-        DeltaModel.CostDelta.init(null, 5000000000000, "added.txt", "added"), // Added (+5)
-        DeltaModel.CostDelta.init(1000000000000, 2000000000000, "mod.txt", "mod"), // Mod (+1)
-        DeltaModel.CostDelta.init(1000000000000, null, "removed.txt", "removed"), // Removed
+        DeltaModel.CostDelta.init(null, 5_000_000, "added.txt", "added"), // Added (+5)
+        DeltaModel.CostDelta.init(1_000_000, 2_000_000, "mod.txt", "mod"), // Mod (+1)
+        DeltaModel.CostDelta.init(1_000_000, null, "removed.txt", "removed"), // Removed
     };
 
     try formatTable(allocator, deltas, buf.writer());

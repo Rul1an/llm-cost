@@ -20,7 +20,7 @@ pub const FocusRow = struct {
     // Core Columns
     charge_period_start: []const u8,
     charge_category: []const u8,
-    billed_cost: f64,
+    billed_cost: []const u8,
     resource_id: []const u8,
     resource_type: []const u8,
     region_id: []const u8,
@@ -46,7 +46,7 @@ pub const FocusRow = struct {
     pub fn deinit(self: *FocusRow) void {
         self.allocator.free(self.charge_period_start);
         self.allocator.free(self.charge_category);
-        // billed_cost is f64
+        self.allocator.free(self.billed_cost);
         self.allocator.free(self.resource_id);
         self.allocator.free(self.resource_type);
         self.allocator.free(self.region_id);

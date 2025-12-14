@@ -9,7 +9,11 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // Main executable
-    const version = std.SemanticVersion{ .major = 0, .minor = 10, .patch = 1 };
+    var version = std.SemanticVersion{ .major = 0, .minor = 10, .patch = 1 };
+    if (b.option([]const u8, "version", "Override version string")) |ver_str| {
+        version = std.SemanticVersion.parse(ver_str) catch std.debug.panic("Invalid version format: {s}", .{ver_str});
+    }
+
     const exe = b.addExecutable(.{
         .name = "llm-cost",
         .root_source_file = b.path("src/main.zig"),
@@ -44,8 +48,18 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const run_unit_tests = b.addRunArtifact(unit_tests);
+
+    // Determinism Tests
+    const determinism_tests = b.addTest(.{
+        .root_source_file = b.path("src/determinism_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const run_determinism_tests = b.addRunArtifact(determinism_tests);
+
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
+    test_step.dependOn(&run_determinism_tests.step);
 
     // Fuzz/Chaos tests
     // Changed from addExecutable to addTest because src/fuzz_test.zig uses 'test' blocks without 'main'

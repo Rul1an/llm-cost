@@ -7,17 +7,9 @@ const CRITICAL_AGE_SECONDS = 90 * 24 * 60 * 60; // 90 days
 
 const StaleStatus = enum { Fresh, Warning, Critical };
 
-pub const PriceDef = struct {
-    provider: []const u8 = "Unknown",
-    input_price_per_mtok: f64 = 0,
-    output_price_per_mtok: f64 = 0,
-
-    // Legacy aliases if needed
-    input_cost_per_mtok: f64 = 0,
-    output_cost_per_mtok: f64 = 0,
-
-    output_reasoning_price_per_mtok: f64 = 0.0,
-};
+const schema = @import("schema.zig");
+pub const PriceDef = schema.PriceDef;
+pub const MicroUsd = schema.MicroUsd;
 
 pub const Registry = struct {
     allocator: std.mem.Allocator,
@@ -115,6 +107,12 @@ pub const Registry = struct {
         return reg;
     }
 
+    // Helper to safely convert float price (USD) to MicroUSD (i128)
+    fn toMicroUsd(val: f64) schema.MicroUsdPerMTok {
+        // Round to nearest integer to avoid precision truncation issues with floats like 2.499999
+        return @intFromFloat(@round(val * 1_000_000.0));
+    }
+
     fn parseInto(allocator: std.mem.Allocator, root: std.json.Value, map: *std.StringHashMap(PriceDef)) !void {
         var models_node: std.json.Value = root;
 
@@ -131,19 +129,75 @@ pub const Registry = struct {
                 const val = entry.value_ptr.*;
                 if (val != .object) continue;
 
-                var def = try std.json.parseFromValue(PriceDef, allocator, val, .{ .ignore_unknown_fields = true });
-                defer def.deinit();
+                // Manual parsing to handle conversion from JSON float to MicroUSD i128
+                var def = PriceDef{
+                    .input_price_per_mtok = 0,
+                    .output_price_per_mtok = 0,
+                    .provider = .Unknown,
+                };
 
-                // Duplicate provider string because source buffer is transient (in loadFromCache)
-                if (!std.mem.eql(u8, def.value.provider, "Unknown")) {
-                    def.value.provider = try allocator.dupe(u8, def.value.provider);
-                } else {
-                    // Critical: Point to static "Unknown" so it survives arena deinit
-                    // and matches the deinit check logic (which skips free for "Unknown")
-                    def.value.provider = "Unknown";
+                if (val.object.get("input_price_per_mtok")) |v| {
+                    if (v == .float) def.input_price_per_mtok = toMicroUsd(v.float);
+                    if (v == .integer) def.input_price_per_mtok = toMicroUsd(@floatFromInt(v.integer));
+                }
+                // Legacy alias
+                if (val.object.get("input_cost_per_mtok")) |v| {
+                    if (def.input_price_per_mtok == 0) {
+                        if (v == .float) def.input_price_per_mtok = toMicroUsd(v.float);
+                        if (v == .integer) def.input_price_per_mtok = toMicroUsd(@floatFromInt(v.integer));
+                    }
                 }
 
-                try map.put(try allocator.dupe(u8, entry.key_ptr.*), def.value);
+                if (val.object.get("output_price_per_mtok")) |v| {
+                    if (v == .float) def.output_price_per_mtok = toMicroUsd(v.float);
+                    if (v == .integer) def.output_price_per_mtok = toMicroUsd(@floatFromInt(v.integer));
+                }
+                // Legacy alias
+                if (val.object.get("output_cost_per_mtok")) |v| {
+                    if (def.output_price_per_mtok == 0) {
+                        if (v == .float) def.output_price_per_mtok = toMicroUsd(v.float);
+                        if (v == .integer) def.output_price_per_mtok = toMicroUsd(@floatFromInt(v.integer));
+                    }
+                }
+
+                if (val.object.get("output_reasoning_price_per_mtok")) |v| {
+                    if (v == .float) def.output_reasoning_price_per_mtok = toMicroUsd(v.float);
+                    if (v == .integer) def.output_reasoning_price_per_mtok = toMicroUsd(@floatFromInt(v.integer));
+                }
+
+                if (val.object.get("cache_read_price_per_mtok")) |v| {
+                    if (v == .float) def.cache_read_price_per_mtok = toMicroUsd(v.float);
+                    if (v == .integer) def.cache_read_price_per_mtok = toMicroUsd(@floatFromInt(v.integer));
+                }
+                if (val.object.get("cache_write_price_per_mtok")) |v| {
+                    if (v == .float) def.cache_write_price_per_mtok = toMicroUsd(v.float);
+                    if (v == .integer) def.cache_write_price_per_mtok = toMicroUsd(@floatFromInt(v.integer));
+                }
+
+                // Context window
+                if (val.object.get("context_window")) |v| {
+                    if (v == .integer) def.context_window = @intCast(v.integer);
+                }
+
+                // Provider
+                if (val.object.get("provider")) |p_val| {
+                    if (p_val == .string) {
+                        def.provider = schema.Provider.fromString(p_val.string);
+                    }
+                }
+
+                // Duplicate provider string because source buffer is transient (in loadFromCache)
+                // Provider enum is value type, no duplication needed for enum!
+                // Old code duped strings, new code uses Enum.
+                // We just need to handle if 'provider' was a string field in the struct?
+                // schema.PriceDef.provider is an ENUM.
+                // The old code had `provider: []const u8`.
+                // Wait, the old code in step 6387 had `provider: []const u8`.
+                // schema.zig in step 6434 has `provider: Provider`.
+                // So I am changing the type of `PriceDef` in `mod.zig` to match `schema.PriceDef` which uses the Enum.
+                // This removes the need for string duplication for provider! excellent.
+
+                try map.put(try allocator.dupe(u8, entry.key_ptr.*), def);
             }
         }
     }
@@ -180,12 +234,6 @@ pub const Registry = struct {
         var it = self.models.iterator();
         while (it.next()) |entry| {
             self.allocator.free(entry.key_ptr.*);
-
-            // Free provider string if it's not the default "Unknown" (which is static)
-            // Note: We check against the literal "Unknown"
-            if (!std.mem.eql(u8, entry.value_ptr.provider, "Unknown")) {
-                self.allocator.free(entry.value_ptr.provider);
-            }
         }
         self.models.deinit();
     }
@@ -199,17 +247,13 @@ pub const Registry = struct {
         return self.models.get(model_id);
     }
 
-    pub fn calculate(def: PriceDef, input_tokens: u64, output_tokens: u64, reasoning_tokens: u64) f64 {
-        const in_vals = if (def.input_price_per_mtok > 0) def.input_price_per_mtok else def.input_cost_per_mtok;
-        const out_vals = if (def.output_price_per_mtok > 0) def.output_price_per_mtok else def.output_cost_per_mtok;
-        const reas_vals = def.output_reasoning_price_per_mtok;
-
-        const in_cost = (in_vals / 1_000_000.0) * @as(f64, @floatFromInt(input_tokens));
+    pub fn calculate(def: PriceDef, input_tokens: u64, output_tokens: u64, reasoning_tokens: u64) MicroUsd {
+        // Reasoning tokens are typically included in total output tokens by Engine.
+        // We separate them here to apply correct pricing.
         const standard_output = if (output_tokens >= reasoning_tokens) output_tokens - reasoning_tokens else 0;
-        const out_cost = (out_vals / 1_000_000.0) * @as(f64, @floatFromInt(standard_output));
-        const reas_price = if (reas_vals > 0) reas_vals else out_vals;
-        const reas_cost = (reas_price / 1_000_000.0) * @as(f64, @floatFromInt(reasoning_tokens));
 
-        return in_cost + out_cost + reas_cost;
+        return def.calculateCost(input_tokens, .Input) +
+            def.calculateCost(standard_output, .Output) +
+            def.calculateCost(reasoning_tokens, .Reasoning);
     }
 };

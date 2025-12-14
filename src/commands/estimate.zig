@@ -86,7 +86,7 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
         return error.UnknownModel;
     };
 
-    var total_cost: f64 = 0.0;
+    var total_cost: i128 = 0;
 
     // JSON Output Structures
     const PromptResult = struct {
@@ -96,7 +96,7 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
         model: []const u8,
         input_tokens: u64,
         output_tokens: u64,
-        cost_usd: f64,
+        cost_micro: i128,
     };
     var results = std.ArrayList(PromptResult).init(state.allocator);
     defer results.deinit();
@@ -156,13 +156,13 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
                 .model = model_name,
                 .input_tokens = token_count,
                 .output_tokens = output_tokens_arg orelse 0,
-                .cost_usd = cost,
+                .cost_micro = cost,
             });
         } else {
             try state.stdout.print("Model:       {s}\n", .{model_name});
             try state.stdout.print("Tokens In:   {d}\n", .{token_count});
             if ((output_tokens_arg orelse 0) > 0) try state.stdout.print("Tokens Out:  {d}\n", .{output_tokens_arg orelse 0});
-            try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
+            try state.stdout.print("Cost (est):  ${d:.6}\n", .{Pricing.PriceDef.toUsd(cost)});
             try state.stdout.print("Resource ID: {s} ({s})\n", .{ rid.value, @tagName(rid.source) });
         }
     } else if (input_tokens_arg != null) {
@@ -170,7 +170,7 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
         const cost = Pricing.Registry.calculate(price_def, input_tokens_arg.?, output_tokens_arg orelse 0, reasoning_tokens_arg);
         total_cost += cost;
         if (!format_json) {
-            try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
+            try state.stdout.print("Cost (est):  ${d:.6}\n", .{Pricing.PriceDef.toUsd(cost)});
         } else {
             try results.append(.{
                 .path = "manual-tokens",
@@ -179,7 +179,7 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
                 .model = model_name,
                 .input_tokens = input_tokens_arg.?,
                 .output_tokens = output_tokens_arg orelse 0,
-                .cost_usd = cost,
+                .cost_micro = cost,
             });
         }
     } else {
@@ -218,16 +218,16 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
                     .model = model_name,
                     .input_tokens = token_count,
                     .output_tokens = output_tokens_arg orelse 0,
-                    .cost_usd = cost,
+                    .cost_micro = cost,
                 });
             } else {
                 if (is_manifest_scan) {
                     // Quieter output for scan? Or same?
-                    try state.stdout.print("{s}: ${d:.6} ({s})\n", .{ path, cost, rid.value });
+                    try state.stdout.print("{s}: ${d:.6} ({s})\n", .{ path, Pricing.PriceDef.toUsd(cost), rid.value });
                 } else {
                     try state.stdout.print("File:        {s}\n", .{path});
                     try state.stdout.print("Tokens In:   {d}\n", .{token_count});
-                    try state.stdout.print("Cost (est):  ${d:.6}\n", .{cost});
+                    try state.stdout.print("Cost (est):  ${d:.6}\n", .{Pricing.PriceDef.toUsd(cost)});
                     try state.stdout.print("Resource ID: {s} ({s})\n\n", .{ rid.value, @tagName(rid.source) });
                 }
             }
@@ -260,11 +260,10 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
             try jw.putInt("input_tokens", res.input_tokens);
             try jw.putInt("output_tokens", res.output_tokens);
 
-            // Fixed precision for cost (ensure it is a JSON Number, not string)
-            // Buffer for "123.456789"
+            // Fixed precision for cost (ensure it is a JSON String per SOTA spec)
             var cost_buf: [32]u8 = undefined;
-            const cost_s = try std.fmt.bufPrint(&cost_buf, "{d:.6}", .{res.cost_usd});
-            try jw.put("cost_usd", cost_s);
+            const cost_s = try std.fmt.bufPrint(&cost_buf, "{d:.6}", .{Pricing.PriceDef.toUsd(res.cost_micro)});
+            try jw.putString("cost_usd", cost_s);
 
             try jw.write(state.stdout);
 
@@ -281,13 +280,13 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
             defer jw.deinit();
 
             var cost_buf: [32]u8 = undefined;
-            const cost_s = try std.fmt.bufPrint(&cost_buf, "{d:.6}", .{total_cost});
-            try jw.put("total_cost_usd", cost_s);
+            const cost_s = try std.fmt.bufPrint(&cost_buf, "{d:.6}", .{Pricing.PriceDef.toUsd(total_cost)});
+            try jw.putString("total_cost_usd", cost_s);
 
             try jw.write(state.stdout);
         }
         try state.stdout.writeAll("\n}\n");
     } else if (input_files.items.len > 1 or is_manifest_scan) {
-        try state.stdout.print("Total Cost:  ${d:.6}\n", .{total_cost});
+        try state.stdout.print("Total Cost:  ${d:.6}\n", .{Pricing.PriceDef.toUsd(total_cost)});
     }
 }

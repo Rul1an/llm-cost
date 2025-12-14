@@ -41,20 +41,24 @@ pub const Provider = enum {
     }
 };
 
+pub const MicroUsd = i128;
+pub const MicroUsdPerMTok = i128;
+
 pub const PriceDef = struct {
     provider: Provider = .Unknown,
-    // Pricing in USD per 1 Million tokens (voorkomt float drift)
-    input_price_per_mtok: f64,
-    output_price_per_mtok: f64,
+    // Pricing in MicroUSD (1e-6) per 1 Million tokens.
+    // Stored as i128 to ensure determinism (no floating point usage).
+    input_price_per_mtok: MicroUsdPerMTok,
+    output_price_per_mtok: MicroUsdPerMTok,
 
     // Nieuw veld voor 2025 models (Thinking models)
-    output_reasoning_price_per_mtok: ?f64 = null,
+    output_reasoning_price_per_mtok: ?MicroUsdPerMTok = null,
 
-    cache_read_price_per_mtok: ?f64 = null,
-    cache_write_price_per_mtok: ?f64 = null,
+    cache_read_price_per_mtok: ?MicroUsdPerMTok = null,
+    cache_write_price_per_mtok: ?MicroUsdPerMTok = null,
     context_window: ?u64 = null,
 
-    pub fn calculateCost(self: PriceDef, tokens: u64, kind: TokenKind) f64 {
+    pub fn calculateCost(self: PriceDef, tokens: u64, kind: TokenKind) MicroUsd {
         const price = switch (kind) {
             .Input => self.input_price_per_mtok,
             .Output => self.output_price_per_mtok,
@@ -62,9 +66,13 @@ pub const PriceDef = struct {
             .CacheRead => self.cache_read_price_per_mtok orelse self.input_price_per_mtok,
             .CacheWrite => self.cache_write_price_per_mtok orelse self.input_price_per_mtok,
         };
-        // Eerst vermenigvuldigen (groot getal), dan delen.
-        // tokens (u64) -> floatFromInt is safe tot 2^53 (9 PetaTokens).
-        return (@as(f64, @floatFromInt(tokens)) * price) / 1_000_000.0;
+        // Deterministic calculation: (Tokens * PricePerMTok) / 1_000_000
+        // Rounding is FLOOR (integer division default).
+        return @divFloor(@as(i128, @intCast(tokens)) * price, 1_000_000);
+    }
+
+    pub fn toUsd(cost: MicroUsd) f64 {
+        return @as(f64, @floatFromInt(cost)) / 1_000_000.0;
     }
 };
 
