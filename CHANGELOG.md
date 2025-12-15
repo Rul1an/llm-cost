@@ -1,5 +1,17 @@
 # Changelog
 
+## [v1.3.0] - 2025-12-15
+### Added
+- **FinOps Reporting**: Automated "Cost Integrity Cards" (GitHub Job Summaries) and `audit.json` artifacts.
+- **Validation Suites**: P0 (PR Gate) and P1 (Nightly/Scale) suites enforcing schema, PII safety, and determinism.
+- **Metrics**: `global_drift_bps` (Global Basis Points Drift) added to `factors.toml` metadata.
+- **Artifacts**: Release builds now include `perf_metrics.txt` and `audit.json` as immutable assets.
+- **Compliance**: Standardized validation on FOCUS v1.0.
+
+### Changed
+- **Guardrails**: `finops_p0` is now a required status check for `main` branch merges.
+- **Tooling**: `render_report.py` supports fail-fast thresholds (`FINOPS_FAIL_FAST`).
+
 ## [v1.2.2] - 2025-12-14
 ### Changed
 - **CLI**: `calibrate` now returns stable exit codes (0=Success, 2=Schema/Data Error, 3=Insufficient/Zero Match).

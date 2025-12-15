@@ -100,11 +100,17 @@ The command outputs a TOML file containing calibration factors for each Model/Sc
 
 ```toml
 [metadata]
-tool_version = "v1.2.1"
+schema_version = 1
+tool_version = "v1.3.0"
 generated_at = 1715623000
 estimates_sha256 = "a1b2..."
 actuals_sha256 = "c3d4..."
 match_mode = "fuzzy"
+
+[metadata.stats]
+matched_rows = 1250
+unmatched_actuals = 0
+global_drift_bps = 500
 
 [[factor]]
 model = "gpt-4"
