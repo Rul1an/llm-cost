@@ -44,7 +44,7 @@ The engine guarantees bit-exact output for identical inputs, independent of conc
 *   **Verification**: Comparison against committed golden `factors.toml` hashes.
 
 ### Schema Integrity
-All inputs and outputs adhere to **FOCUS v1.1** draft specifications.
+All inputs and outputs adhere to **FOCUS v1.0** specifications.
 *   **Estimates**: Version 2 Schema (Typed `cost_micro`).
 *   **Actuals**: Strict column validation (`ResourceId`, `BilledCost`, `ChargePeriodStart`).
 

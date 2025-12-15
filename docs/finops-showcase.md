@@ -36,7 +36,8 @@ echo "req-1,0.05" >> bad.csv
 
 **Result:**
 ```text
-Error: Missing required column 'ChargePeriodStart' in header.
+Error: CSV missing required columns:
+  - ChargePeriodStart
 Exit Code: 2
 ```
 

@@ -57,7 +57,7 @@ def main():
     out_audit = os.path.join(reports_dir, "audit.json")
 
     max_drift_bps = float(get_env("FINOPS_MAX_DRIFT_BPS", "10"))
-    focus_version = get_env("FINOPS_FOCUS_VERSION", "1.1")
+    focus_version = get_env("FINOPS_FOCUS_VERSION", "1.0")
     fail_fast = get_env("FINOPS_FAIL_FAST", "true").lower() == "true"
 
     # Heuristiek: determinism test produceert meestal 2 outputs. Pak de eerste als referentie.

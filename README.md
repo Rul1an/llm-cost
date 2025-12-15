@@ -142,9 +142,13 @@ Filter and group by `Tags.team`, `Tags.app`, or `Tags.model` in your FinOps dash
 - **P0/P1 Validation Suite**: Every commit is verified against a rigorous regression test suite covering determinism, schema integrity, and scale (1M+ rows).
 - **Cost Integrity Reporting**: Automated "Cost Integrity Cards" in GitHub Pull Requests report drift (BPS), logic hashes, and PII leakage.
 - **Fail-Fast Policy**: Strict exit codes (`2`) ensures no "garbage-in/garbage-out" in data pipelines.
-- **FOCUS Compliant**: Native support for the FinOps Open Cost & Usage Specification (v1.1).
+- **FOCUS Compliant**: Native support for the FinOps Open Cost & Usage Specification (v1.0).
 
-<img src="https://raw.githubusercontent.com/Rul1an/llm-cost/main/docs/images/finops-report-example.png" alt="FinOps Report" width="600">
+| Metric | Status |
+| :--- | :--- |
+| **Schema** | 🟢 PASS |
+| **Logic** | 🟢 PASS |
+| **Drift** | 🟢 PASS |
 
 Verify releases:
 ```bash
