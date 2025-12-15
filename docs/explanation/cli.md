@@ -242,7 +242,7 @@ Lists all supported models and their current pricing rates (embedded in the bina
 llm-cost models
 ```
 
-**Exit Codes**
+## Exit Codes
 `llm-cost` uses BSD-style exit codes for reliable scripting:
 *   `0`: Success.
 *   `64`: Usage error (invalid flags) or Quota exceeded.
