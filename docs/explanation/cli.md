@@ -1,4 +1,4 @@
-# CLI Reference (v0.7.0)
+# CLI Reference (v1.3.0)
 
 `llm-cost` is a high-performance, offline command-line utility for token counting and cost estimation. It follows the **Unix Philosophy**: it reads text streams, processes them efficiently, and outputs structured data, making it ideal for composition in CI/CD pipelines and shell scripts.
 
@@ -7,6 +7,7 @@
 2.  **Zero Dependency**: Single static binary.
 3.  **Pipeline Ready**: Reads `stdin`, writes `stdout` (JSON/Text).
 4.  **Exact Parity**: Matches OpenAI's `tiktoken` logic exactly.
+5.  **FinOps Ready**: Audit-grade calibration and reporting.
 
 ## Global Options
 *   `-h, --help`: Show usage information.
@@ -79,7 +80,25 @@ llm-cost estimate --format json prompts/login.txt
 # }
 ```
 
-### 3. `pipe`
+### 3. `calibrate` (FinOps)
+Compares estimated costs against actual billing data (FOCUS v1.0) to detect drift, verify pricing assumptions, and generate calibration factors.
+
+**Usage:**
+```bash
+llm-cost calibrate --estimates <file> --actuals <file> [options]
+```
+
+**Arguments:**
+*   `--estimates`: JSON estimates export (from `export` or your system).
+*   `--actuals`: FOCUS v1.0 compliant billing CSV.
+*   `--match`: `strict` (default) or `fuzzy` matching logic.
+*   `--max-groups`: Guardrail for cardinality (default 100k).
+*   `--validate-only`: Exit 0 if input data is schema-compliant.
+
+**Output:**
+Generates a `factors.toml` file with drift metrics (BPS) and audit metadata.
+
+### 4. `pipe`
 Stream processing mode. Reads a stream of JSON objects (NDJSON) or raw text from `stdin`, adds token counts/cost estimates, and writes to `stdout`.
 
 **Usage:**
@@ -105,7 +124,7 @@ tail -f access.log | llm-cost pipe -m gpt-4o --raw
 cat dataset.jsonl | llm-cost pipe -m gpt-4o --max-cost 5.00
 ```
 
-### 4. `analyze-fairness` (Beta)
+### 5. `analyze-fairness` (Beta)
 Analyzes a text corpus to determine the "Token Tax" (inefficiency) for different languages compared to English.
 
 **Usage:**
@@ -123,7 +142,7 @@ llm-cost analyze-fairness --corpus <path> --model <model>
 *   **Parity Ratio**: Fertility relative to English.
 *   **Gini Coefficient**: Measure of inequality across languages in the corpus.
 
-### 5. `report` (alias: `tokenizer-report`)
+### 6. `report` (alias: `tokenizer-report`)
 Generates a detailed statistical report on how a specific text is tokenized, identifying the most frequent tokens and compression efficiency.
 
 **Usage:**
@@ -136,7 +155,7 @@ llm-cost report --model <model> [file]
 *   `--file, -f`: Input file path (or use `--stdin`).
 *   `--top-k`: Number of top tokens to show (default: 10).
 
-### 6. `check`
+### 7. `check`
 Enforces budget and policy usage against an `llm-cost.toml` configuration. Ideal for CI/CD pipelines to prevent cost overruns or unauthorized model usage.
 
 **Usage:**
@@ -171,7 +190,7 @@ path = "prompts/search.txt"
 prompt_id = "search-prompt"
 ```
 
-### 7. `init`
+### 8. `init`
 Interactively scaffolds an `llm-cost.toml` configuration file. It scans the directory for prompt files, generates stable `prompt_id`s (slugs), and creates a best-practice configuration.
 
 **Usage:**
@@ -183,7 +202,7 @@ llm-cost init [--dir <path>] [--non-interactive]
 *   `--dir`: Directory to scan for prompts (default: current directory).
 *   `--non-interactive`: Skip confirmation prompts and write immediately.
 
-### 8. `export`
+### 9. `export`
 Generates a deterministic, compliant usage CSV export for FinOps tools (specifically Vantage). Outputs data formatted according to the **FOCUS 1.0** specification.
 
 **Usage:**
@@ -202,7 +221,7 @@ Standard output is a CSV stream. Columns adhere to the strict Vantage-compatible
 *   **BilledCost**: Calculated using `pico-USD` fixed-point math (12 decimal places) to prevent floating-point drift.
 *   **Tags**: JSON column containing metadata (`provider`, `model`, `resource-name`) and user tags. Keys are sorted for deterministic diffs.
 
-### 9. `update-db`
+### 10. `update-db`
 Securely updates the pricing database from the official registry.
 
 **Usage:**
@@ -215,7 +234,7 @@ llm-cost update-db
 2.  Verifies the Ed25519 signature against the embedded public key.
 3.  Atomically upgrades the local cache (`~/.cache/llm-cost/` or equivalent).
 
-### 9. `models`
+### 11. `models`
 Lists all supported models and their current pricing rates (embedded in the binary).
 
 **Usage:**
@@ -223,7 +242,7 @@ Lists all supported models and their current pricing rates (embedded in the bina
 llm-cost models
 ```
 
-## Exit Codes
+**Exit Codes**
 `llm-cost` uses BSD-style exit codes for reliable scripting:
 *   `0`: Success.
 *   `64`: Usage error (invalid flags) or Quota exceeded.
