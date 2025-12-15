@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // Main executable
-    var version = std.SemanticVersion{ .major = 0, .minor = 10, .patch = 1 };
+    var version = std.SemanticVersion{ .major = 1, .minor = 3, .patch = 0 };
     if (b.option([]const u8, "version", "Override version string")) |ver_str| {
         version = std.SemanticVersion.parse(ver_str) catch std.debug.panic("Invalid version format: {s}", .{ver_str});
     }

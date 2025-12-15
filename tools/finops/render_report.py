@@ -33,10 +33,8 @@ def extract_global_drift_bps(toml_obj: dict) -> float | None:
     # Pas keys aan aan jullie daadwerkelijke schema.
     # Probeert meerdere paden zodat het niet brittle is.
     candidates = [
-        ("global", "drift_bps"),
-        ("global", "drift", "bps"),
-        ("global", "stats", "drift_bps"),
-        ("metadata", "stats", "drift_bps"),
+        ("metadata", "stats", "global_drift_bps"), # Canonical v1.3+
+        ("global", "drift_bps"), # Legacy
     ]
     for path in candidates:
         cur = toml_obj
@@ -59,7 +57,7 @@ def main():
     out_audit = os.path.join(reports_dir, "audit.json")
 
     max_drift_bps = float(get_env("FINOPS_MAX_DRIFT_BPS", "10"))
-    focus_version = get_env("FINOPS_FOCUS_VERSION", "1.1")
+    focus_version = get_env("FINOPS_FOCUS_VERSION", "1.0")
     fail_fast = get_env("FINOPS_FAIL_FAST", "true").lower() == "true"
 
     # Heuristiek: determinism test produceert meestal 2 outputs. Pak de eerste als referentie.
@@ -102,7 +100,7 @@ def main():
 
     commit = get_env("GITHUB_SHA", get_env("CI_COMMIT_SHA", ""))
     short_commit = commit[:7] if commit else ""
-    tool_version = get_env("LLM_COST_VERSION", "v1.2.2")
+    tool_version = get_env("LLM_COST_VERSION", "v1.3.0")
 
     # Markdown summary
     md_lines = []

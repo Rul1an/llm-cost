@@ -52,6 +52,21 @@ jobs:
         # Optimization level is handled by build.zig
         run: zig build bench
 
+      - name: Generate FinOps Audit (Release Proof)
+        if: runner.os == 'Linux'
+        run: |
+          ./scripts/finops/run_finops_suite.sh p0
+          FINOPS_MAX_DRIFT_BPS=10 FINOPS_FAIL_FAST=true python3 tools/finops/render_report.py
+
+      - name: Upload FinOps Proof
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: finops-audit-proof
+          path: |
+            reports/audit.json
+            reports/perf_metrics.txt
+
   build-matrix:
     needs: verify
     permissions:
@@ -198,6 +213,12 @@ jobs:
             # We want to move everything to release_assets
             cp "$dir"/* release_assets/
           done
+
+          # Add FinOps Audit
+          # Downloaded to artifacts/finops-audit-proof
+          if [ -d "artifacts/finops-audit-proof" ]; then
+             cp artifacts/finops-audit-proof/* release_assets/
+          fi
 
           cd release_assets
           # Generate checksums for binaries (exclude .sig, .crt, .cdx.json)

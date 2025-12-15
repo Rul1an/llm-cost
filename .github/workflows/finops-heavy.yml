@@ -26,6 +26,7 @@ jobs:
         run: |
           # Use /usr/bin/time -v to capture RSS and Time
           # Output format varies, we grep for key metrics
+          mkdir -p reports
           /usr/bin/time -v -o reports/perf_metrics.txt ./zig-out/bin/llm-cost calibrate \
             --estimates testdata/finops/small/estimates.json \
             --actuals /tmp/actuals-1m.focus.csv \
