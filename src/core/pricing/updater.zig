@@ -145,6 +145,7 @@ pub fn checkAndUpdate(
                 try writer.writeAll("❌ Schema version mismatch\n");
                 return UpdateError.SchemaVersionMismatch;
             },
+            else => return UpdateError.ManifestInvalid,
         }
     };
 

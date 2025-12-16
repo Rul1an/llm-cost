@@ -83,8 +83,12 @@ pub fn fetch(
 
     // Capture ETag
     var etag: ?[]const u8 = null;
-    if (req.response.headers.getFirstValue("ETag")) |val| {
-        etag = try allocator.dupe(u8, val);
+    var it = req.response.iterateHeaders();
+    while (it.next()) |header| {
+        if (std.ascii.eqlIgnoreCase(header.name, "ETag")) {
+            etag = try allocator.dupe(u8, header.value);
+            break;
+        }
     }
     errdefer if (etag) |e| allocator.free(e);
 
@@ -150,8 +154,12 @@ pub fn fetchToFile(
     }
 
     var etag: ?[]const u8 = null;
-    if (req.response.headers.getFirstValue("ETag")) |val| {
-        etag = try allocator.dupe(u8, val);
+    var it = req.response.iterateHeaders();
+    while (it.next()) |header| {
+        if (std.ascii.eqlIgnoreCase(header.name, "ETag")) {
+            etag = try allocator.dupe(u8, header.value);
+            break;
+        }
     }
     errdefer if (etag) |e| allocator.free(e);
 

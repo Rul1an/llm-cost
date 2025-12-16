@@ -26,7 +26,7 @@ pub fn main() !void {
     // Default corpus path if not provided
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
-    try stdout.print("Running Parity Tests against {s}...\n", .{corpus_path});
+    try stdout.print("Running Parity Tests against {s}...\n", .{if (args.len > 1) args[1] else "unknown"});
 
     // 2. Initialize Tokenizers
     // We try to init both cl100k and o200k. If vocab missing, we skip tests needing them.
