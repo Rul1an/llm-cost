@@ -21,10 +21,13 @@ pub fn run(allocator: std.mem.Allocator, args: []const []const u8) !i32 {
     var buf: [4096]u8 = undefined;
     const uri = try std.Uri.parse(API_ENDPOINT);
 
+    var auth_buf: [256]u8 = undefined;
+    const auth_val = try std.fmt.bufPrint(&auth_buf, "Bearer {s}", .{license_key});
+
     var req = try client.open(.GET, uri, .{
         .server_header_buffer = &buf,
         .headers = .{
-            .authorization = .{ .bearer = license_key },
+            .authorization = .{ .override = auth_val },
         },
     });
     defer req.deinit();

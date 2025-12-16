@@ -185,7 +185,7 @@ pub fn fetchToFile(
         // Manually flush fifo to writer
         while (fifo.readableLength() > 0) {
             const slice = fifo.readableSlice(0);
-            try writer.writeAll(slice);
+            writer.writeAll(slice) catch return error.NetworkUnreachable;
             fifo.discard(slice.len);
         }
     }
