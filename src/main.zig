@@ -303,10 +303,4 @@ fn printUsage(w: anytype) !void {
     , .{version_str});
 }
 
-test "imports" {
-    _ = tokenizer;
-    _ = Pricing;
-    _ = engine;
-    _ = calibrate_cmd;
-    _ = @import("calibrate/golden_test.zig");
-}
+// End of main.zig

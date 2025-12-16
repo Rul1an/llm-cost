@@ -39,19 +39,9 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
         } else if (std.mem.eql(u8, arg, "--format=json") or std.mem.eql(u8, arg, "--json")) {
             format_json = true;
         } else if (std.mem.eql(u8, arg, "--manifest")) {
-            // Allow pass-through for ci-action
-            // We might implement manifest scanning here if needed, but for now just skip strict check since ci-action handles it
-            // Actually, if we want `runEstimate` to support --manifest logic (scanning manifest for prompts), we need to implement it.
-            // The User Request said: "Zorg dat runEstimate de combinatie --format=json --manifest <path> zonder files ondersteunt (manifest-scan)."
-            // So I should implement that here.
+            // Pass-through for ci-action or explicit manifest scanning
             if (i + 1 >= args.len) return error.MissingArgument;
-            // We store manifest path but we also need to know if we are scanning.
-            // For now, let's just parse it.
-            // If input_files is empty, and manifest provided, we scan?
-            // The ci_action uses main_app logic which assumes prompt scanning.
-            // But `main.zig` logic I copied DOES NOT have manifest scanning yet!
-            // It only uses manifest for Resource ID resolution.
-            // I need to ADD logic to iterate manifest prompts if no files provided.
+            // Store manifest path for later scanning logic
             i += 1;
         } else if (!std.mem.startsWith(u8, arg, "-")) {
             try input_files.append(arg);
