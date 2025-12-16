@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>llm-cost - Token Counting & Cost Estimation CLI</title>
+    <meta name="description"
+        content="A blazingly fast, local-first CLI for estimating LLM token counts and costs in CI/CD pipelines.">
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --text: #ffffff;
+            --accent: #3b82f6;
+            --accent-glow: rgba(59, 130, 246, 0.5);
+            --card-bg: #171717;
+            --border: #333;
+        }
+
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            overflow-x: hidden;
+        }
+
+        .container {
+            padding: 2rem;
+            max-width: 800px;
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(to right, #fff, #a5b4fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+
+        p.subtitle {
+            font-size: 1.25rem;
+            color: #a3a3a3;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        .code-block {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            padding: 1.5rem;
+            border-radius: 12px;
+            font-family: "Menlo", "Monaco", "Courier New", monospace;
+            text-align: left;
+            margin-bottom: 2rem;
+            position: relative;
+            box-shadow: 0 0 40px -10px var(--accent-glow);
+        }
+
+        .code-block code {
+            color: #4ade80;
+        }
+
+        .buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            text-decoration: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn.primary {
+            background: var(--text);
+            color: var(--bg);
+        }
+
+        .btn.primary:hover {
+            background: #e5e5e5;
+            transform: translateY(-1px);
+        }
+
+        .btn.secondary {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+
+        .btn.secondary:hover {
+            border-color: #666;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Background Glow */
+        .glow {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0.2;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="glow"></div>
+    <div class="container">
+        <h1>llm-cost</h1>
+        <p class="subtitle">
+            The standard for static cost analysis.<br>
+            Predict API costs. Enforce CI budgets. Offline & Secure.
+        </p>
+
+        <div class="code-block">
+            <code>curl -sSfL https://get.llm-cost.dev | sh</code>
+        </div>
+
+        <div class="buttons">
+            <a href="/pricing/" class="btn primary">View Plans & Pricing →</a>
+            <a href="https://github.com/Rul1an/llm-cost" class="btn secondary">GitHub</a>
+        </div>
+    </div>
+</body>
+
+</html>
