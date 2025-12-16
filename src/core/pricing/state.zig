@@ -61,7 +61,7 @@ pub const UpdateState = struct {
         defer allocator.free(cache_path);
 
         // 1. Ensure cache dir exists
-        try std.fs.makeDirAbsolute(cache_path) catch |err| {
+        std.fs.makeDirAbsolute(cache_path) catch |err| {
             if (err != error.PathAlreadyExists) return err;
         };
 

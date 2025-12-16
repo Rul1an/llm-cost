@@ -174,7 +174,6 @@ pub fn fetchToFile(
 
     while (true) {
         const n = reader.read(fifo.writableSlice(0)) catch |err| switch (err) {
-            error.StreamTooLong => return error.TooLarge,
             else => return error.NetworkUnreachable,
         };
         if (n == 0) break;
