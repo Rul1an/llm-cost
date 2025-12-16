@@ -1,5 +1,8 @@
 const std = @import("std");
 
+// Hex representation of the official public key (decoded from Minisign key in crypto.zig)
+pub const EMBEDDED_PUB_KEY_STR_HEX = "2cae72849c878b437c2fd4fe08801dd62494b68238a67ef4fb5835d8ced94af0";
+
 pub const ManifestBody = struct {
     schema_version: u32 = 1,
     version: u64,

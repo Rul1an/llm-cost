@@ -43,9 +43,20 @@ pub fn fetch(
     defer client.deinit();
 
     // Fix: In Zig 0.14, headers buffer might be needed
+    // Fix: In Zig 0.14, headers buffer might be needed
     var buf: [4096]u8 = undefined;
+
+    // Prepare extra headers (If-None-Match)
+    var extra_headers_buf: [1]std.http.Header = undefined;
+    var extra_headers: []const std.http.Header = &[0]std.http.Header{};
+    if (options.if_none_match) |etag| {
+        extra_headers_buf[0] = .{ .name = "If-None-Match", .value = etag };
+        extra_headers = &extra_headers_buf;
+    }
+
     var req = client.open(.GET, uri, .{
         .server_header_buffer = &buf,
+        .extra_headers = extra_headers,
         // TODO: Timeouts?
     }) catch return error.NetworkUnreachable;
     defer req.deinit();
@@ -57,13 +68,7 @@ pub fn fetch(
         req.headers.authorization = .{ .override = auth_val };
     }
 
-    if (options.if_none_match) |etag| {
-        // Custom headers need explicit handling if not in standard struct
-        // std.http.Client.Request.Headers has common fields. if-none-match is standard?
-        // Checking std... it might not be in the struct.
-        // We can append custom headers.
-        try req.headers.append("If-None-Match", etag);
-    }
+
 
     req.send() catch return error.NetworkUnreachable;
     req.wait() catch return error.NetworkUnreachable;
@@ -112,8 +117,18 @@ pub fn fetchToFile(
     defer client.deinit();
 
     var buf: [4096]u8 = undefined;
+
+    // Prepare extra headers (If-None-Match)
+    var extra_headers_buf: [1]std.http.Header = undefined;
+    var extra_headers: []const std.http.Header = &[0]std.http.Header{};
+    if (options.if_none_match) |etag| {
+        extra_headers_buf[0] = .{ .name = "If-None-Match", .value = etag };
+        extra_headers = &extra_headers_buf;
+    }
+
     var req = client.open(.GET, uri, .{
         .server_header_buffer = &buf,
+        .extra_headers = extra_headers,
     }) catch return error.NetworkUnreachable;
     defer req.deinit();
 
@@ -122,9 +137,7 @@ pub fn fetchToFile(
         const auth_val = std.fmt.bufPrint(&auth_buf, "Bearer {s}", .{token}) catch return error.OutOfMemory;
         req.headers.authorization = .{ .override = auth_val };
     }
-    if (options.if_none_match) |etag| {
-        try req.headers.append("If-None-Match", etag);
-    }
+
 
     req.send() catch return error.NetworkUnreachable;
     req.wait() catch return error.NetworkUnreachable;

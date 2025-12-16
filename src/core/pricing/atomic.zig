@@ -50,7 +50,7 @@ pub fn install(
     };
 
     // 4. Promote: temp -> current
-    cache_dir.rename("temp", "current") catch |_| {
+    cache_dir.rename("temp", "current") catch {
         // If this fails, we are in a bad state (no current, temp exists, last_good exists).
         // Rollback strategy: try to rename last_good back to current?
         // For now, return error.
