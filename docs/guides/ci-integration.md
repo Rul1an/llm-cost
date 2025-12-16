@@ -19,7 +19,7 @@ jobs:
 
       - name: Install llm-cost
         run: |
-          VERSION="v0.7.1"
+          VERSION="v1.5.0"
           curl -LO "https://github.com/Rul1an/llm-cost/releases/download/${VERSION}/llm-cost-linux-x86_64"
           chmod +x llm-cost-linux-x86_64
           mv llm-cost-linux-x86_64 /usr/local/bin/llm-cost
@@ -41,7 +41,7 @@ jobs:
 cost_check:
   image: alpine:latest
   script:
-    - wget https://github.com/Rul1an/llm-cost/releases/download/v0.7.1/llm-cost-linux-static -O /bin/llm-cost
+    - wget https://github.com/Rul1an/llm-cost/releases/download/v1.5.0/llm-cost-linux-static -O /bin/llm-cost
     - chmod +x /bin/llm-cost
     - cat data.jsonl | llm-cost pipe -m gpt-4o --max-cost 5.00
 ```

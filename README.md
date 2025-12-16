@@ -27,7 +27,11 @@ cached@60%  $0.0033   -37%
 
 ## Installation
 ```bash
+```bash
 curl -sSfL https://get.llm-cost.dev | sh
+```
+
+Or download pre-built binaries from [Releases](https://github.com/Rul1an/llm-cost/releases).
 ```
 
 Or download from [Releases](../../releases).
@@ -84,7 +88,7 @@ tags = { team = "platform", app = "search" }
 
 ## Calibration (Drift Analysis)
 
-Close the loop by comparing your estimates against actual billing data (FOCUS v1.0 CSV).
+Close the loop by comparing your estimates against actual billing data (FOCUS v1.0 CSV). Detect "Shadow AI" (unapproved usage) and drift.
 
 ```bash
 # 1. Generate estimates map
@@ -125,7 +129,7 @@ Filter and group by `Tags.team`, `Tags.app`, or `Tags.model` in your FinOps dash
 
 - **Offline**: No API keys, no telemetry. Network only for explicit `update-db`.
 - **Exact**: BPE tokenizer with tiktoken parity (o200k_base, cl100k_base).
-- **Signed**: Pricing updates verified via Ed25519/minisign.
+- **Signed**: Pricing updates verified via Ed25519/TUF-lite manifest system.
 - **Fast**: ~10 MB/s throughput, O(N) complexity.
 
 ## Security
