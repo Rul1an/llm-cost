@@ -227,7 +227,7 @@ pub const Registry = struct {
 
         const now = std.time.timestamp();
         // Prevent underflow if clock is skewed backwards significantly
-        if (now < generated_at) return .Fresh; // "Future" DB is arguably fresh
+        if (now < generated_at) return .Warning; // Suspicious: Clock skew or Tampering
 
         const age = now - generated_at;
 

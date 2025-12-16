@@ -27,6 +27,7 @@ pub const ManifestContainer = struct {
 pub const ValidationError = error{
     Expired,
     RollbackDetected,
+    InsecureUrl,
     SignatureInvalid,
     SchemaVersionMismatch,
 };
@@ -52,7 +53,7 @@ pub fn verify(
         // We reuse SignatureInvalid or add a new error, but user asked for strictness.
         // Let's print debug and fail.
         std.debug.print("DEBUG: URL not HTTPS: {s}\n", .{container.body.db.url});
-        return ValidationError.SignatureInvalid;
+        return ValidationError.InsecureUrl;
     }
 
     // 3.2 Hardening: Limits
