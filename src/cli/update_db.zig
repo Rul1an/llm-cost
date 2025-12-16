@@ -8,7 +8,29 @@ pub const UpdateDbArgs = struct {
     allow_downgrade: bool = false,
 };
 
-pub fn run(allocator: std.mem.Allocator, args: UpdateDbArgs) !u8 {
+pub fn run(allocator: std.mem.Allocator, raw_args: []const []const u8) !u8 {
+    var args = UpdateDbArgs{};
+
+    var i: usize = 0;
+    while (i < raw_args.len) : (i += 1) {
+        const arg = raw_args[i];
+        if (std.mem.eql(u8, arg, "--force")) {
+            args.force = true;
+        } else if (std.mem.eql(u8, arg, "--allow-downgrade")) {
+            args.allow_downgrade = true;
+        } else if (std.mem.eql(u8, arg, "--endpoint")) {
+            if (i + 1 < raw_args.len) {
+                args.endpoint = raw_args[i + 1];
+                i += 1;
+            }
+        } else if (std.mem.eql(u8, arg, "--license")) {
+            if (i + 1 < raw_args.len) {
+                args.license = raw_args[i + 1];
+                i += 1;
+            }
+        }
+    }
+
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
 

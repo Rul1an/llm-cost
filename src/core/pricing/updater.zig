@@ -171,7 +171,7 @@ pub fn checkAndUpdate(
         .sha = &stream_hash,
     };
 
-    const fetch_db_res = fetcher.fetchToFile(allocator, manifest_container.value.body.db.url, hashing_struct.writer(), .{
+    _ = fetcher.fetchToFile(allocator, manifest_container.value.body.db.url, hashing_struct.writer(), .{
         .auth_token = options.auth_token,
         // Add safety buffer
         .max_size = manifest_container.value.body.db.size_bytes + 4096,
