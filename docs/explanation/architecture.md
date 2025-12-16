@@ -79,10 +79,18 @@ Implements the BPE logic.
 - **Scanners**: Hand-written regex-equivalent scanners (`o200k_scanner.zig`, `cl100k_scanner.zig`) that match OpenAI's logic exactly.
 - **Parity**: Verified against `tiktoken` using the "Evil Corpus" test suite.
 
-### Pricing DB (`src/pricing.zig`)
-Contains an embedded snapshot of model pricing.
-- No network calls are made.
-- Versions follow the tool's release cycle.
+### Pricing DB Service (TUF-lite)
+The pricing database is now a remote-updateable artifact (`pricing_db.json.zst`) managed via a secure manifest system.
+
+-   **Manifest (`manifest.json`)**: Contains metadata (version, timestamp, schema version) and the SHA256 hash of the compressed database. The manifest itself is signed with Ed25519.
+-   **Database (`pricing_db.json.zst`)**: Zstandard-compressed JSON.
+-   **Security**:
+    -   `update-db` fetches the manifest first.
+    -   Verifies the Ed25519 signature against the embedded public key.
+    -   Verifies the timestamp (anti-freeze/anti-replay).
+    -   Downloads the DB and verifies its SHA256 hash against the manifest.
+    -   Performs an atomic install (write-to-temp -> rename).
+-   **Offline**: By default, `llm-cost` uses the embedded database if no cached update is found. Estimation never makes network calls.
 
 ### Pipe Runner (`src/cli/pipe.zig`)
 Handles streaming I/O for `llm-cost pipe`.
