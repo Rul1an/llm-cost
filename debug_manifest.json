@@ -1,0 +1,16 @@
+{
+  "body": {
+    "schema_version": 1,
+    "version": 20251216,
+    "generated_at": 1765883200,
+    "expires_at": 1766488000,
+    "key_id": "root",
+    "db": {
+      "url": "https://cdn.llm-cost.dev/pricing/20251216/pricing_db.json.zst",
+      "sha256": "aa65aa86192870bc378932cb1f36b75ab7bdcf9b7b5383ecb5171e40da4f52d7",
+      "size_bytes": 74,
+      "model_count": 0
+    }
+  },
+  "signature": "qg2oFta9pV5iocq0mVH2tvnLU8xwd6xrl/z3a8josmVLkXaxBmb4mxZGM87l/FyqqkCzgJwDqoVefoADiZ4hBQ=="
+}
