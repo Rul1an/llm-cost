@@ -23,6 +23,11 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(exe);
 
+    // Create manifest module common to tools and tests
+    const manifest_mod = b.createModule(.{
+        .root_source_file = b.path("src/core/pricing/manifest.zig"),
+    });
+
     // Documentation generation
     const install_docs = b.addInstallDirectory(.{
         .source_dir = exe.getEmittedDocs(),
@@ -41,13 +46,23 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run llm-cost");
     run_step.dependOn(&run_cmd.step);
 
-    // Unit tests
+    // Unit Tests
     const unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("src/tests.zig"),
         .target = target,
         .optimize = optimize,
     });
+    unit_tests.root_module.addImport("manifest", manifest_mod);
     const run_unit_tests = b.addRunArtifact(unit_tests);
+
+    // Security Tests
+    const security_tests = b.addTest(.{
+        .root_source_file = b.path("src/tests/security_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    security_tests.root_module.addImport("manifest", manifest_mod);
+    const run_security_tests = b.addRunArtifact(security_tests);
 
     // Determinism Tests
     const determinism_tests = b.addTest(.{
@@ -59,10 +74,10 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
+    test_step.dependOn(&run_security_tests.step);
     test_step.dependOn(&run_determinism_tests.step);
 
     // Fuzz/Chaos tests
-    // Changed from addExecutable to addTest because src/fuzz_test.zig uses 'test' blocks without 'main'
     const fuzz_tests = b.addTest(.{
         .root_source_file = b.path("src/fuzz_test.zig"),
         .target = target,
@@ -100,8 +115,7 @@ pub fn build(b: *std.Build) void {
     const parity_runner_step = b.step("run-tokenizer-parity", "Run tokenizer parity runner (corpus_v2)");
     parity_runner_step.dependOn(&run_parity_runner.step);
 
-    // Golden Tests (CLI Contract)
-    // Golden Tests (CLI Contract)
+    // Golden Tester (CLI harness)
     const golden_tests = b.addTest(.{
         .root_source_file = b.path("src/golden_test.zig"),
         .target = target,
@@ -109,8 +123,18 @@ pub fn build(b: *std.Build) void {
         .single_threaded = true,
     });
     const run_golden_tests = b.addRunArtifact(golden_tests);
-    const golden_step = b.step("test-golden", "Run CLI contract golden tests");
+    const golden_step = b.step("test-golden", "Run golden tests (CLI contract)");
     golden_step.dependOn(&run_golden_tests.step);
+
+    // Guardrail Tests (Memory/Fairness)
+    const guardrail_tests = b.addTest(.{
+        .root_source_file = b.path("src/calibrate/guardrail_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const run_guardrail = b.addRunArtifact(guardrail_tests);
+    const guardrail_step = b.step("test-guardrail", "Run guardrail tests (memory/fairness limits)");
+    guardrail_step.dependOn(&run_guardrail.step);
 
     // Tools: Vocabulary Converter
     const convert_vocab_exe = b.addExecutable(.{
@@ -143,6 +167,43 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| {
         run_bench.addArgs(args);
     }
-
     bench_step.dependOn(&run_bench.step);
+
+    // Tools: Manifest Signer
+    const signer_exe = b.addExecutable(.{
+        .name = "sign-manifest",
+        .root_source_file = b.path("tools/sign_manifest.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Create manifest module to allow access from tools/
+    signer_exe.root_module.addImport("manifest", manifest_mod);
+
+    b.installArtifact(signer_exe);
+
+    const run_signer = b.addRunArtifact(signer_exe);
+    if (b.args) |args| {
+        run_signer.addArgs(args);
+    }
+    const signer_step = b.step("run-signer", "Run manifest signer");
+    signer_step.dependOn(&run_signer.step);
+
+    // Tools: Release Publisher (Phase 5)
+    // Compresses, Hashes, Signs, and Generates Manifest
+    const publisher_exe = b.addExecutable(.{
+        .name = "publish-release",
+        .root_source_file = b.path("tools/publish_release.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    publisher_exe.root_module.addImport("manifest", manifest_mod);
+    b.installArtifact(publisher_exe);
+
+    const run_publisher = b.addRunArtifact(publisher_exe);
+    if (b.args) |args| {
+        run_publisher.addArgs(args);
+    }
+    const publisher_step = b.step("run-publisher", "Run release publisher");
+    publisher_step.dependOn(&run_publisher.step);
 }
