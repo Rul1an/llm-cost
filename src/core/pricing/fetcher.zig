@@ -68,8 +68,6 @@ pub fn fetch(
         req.headers.authorization = .{ .override = auth_val };
     }
 
-
-
     req.send() catch return error.NetworkUnreachable;
     req.wait() catch return error.NetworkUnreachable;
 
@@ -137,7 +135,6 @@ pub fn fetchToFile(
         const auth_val = std.fmt.bufPrint(&auth_buf, "Bearer {s}", .{token}) catch return error.OutOfMemory;
         req.headers.authorization = .{ .override = auth_val };
     }
-
 
     req.send() catch return error.NetworkUnreachable;
     req.wait() catch return error.NetworkUnreachable;
