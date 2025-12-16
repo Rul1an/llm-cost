@@ -4,6 +4,7 @@ const builtin = @import("builtin");
 pub const Crypto = @import("crypto.zig");
 
 const CRITICAL_AGE_SECONDS = 90 * 24 * 60 * 60; // 90 days
+const WARN_AGE_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
 const StaleStatus = enum { Fresh, Warning, Critical };
 
@@ -17,7 +18,7 @@ pub const Registry = struct {
 
     // Metadata about loaded set
     source: enum { Embedded, Cache } = .Embedded,
-    valid_until: i64 = 0,
+    generated_at: i64 = 0,
 
     pub fn init(allocator: std.mem.Allocator, options: anytype) !Registry {
         _ = options;
@@ -60,14 +61,17 @@ pub const Registry = struct {
         var parsed = try std.json.parseFromSlice(std.json.Value, allocator, db_content, .{});
         defer parsed.deinit();
 
-        var valid_until: i64 = 0;
+        var generated_at: i64 = 0;
         if (parsed.value == .object) {
-            if (parsed.value.object.get("valid_until")) |v| {
-                if (v == .integer) valid_until = v.integer;
+            // Try explicit numeric timestamp first (v1.4.0+)
+            if (parsed.value.object.get("generated_at")) |v| {
+                if (v == .integer) generated_at = v.integer;
             }
+            // Fallback to updated_at string parsing would go here,
+            // but for now we rely on the migration adding generated_at.
         }
 
-        const stale_status = checkStale(valid_until);
+        const stale_status = checkStale(generated_at);
         if (stale_status == .Critical) {
             return error.CacheTooStale;
         }
@@ -76,7 +80,7 @@ pub const Registry = struct {
             .allocator = allocator,
             .models = std.StringHashMap(PriceDef).init(allocator),
             .source = .Cache,
-            .valid_until = valid_until,
+            .generated_at = generated_at,
         };
         errdefer reg.deinit();
 
@@ -93,10 +97,26 @@ pub const Registry = struct {
             return err;
         };
 
+        // Parse embedded to get metadata
+        // We do this transiently just to get generated_at
+        var generated_at: i64 = 0;
+        {
+            var parsed = try std.json.parseFromSlice(std.json.Value, allocator, db_content, .{});
+            defer parsed.deinit();
+            if (parsed.value == .object) {
+                if (parsed.value.object.get("generated_at")) |v| {
+                    if (v == .integer) generated_at = v.integer;
+                }
+            }
+            // NOTE: We do NOT fail embedded load on staleness.
+            // Embedded is the "last resort" source of truth.
+        }
+
         var reg = Registry{
             .allocator = allocator,
             .models = std.StringHashMap(PriceDef).init(allocator),
             .source = .Embedded,
+            .generated_at = generated_at,
         };
         errdefer reg.deinit();
 
@@ -202,11 +222,17 @@ pub const Registry = struct {
         }
     }
 
-    fn checkStale(valid_until: i64) StaleStatus {
+    fn checkStale(generated_at: i64) StaleStatus {
+        if (generated_at == 0) return .Critical;
+
         const now = std.time.timestamp();
-        if (valid_until == 0) return .Critical;
-        if (now > valid_until + CRITICAL_AGE_SECONDS) return .Critical;
-        if (now > valid_until) return .Warning;
+        // Prevent underflow if clock is skewed backwards significantly
+        if (now < generated_at) return .Warning; // Suspicious: Clock skew or Tampering
+
+        const age = now - generated_at;
+
+        if (age > CRITICAL_AGE_SECONDS) return .Critical;
+        if (age > WARN_AGE_SECONDS) return .Warning;
         return .Fresh;
     }
 
@@ -226,6 +252,10 @@ pub const Registry = struct {
             }
         }
         return null;
+    }
+
+    pub fn getStaleness(self: *const Registry) StaleStatus {
+        return checkStale(self.generated_at);
     }
 
     // Verify extracted to crypto.zig (Crypto.verify)

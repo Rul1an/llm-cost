@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>llm-cost Pricing - Static Cost Analysis</title>
+    <meta name="description"
+        content="Predict LLM costs before you run. Locally verified, offline-first cost analysis for CI/CD.">
+    <link rel="stylesheet" href="styles.css">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; connect-src 'self' https://api.llm-cost.dev; script-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; img-src 'self' data:;">
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+</head>
+
+<body>
+    <header class="container">
+        <nav>
+            <a href="/" class="brand">llm-cost_v1.5.0</a>
+            <div class="nav-links">
+                <a href="https://github.com/Rul1an/llm-cost" target="_blank" rel="noopener">GitHub</a>
+                <a href="/docs">Docs</a>
+            </div>
+        </nav>
+    </header>
+
+    <main class="container">
+        <!-- Hero -->
+        <section class="hero-grid">
+            <div class="hero-content">
+                <h1>Estimate costs<br>before the API call.</h1>
+                <p class="subtitle">Always accurate. Locally verified. Zero latency.</p>
+                <div class="cta-group">
+                    <a href="https://github.com/Rul1an/llm-cost/releases" class="btn primary">Download CLI</a>
+                    <a href="#pro" class="btn secondary">Upgrade to Pro</a>
+                </div>
+            </div>
+            <div class="hero-code">
+                <div class="code-block">
+                    <div class="code-header">
+                        <span class="dot"></span>
+                        <span class="lang">terminal</span>
+                        <button id="copy-btn" class="copy-btn" aria-label="Copy install command">COPY</button>
+                    </div>
+                    <pre><code id="install-cmd">curl -sSfL https://get.llm-cost.dev | sh
+llm-cost update-db</code></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- Pricing Cards -->
+        <section id="pricing" class="pricing-section">
+            <div class="pricing-header">
+                <h2>Plan Selection</h2>
+                <div class="toggle-wrapper">
+                    <span class="toggle-label">Monthly</span>
+                    <button id="billing-toggle" class="billing-toggle" role="switch" aria-checked="false"
+                        aria-label="Toggle annual billing">
+                        <span class="knob"></span>
+                    </button>
+                    <span class="toggle-label">Annual <span class="discount">(-16%)</span></span>
+                </div>
+            </div>
+
+            <div class="pricing-grid">
+                <!-- Free Tier -->
+                <article class="card">
+                    <div class="card-header">
+                        <h3>OSS / Free</h3>
+                        <div class="price">$0<span class="period">/mo</span></div>
+                    </div>
+                    <ul class="features">
+                        <li><span class="icon check">✓</span> <strong>10 updates</strong> / day / IP</li>
+                        <li><span class="icon check">✓</span> Full CLI functionality</li>
+                        <li><span class="icon check">✓</span> Ed25519 Verified DB</li>
+                        <li><span class="icon check">✓</span> CI/CD Integration</li>
+                    </ul>
+                    <a href="https://github.com/Rul1an/llm-cost" class="btn outline">View Source</a>
+                </article>
+
+                <!-- Pro Tier -->
+                <article class="card highlight" id="pro">
+                    <div class="card-header">
+                        <h3>Pro</h3>
+                        <div class="price" id="price-display">$10<span class="period">/mo</span></div>
+                    </div>
+                    <ul class="features">
+                        <li><span class="icon check">✓</span> <strong>Unlimited</strong> updates</li>
+                        <li><span class="icon check">✓</span> Priority (24h) pricing</li>
+                        <li><span class="icon check">✓</span> Email Alerts for Rate Hikes</li>
+                        <li><span class="icon check">✓</span> Rate Limit Bypass Token</li>
+                    </ul>
+                    <button id="checkout-btn" class="btn primary full-width" disabled>Coming Soon</button>
+                    <p class="security-note">Payments enabling in v1.x (Stripe pending)</p>
+                </article>
+
+                <!-- Enterprise Tier -->
+                <article class="card">
+                    <div class="card-header">
+                        <h3>Enterprise</h3>
+                        <div class="price">Custom</div>
+                    </div>
+                    <ul class="features">
+                        <li><span class="icon check">✓</span> <strong>Self-hosted</strong> Mirror</li>
+                        <li><span class="icon check">✓</span> Air-gapped Bundle</li>
+                        <li><span class="icon check">✓</span> Custom Price Books</li>
+                        <li><span class="icon check">✓</span> Invoice Payment</li>
+                    </ul>
+                    <a href="mailto:sales@llm-cost.dev" class="btn outline">Contact Sales</a>
+                </article>
+            </div>
+        </section>
+
+        <!-- How It Works -->
+        <section class="how-it-works">
+            <h2>Architecture</h2>
+            <div class="steps-grid">
+                <div class="step">
+                    <span class="step-num">01</span>
+                    <h3>Fetch Manifest</h3>
+                    <p>CLI requests signed <code>manifest.json</code> from Worker. Verifies basic integrity.</p>
+                </div>
+                <div class="step">
+                    <span class="step-num">02</span>
+                    <h3>Verify Signature</h3>
+                    <p>Ed25519 check against embedded public key. Anti-replay timestamp check.</p>
+                </div>
+                <div class="step">
+                    <span class="step-num">03</span>
+                    <h3>Stream & Verify</h3>
+                    <p>Downloads DB artifact. Validates SHA256 matches manifest before atomic write.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- FAQ -->
+        <section class="faq">
+            <h2>FAQ</h2>
+            <div class="faq-item">
+                <details>
+                    <summary>Why is there a rate limit on the free tier?</summary>
+                    <div class="faq-content">
+                        To prevent abuse of our bandwidth. The 10/day limit is sufficient for most individual developers
+                        and small CI pipelines. Pro removes this limit for heavy usage.
+                    </div>
+                </details>
+            </div>
+            <div class="faq-item">
+                <details>
+                    <summary>Can I self-host this?</summary>
+                    <div class="faq-content">
+                        Yes. The Enterprise plan provides a Docker container for the Pricing Service and tools to sign
+                        your own custom pricing databases ("Private Root of Trust").
+                    </div>
+                </details>
+            </div>
+            <div class="faq-item">
+                <details>
+                    <summary>What if I lose my license key?</summary>
+                    <div class="faq-content">
+                        You can recover it via the <a href="/recovery">Recovery Page</a> using your purchase email, or
+                        check your original receipt email.
+                    </div>
+                </details>
+            </div>
+        </section>
+
+        <!-- Trust -->
+        <section class="trust-footer">
+            <div class="trust-badge">
+                <span class="icon">🔒</span> No private keys on server
+            </div>
+            <div class="trust-badge">
+                <span class="icon">✍️</span> Signed Artifacts
+            </div>
+            <div class="trust-badge">
+                <span class="icon">⚡</span> Offline after sync
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 llm-cost. Released under MIT (CLI).</p>
+        </div>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

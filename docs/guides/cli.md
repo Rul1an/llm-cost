@@ -233,3 +233,24 @@ Verifies Ed25519 signature before applying.
 ```bash
 llm-cost update-db
 ```
+
+---
+
+### upgrade
+
+Upgrade to a Pro license to support the project and unlock unlimited pricing updates.
+Generates a unique checkout URL.
+
+```bash
+llm-cost upgrade
+```
+
+---
+
+### verify-license
+
+Verify the status of your Pro license key.
+
+```bash
+llm-cost verify-license <LICENSE_KEY>
+```

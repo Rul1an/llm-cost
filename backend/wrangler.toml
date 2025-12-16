@@ -1,0 +1,25 @@
+name = "llm-cost-api"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+[vars]
+ENVIRONMENT = "prod"
+STRIPE_PRO_MONTHLY_PRICE_ID = "price_1Sey4eGjDRd4LQBlzoM3KLQc"
+STRIPE_PRO_ANNUAL_PRICE_ID = "price_1Sey4fGjDRd4LQBl6Zrzrk68"
+STRIPE_ENT_MONTHLY_PRICE_ID = "price_1Sey4gGjDRd4LQBlkjKMQYc6"
+STRIPE_ENT_ANNUAL_PRICE_ID = "price_1Sey4gGjDRd4LQBlMJnt0gh8"
+SUCCESS_URL = "https://llm-cost.dev/success"
+CANCEL_URL = "https://llm-cost.dev/pricing"
+EMAIL_FROM = "llm-cost <hello@llm-cost.dev>"
+
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "79333a1c5dc24cec85ffa4bfb77de0dc"
+
+[[kv_namespaces]]
+binding = "LICENSES"
+id = "1c4dd28f0d3e4150a3bc6ecc812b728f"
+
+[[r2_buckets]]
+binding = "PRICING_BUCKET"
+bucket_name = "llm-cost-pricing"

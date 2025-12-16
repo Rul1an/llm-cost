@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Receipt - llm-cost</title>
+    <link rel="stylesheet" href="styles.css">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; connect-src 'self' https://api.llm-cost.dev; script-src 'self'; style-src 'self' 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none';">
+    <meta name="referrer" content="no-referrer">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+</head>
+
+<body>
+    <main class="layout-center">
+        <div class="receipt-container">
+            <!-- Receipt Header -->
+            <header class="receipt-header">
+                <div class="brand">llm-cost // receipt</div>
+                <div class="meta-grid">
+                    <div class="meta-row">
+                        <span class="label">SESSION_ID</span>
+                        <span class="value code" id="session-id-display">...</span>
+                    </div>
+                    <div class="meta-row">
+                        <span class="label">TIER</span>
+                        <span class="value">PRO LICENSE</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Status / Content Area -->
+            <div id="status-area" class="status-area">
+                <div class="spinner"></div>
+                <p class="status-text">Synchronizing with Payment Provider...</p>
+            </div>
+
+            <!-- License Block (Hidden by default) -->
+            <div id="license-block" class="license-block hidden">
+                <div class="perforation-top"></div>
+                <div class="block-content">
+                    <span class="label">LICENSE KEY</span>
+                    <div class="key-display">
+                        <code id="license-key">--------------------------------</code>
+                        <button id="copy-btn" class="icon-btn" aria-label="Copy License">📋</button>
+                    </div>
+                    <button id="download-btn" class="btn outline full-width">Download Config (llm-cost.env)</button>
+                </div>
+                <div class="perforation-bottom"></div>
+            </div>
+
+            <!-- Next Steps -->
+            <div id="instructions" class="instructions hidden">
+                <span class="label">NEXT STEPS</span>
+                <ol class="steps-list">
+                    <li>
+                        <span class="step-text">Export variable</span>
+                        <code class="cmd">export LLM_COST_LICENSE="..."</code>
+                    </li>
+                    <li>
+                        <span class="step-text">Update database</span>
+                        <code class="cmd">llm-cost update-db</code>
+                    </li>
+                    <li>
+                        <span class="step-text">Verify status</span>
+                        <code class="cmd">llm-cost verify-license</code>
+                    </li>
+                </ol>
+            </div>
+
+            <!-- Footer -->
+            <footer class="receipt-footer">
+                <div class="hash-line">sha256: 7d1a54127b222502f5b79b5fb597479...</div>
+                <p>Automating? Use a secret store in CI.</p>
+                <a href="mailto:support@llm-cost.dev">Support</a>
+            </footer>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

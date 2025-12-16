@@ -13,7 +13,7 @@ We provide a script to automate verification:
 ```bash
 ./scripts/verify-release.sh <artifact> <tag>
 # Example:
-./scripts/verify-release.sh llm-cost-linux-x86_64 v0.7.0
+./scripts/verify-release.sh llm-cost-linux-x86_64 v1.5.0
 ```
 
 ## Manual Verification
@@ -22,7 +22,7 @@ To manually verify an artifact:
 
 1.  **Download the artifact**:
     ```bash
-    gh release download v0.7.0 -p "llm-cost-linux-x86_64" --repo Rul1an/llm-cost
+    gh release download v1.5.0 -p "llm-cost-linux-x86_64" --repo Rul1an/llm-cost
     ```
 
 2.  **Verify Attestation**:
@@ -58,7 +58,7 @@ steps:
     uses: dsaltares/fetch-gh-release-asset@d65c814173d12d457636979204040924036e5797 # v1.1.2
     with:
       repo: 'Rul1an/llm-cost'
-      version: 'tags/v0.7.0'
+      version: 'tags/v1.5.0'
       file: 'llm-cost-linux-x86_64'
 
   - name: Verify Attestation

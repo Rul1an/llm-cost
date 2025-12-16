@@ -72,6 +72,7 @@ pub const Config = struct {
     comment_threshold: f64 = 0.0,
     post_comment: bool = true,
     comment_marker: []const u8 = "<!-- llm-cost-action-comment -->",
+    strict_pricing: bool = false,
 
     pub fn deinit(self: *Config, allocator: std.mem.Allocator) void {
         allocator.free(self.github_token);
@@ -100,6 +101,13 @@ pub const Config = struct {
         var comment_threshold: f64 = 0.0;
         var post_comment: bool = true;
         var marker: []const u8 = "<!-- llm-cost-action-comment -->";
+        var strict_pricing: bool = false;
+
+        // Auto-detect strict via env
+        if (env.getOwned(allocator, "LLM_COST_STRICT")) |v| {
+            strict_pricing = true;
+            allocator.free(v);
+        }
 
         var i: usize = 0;
         while (i < argv.len) : (i += 1) {
@@ -132,6 +140,8 @@ pub const Config = struct {
                 budget = try parseF64(argv[i]);
             } else if (std.mem.eql(u8, arg, "--fail-on-increase")) {
                 fail_on_increase = true;
+            } else if (std.mem.eql(u8, arg, "--strict-pricing")) {
+                strict_pricing = true;
             } else if (std.mem.eql(u8, arg, "--comment-threshold")) {
                 i += 1;
                 if (i >= argv.len) return ConfigError.InvalidArg;
@@ -164,6 +174,7 @@ pub const Config = struct {
             .comment_threshold = comment_threshold,
             .post_comment = post_comment,
             .comment_marker = marker,
+            .strict_pricing = strict_pricing,
         };
     }
 
@@ -287,6 +298,19 @@ pub fn run(state: context.GlobalState, argv: []const []const u8) !u8 {
 
     const ev_json = try readFileBounded(state.allocator, cfg.event_path, 1024 * 1024);
     defer state.allocator.free(ev_json);
+
+    // Staleness Check (CI Specific)
+    const staleness = state.registry.getStaleness();
+    if (staleness != .Fresh) {
+        if (cfg.strict_pricing or staleness == .Critical) {
+            if (cfg.strict_pricing) {
+                try state.stderr.print("Error: Pricing data is stale (Status: {s}). Strict mode enabled for CI.\n", .{@tagName(staleness)});
+                return @intFromEnum(ExitCode.api_error);
+            } else {
+                try state.stderr.print("Warning: Pricing data is stale (Status: {s}).\n", .{@tagName(staleness)});
+            }
+        }
+    }
 
     const ctx = parseEvent(state.allocator, ev_json) catch |err| {
         try state.stderr.print("ci-action event parse error: {}\n", .{err});

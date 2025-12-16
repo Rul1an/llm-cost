@@ -14,7 +14,7 @@ llm-cost is an **offline** token counting & pricing CLI. It is intended to be:
 - Predictable and machine-friendly, with stable JSON contracts
 
 This is primarily an **offline** tool: it does not contact model vendors for validation.
-However, v0.9.0+ introduces an optional `update-db` command to securely fetch pricing updates from the official registry. This is user-initiated and cryptographically verified.
+However, v1.0.0+ introduces an optional `update-db` command to securely fetch pricing updates from the official registry. This is user-initiated and cryptographically verified.
 
 ---
 
@@ -111,7 +111,7 @@ These artifacts are published in the GitHub Release alongside the binaries.
 
 ### 3.4 SLSA Level 2 Compliance
 
-> **Note:** SLSA Level 2 applies to releases ≥ v0.4.0. Older versions may not have provenance.
+> **Note:** SLSA Level 2 applies to releases ≥ v1.0.0. Older versions may not have provenance.
 
 llm-cost release artifacts meet **SLSA Build Level 2** requirements:
 
@@ -320,7 +320,7 @@ Each release includes a `checksums.txt` file with SHA256 hashes:
 
 ```bash
 # Download checksums
-curl -LO https://github.com/Rul1an/llm-cost/releases/download/v0.4.0/checksums.txt
+curl -LO https://github.com/Rul1an/llm-cost/releases/download/v1.5.0/checksums.txt
 
 # Verify
 sha256sum -c checksums.txt
@@ -362,7 +362,7 @@ If SLSA provenance attestations are attached:
 slsa-verifier verify-artifact \
   --provenance-path llm-cost-linux-x86_64.intoto.jsonl \
   --source-uri github.com/Rul1an/llm-cost \
-  --source-tag v0.4.0 \
+  --source-tag v1.5.0 \
   llm-cost-linux-x86_64
 ```
 

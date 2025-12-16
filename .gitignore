@@ -23,3 +23,10 @@ comparison.json
 json_test.txt
 archive/
 reports/
+
+# Logs
+*.log
+
+# Internal Tools (Private)
+tools/publish_release.zig
+tools/sign_manifest.zig
