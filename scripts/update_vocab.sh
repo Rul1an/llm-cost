@@ -45,7 +45,7 @@ else
     ZIG_EXE=zig
 fi
 
-"$ZIG_EXE" build
+"$ZIG_EXE" build tools
 CONVERT_TOOL="$PROJECT_ROOT/zig-out/bin/convert-vocab"
 
 if [[ ! -x "$CONVERT_TOOL" ]]; then
