@@ -27,7 +27,6 @@ pub fn main() !void {
 
     // Default corpus path if not provided
     const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
     try stdout.print("Running Parity Tests against {s}...\n", .{corpus_path});
 
     // 2. Initialize Tokenizers
