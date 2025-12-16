@@ -27,7 +27,11 @@ cached@60%  $0.0033   -37%
 
 ## Installation
 ```bash
-Download pre-built binaries from [Releases](https://github.com/Rul1an/llm-cost/releases).
+```bash
+curl -sSfL https://get.llm-cost.dev | sh
+```
+
+Or download pre-built binaries from [Releases](https://github.com/Rul1an/llm-cost/releases).
 ```
 
 Or download from [Releases](../../releases).
