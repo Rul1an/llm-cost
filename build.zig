@@ -136,6 +136,8 @@ pub fn build(b: *std.Build) void {
     const guardrail_step = b.step("test-guardrail", "Run guardrail tests (memory/fairness limits)");
     guardrail_step.dependOn(&run_guardrail.step);
 
+    const tools_step = b.step("tools", "Install auxiliary tools (signer, publisher, converter)");
+
     // Tools: Vocabulary Converter
     const convert_vocab_exe = b.addExecutable(.{
         .name = "convert-vocab",
@@ -143,7 +145,9 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    b.installArtifact(convert_vocab_exe);
+    // b.installArtifact(convert_vocab_exe);
+    const install_vocab = b.addInstallArtifact(convert_vocab_exe, .{});
+    tools_step.dependOn(&install_vocab.step);
 
     const run_convert_vocab = b.addRunArtifact(convert_vocab_exe);
     if (b.args) |args| {
@@ -180,7 +184,9 @@ pub fn build(b: *std.Build) void {
     // Create manifest module to allow access from tools/
     signer_exe.root_module.addImport("manifest", manifest_mod);
 
-    b.installArtifact(signer_exe);
+    // b.installArtifact(signer_exe);
+    const install_signer = b.addInstallArtifact(signer_exe, .{});
+    tools_step.dependOn(&install_signer.step);
 
     const run_signer = b.addRunArtifact(signer_exe);
     if (b.args) |args| {
@@ -198,7 +204,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     publisher_exe.root_module.addImport("manifest", manifest_mod);
-    b.installArtifact(publisher_exe);
+    // b.installArtifact(publisher_exe);
+    const install_publisher = b.addInstallArtifact(publisher_exe, .{});
+    tools_step.dependOn(&install_publisher.step);
 
     const run_publisher = b.addRunArtifact(publisher_exe);
     if (b.args) |args| {
