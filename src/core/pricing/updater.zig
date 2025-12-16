@@ -114,17 +114,12 @@ pub fn checkAndUpdate(
     }
 
     if (manifest_res.status == .not_modified) {
-         try writer.print("✓ Already up to date (cached)\n", .{});
-         return .already_current;
+        try writer.print("✓ Already up to date (cached)\n", .{});
+        return .already_current;
     }
 
     // 3. Verify Manifest
-    var manifest_container = std.json.parseFromSlice(
-        Manifest.ManifestContainer,
-        allocator,
-        manifest_res.data,
-        .{}
-    ) catch return UpdateError.ManifestInvalid;
+    var manifest_container = std.json.parseFromSlice(Manifest.ManifestContainer, allocator, manifest_res.data, .{}) catch return UpdateError.ManifestInvalid;
     defer manifest_container.deinit();
 
     // Verify signature & logic
@@ -135,12 +130,12 @@ pub fn checkAndUpdate(
                 return UpdateError.ManifestExpired;
             },
             error.RollbackDetected => {
-                 if (options.allow_downgrade) {
-                     try writer.writeAll("⚠️ Rollback detected but allowed via flag\n");
-                 } else {
-                     try writer.writeAll("❌ Rollback detected (anti-rollback protection)\n");
-                     return UpdateError.ManifestRollback;
-                 }
+                if (options.allow_downgrade) {
+                    try writer.writeAll("⚠️ Rollback detected but allowed via flag\n");
+                } else {
+                    try writer.writeAll("❌ Rollback detected (anti-rollback protection)\n");
+                    return UpdateError.ManifestRollback;
+                }
             },
             error.SignatureInvalid => {
                 try writer.writeAll("❌ Signature invalid\n");
@@ -156,8 +151,8 @@ pub fn checkAndUpdate(
     // Check if version == highest_seen (and not forced)
     // verify() handles < logic.
     if (!options.force and manifest_container.value.body.version == state.highest_version_seen) {
-         try writer.print("✓ Already at latest version (v{d})\n", .{manifest_container.value.body.version});
-         return .already_current;
+        try writer.print("✓ Already at latest version (v{d})\n", .{manifest_container.value.body.version});
+        return .already_current;
     }
 
     // 4. Download DB to temp file with On-the-fly Hashing
@@ -176,16 +171,11 @@ pub fn checkAndUpdate(
         .sha = &stream_hash,
     };
 
-    const fetch_db_res = fetcher.fetchToFile(
-        allocator,
-        manifest_container.value.body.db.url,
-        hashing_struct.writer(),
-        .{
-            .auth_token = options.auth_token,
-            // Add safety buffer
-            .max_size = manifest_container.value.body.db.size_bytes + 4096,
-        }
-    ) catch |err| return mapFetchError(err);
+    const fetch_db_res = fetcher.fetchToFile(allocator, manifest_container.value.body.db.url, hashing_struct.writer(), .{
+        .auth_token = options.auth_token,
+        // Add safety buffer
+        .max_size = manifest_container.value.body.db.size_bytes + 4096,
+    }) catch |err| return mapFetchError(err);
 
     try db_file.sync();
 
@@ -204,7 +194,7 @@ pub fn checkAndUpdate(
     // Verify size
     const stat = try db_file.stat();
     if (stat.size != manifest_container.value.body.db.size_bytes) {
-        try writer.print("❌ Size mismatch: expected {d}, got {d}\n", .{manifest_container.value.body.db.size_bytes, stat.size});
+        try writer.print("❌ Size mismatch: expected {d}, got {d}\n", .{ manifest_container.value.body.db.size_bytes, stat.size });
         return UpdateError.HashMismatch;
     }
 
@@ -220,7 +210,7 @@ pub fn checkAndUpdate(
         state.etag = try allocator.dupe(u8, e);
     }
     state.save(allocator) catch {
-         try writer.writeAll("⚠️ Failed to save state\n");
+        try writer.writeAll("⚠️ Failed to save state\n");
     };
 
     try writer.print("✓ Updated to v{d}\n", .{manifest_container.value.body.version});
@@ -228,7 +218,7 @@ pub fn checkAndUpdate(
     return UpdateResult{ .success = .{
         .version = manifest_container.value.body.version,
         .model_count = manifest_container.value.body.db.model_count,
-    }};
+    } };
 }
 
 fn mapFetchError(err: fetcher.FetchError) UpdateError {

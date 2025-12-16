@@ -19,6 +19,9 @@ const estimate_cmd = @import("commands/estimate.zig");
 const ci_action_cmd = @import("ci_action.zig");
 const verify_cmd = @import("verify.zig");
 const calibrate_cmd = @import("calibrate/cmd.zig");
+const update_db_cmd = @import("cli/update_db.zig");
+const upgrade_cmd = @import("cli/upgrade.zig");
+const verify_license_cmd = @import("cli/verify_license.zig");
 
 pub const version_str = "1.2.2";
 
@@ -83,7 +86,9 @@ pub fn main() !void {
     } else if (std.mem.eql(u8, command, "analyze-fairness")) {
         try runFairnessAnalysis(state, args[2..]);
     } else if (std.mem.eql(u8, command, "update-db")) {
-        try update.run(state.allocator, args[2..]);
+        // Pass slice of args (skip "update-db")
+        const exit_code = try update_db_cmd.run(state.allocator, args[2..]);
+        if (exit_code != 0) std.process.exit(exit_code);
     } else if (std.mem.eql(u8, command, "check")) {
         const exit_code = try check.run(state.allocator, args[2..], state.registry, state.stdout, state.stderr);
         if (exit_code != 0) std.process.exit(exit_code);
@@ -100,6 +105,12 @@ pub fn main() !void {
         try verify_cmd.run(state.allocator, args[2..], state.stdout, state.stderr);
     } else if (std.mem.eql(u8, command, "calibrate")) {
         const exit_code = try calibrate_cmd.run(state.allocator, args[2..], state.registry, state.stdout, state.stderr);
+        if (exit_code != 0) std.process.exit(exit_code);
+    } else if (std.mem.eql(u8, command, "upgrade")) {
+        const exit_code = try upgrade_cmd.run(state.allocator, args[2..]);
+        if (exit_code != 0) std.process.exit(exit_code);
+    } else if (std.mem.eql(u8, command, "verify-license")) {
+        const exit_code = try verify_license_cmd.run(state.allocator, args[2..]);
         if (exit_code != 0) std.process.exit(exit_code);
     } else {
         try stderr.print("Error: Unknown command '{s}'\n\n", .{command});
@@ -280,6 +291,8 @@ fn printUsage(w: anytype) !void {
         \\  llm-cost verify    [FILE]                 Verify artifact integrity
         \\  llm-cost calibrate [OPTIONS]              Calibrate prices against FOCUS data
         \\  llm-cost update-db                        Update pricing database
+        \\  llm-cost upgrade                          Upgrade to Pro (License purchase)
+        \\  llm-cost verify-license [KEY]             Verify Pro license status
         \\  llm-cost version                          Show version
         \\
         \\Examples:

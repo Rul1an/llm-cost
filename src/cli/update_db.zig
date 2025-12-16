@@ -38,13 +38,13 @@ pub fn run(allocator: std.mem.Allocator, args: UpdateDbArgs) !u8 {
             }
 
             return switch (err) {
-                 error.NetworkUnreachable => 1,
-                 error.Timeout => 2,
-                 error.ServerError => 3,
-                 error.RateLimited => 4,
-                 error.ManifestInvalid, error.SignatureInvalid, error.HashMismatch => 10,
-                 error.ManifestExpired, error.ManifestRollback, error.SchemaVersionMismatch => 11,
-                 else => 20,
+                error.NetworkUnreachable => 1,
+                error.Timeout => 2,
+                error.ServerError => 3,
+                error.RateLimited => 4,
+                error.ManifestInvalid, error.SignatureInvalid, error.HashMismatch => 10,
+                error.ManifestExpired, error.ManifestRollback, error.SchemaVersionMismatch => 11,
+                else => 20,
             };
         },
     }

@@ -11,6 +11,7 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
     var output_tokens_arg: ?u64 = null;
     var reasoning_tokens_arg: u64 = 0;
     var format_json = false;
+    var strict_pricing = false;
     var input_files = std.ArrayList([]const u8).init(state.allocator);
     defer input_files.deinit();
 
@@ -21,6 +22,8 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
             if (i + 1 >= args.len) return error.MissingArgument;
             model_name = args[i + 1];
             i += 1;
+        } else if (std.mem.eql(u8, arg, "--strict-pricing")) {
+            strict_pricing = true;
         } else if (std.mem.eql(u8, arg, "--input-tokens")) {
             if (i + 1 >= args.len) return error.MissingArgument;
             input_tokens_arg = try std.fmt.parseInt(u64, args[i + 1], 10);
@@ -52,6 +55,40 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
             i += 1;
         } else if (!std.mem.startsWith(u8, arg, "-")) {
             try input_files.append(arg);
+        }
+    }
+
+    // Staleness Check
+    // Env var override
+    var env_map = try std.process.getEnvMap(state.allocator);
+    defer env_map.deinit();
+    if (env_map.get("LLM_COST_STRICT")) |_| strict_pricing = true;
+
+    const staleness = state.registry.getStaleness();
+    if (staleness != .Fresh) {
+        if (strict_pricing or staleness == .Critical) {
+            // In Strict mode, ANY staleness (Warning+) is an error.
+            // In Relaxed mode (default), Critical is Hard Error (unless force? No, Critical is error per ADR 010).
+            // Wait, ADR 010 said: "Default (OSS): WARN only. Never break basic functionality."
+            // But logic in mod.zig implements: "Critical (>90d) returns error.CacheTooStale".
+            // So default behavior is already safe from CRITICAL cached data (fallback to embedded).
+
+            // If we are here, we have *some* registry loaded (embedded or cache).
+            // If that registry is STALE (30-90d) => Warn.
+            // If that registry is CRITICAL (>90d) => Warn (Default) or Error (Strict).
+
+            // Re-reading ADR-010: "Default (OSS): WARN only. Never break basic functionality."
+            // "Critical (>90 days): Free Tier = Hard Error" (Wait, contradictory?)
+            // Let's stick to the synthesised view:
+            // - Stale (30-90d): Warn on stderr.
+            // - Critical (>90d): Warn on stderr (Default). Error if Strict.
+
+            if (strict_pricing) {
+                try state.stderr.print("Error: Pricing data is stale (Status: {s}). Strict mode enabled.\n", .{@tagName(staleness)});
+                return error.StalePricing;
+            } else {
+                try state.stderr.print("Warning: Pricing data is stale (Status: {s}). Estimates may be inaccurate.\n", .{@tagName(staleness)});
+            }
         }
     }
 

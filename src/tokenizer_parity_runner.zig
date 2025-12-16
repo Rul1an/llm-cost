@@ -24,9 +24,8 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     // Default corpus path if not provided
-    const corpus_path = if (args.len > 1) args[1] else "test/golden/corpus_v2.jsonl";
     const stdout = std.io.getStdOut().writer();
-
+    const stderr = std.io.getStdErr().writer();
     try stdout.print("Running Parity Tests against {s}...\n", .{corpus_path});
 
     // 2. Initialize Tokenizers
