@@ -182,7 +182,12 @@ pub fn fetchToFile(
         total_read += n;
         if (total_read > options.max_size) return error.TooLarge;
 
-        try fifo.pump(writer);
+        // Manually flush fifo to writer
+        while (fifo.readableLength() > 0) {
+            const slice = fifo.readableSlice(0);
+            try writer.writeAll(slice);
+            fifo.discard(slice.len);
+        }
     }
 
     return .{ .status = status, .etag = etag };

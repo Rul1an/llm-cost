@@ -88,10 +88,10 @@ pub fn main() !void {
     } else if (std.mem.eql(u8, command, "update-db")) {
         // Pass slice of args (skip "update-db")
         const exit_code = try update_db_cmd.run(state.allocator, args[2..]);
-        if (exit_code != 0) std.process.exit(exit_code);
+        if (exit_code != 0) std.process.exit(@intCast(exit_code));
     } else if (std.mem.eql(u8, command, "check")) {
         const exit_code = try check.run(state.allocator, args[2..], state.registry, state.stdout, state.stderr);
-        if (exit_code != 0) std.process.exit(exit_code);
+        if (exit_code != 0) std.process.exit(@intCast(exit_code));
     } else if (std.mem.eql(u8, command, "init")) {
         try init.run(state.allocator, args[2..], std.io.getStdIn().reader(), state.stdout);
     } else if (std.mem.eql(u8, command, "export")) {
@@ -100,18 +100,18 @@ pub fn main() !void {
         try diff_cmd.run(state.allocator, args[2..], state.registry, state.stdout);
     } else if (std.mem.eql(u8, command, "ci-action")) {
         const exit_code = try ci_action_cmd.run(state, args[2..]);
-        if (exit_code != 0) std.process.exit(exit_code);
+        if (exit_code != 0) std.process.exit(@intCast(exit_code));
     } else if (std.mem.eql(u8, command, "verify")) {
         try verify_cmd.run(state.allocator, args[2..], state.stdout, state.stderr);
     } else if (std.mem.eql(u8, command, "calibrate")) {
         const exit_code = try calibrate_cmd.run(state.allocator, args[2..], state.registry, state.stdout, state.stderr);
-        if (exit_code != 0) std.process.exit(exit_code);
+        if (exit_code != 0) std.process.exit(@intCast(exit_code));
     } else if (std.mem.eql(u8, command, "upgrade")) {
         const exit_code = try upgrade_cmd.run(state.allocator, args[2..]);
-        if (exit_code != 0) std.process.exit(exit_code);
+        if (exit_code != 0) std.process.exit(@intCast(exit_code));
     } else if (std.mem.eql(u8, command, "verify-license")) {
         const exit_code = try verify_license_cmd.run(state.allocator, args[2..]);
-        if (exit_code != 0) std.process.exit(exit_code);
+        if (exit_code != 0) std.process.exit(@intCast(exit_code));
     } else {
         try stderr.print("Error: Unknown command '{s}'\n\n", .{command});
         try printUsage(stderr);
