@@ -174,44 +174,46 @@ pub fn build(b: *std.Build) void {
     bench_step.dependOn(&run_bench.step);
 
     // Tools: Manifest Signer
-    const signer_exe = b.addExecutable(.{
-        .name = "sign-manifest",
-        .root_source_file = b.path("tools/sign_manifest.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    if (b.option(bool, "tools", "Build release tools (signer, publisher)") orelse false) {
+        const signer_exe = b.addExecutable(.{
+            .name = "sign-manifest",
+            .root_source_file = b.path("tools/sign_manifest.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
 
-    // Create manifest module to allow access from tools/
-    signer_exe.root_module.addImport("manifest", manifest_mod);
+        // Create manifest module to allow access from tools/
+        signer_exe.root_module.addImport("manifest", manifest_mod);
 
-    // b.installArtifact(signer_exe);
-    const install_signer = b.addInstallArtifact(signer_exe, .{});
-    tools_step.dependOn(&install_signer.step);
+        // b.installArtifact(signer_exe);
+        const install_signer = b.addInstallArtifact(signer_exe, .{});
+        tools_step.dependOn(&install_signer.step);
 
-    const run_signer = b.addRunArtifact(signer_exe);
-    if (b.args) |args| {
-        run_signer.addArgs(args);
+        const run_signer = b.addRunArtifact(signer_exe);
+        if (b.args) |args| {
+            run_signer.addArgs(args);
+        }
+        const signer_step = b.step("run-signer", "Run manifest signer");
+        signer_step.dependOn(&run_signer.step);
+
+        // Tools: Release Publisher (Phase 5)
+        // Compresses, Hashes, Signs, and Generates Manifest
+        const publisher_exe = b.addExecutable(.{
+            .name = "publish-release",
+            .root_source_file = b.path("tools/publish_release.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        publisher_exe.root_module.addImport("manifest", manifest_mod);
+        // b.installArtifact(publisher_exe);
+        const install_publisher = b.addInstallArtifact(publisher_exe, .{});
+        tools_step.dependOn(&install_publisher.step);
+
+        const run_publisher = b.addRunArtifact(publisher_exe);
+        if (b.args) |args| {
+            run_publisher.addArgs(args);
+        }
+        const publisher_step = b.step("run-publisher", "Run release publisher");
+        publisher_step.dependOn(&run_publisher.step);
     }
-    const signer_step = b.step("run-signer", "Run manifest signer");
-    signer_step.dependOn(&run_signer.step);
-
-    // Tools: Release Publisher (Phase 5)
-    // Compresses, Hashes, Signs, and Generates Manifest
-    const publisher_exe = b.addExecutable(.{
-        .name = "publish-release",
-        .root_source_file = b.path("tools/publish_release.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    publisher_exe.root_module.addImport("manifest", manifest_mod);
-    // b.installArtifact(publisher_exe);
-    const install_publisher = b.addInstallArtifact(publisher_exe, .{});
-    tools_step.dependOn(&install_publisher.step);
-
-    const run_publisher = b.addRunArtifact(publisher_exe);
-    if (b.args) |args| {
-        run_publisher.addArgs(args);
-    }
-    const publisher_step = b.step("run-publisher", "Run release publisher");
-    publisher_step.dependOn(&run_publisher.step);
 }
