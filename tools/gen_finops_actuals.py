@@ -24,13 +24,7 @@ def gen_high_cardinality(path, rows=100_000):
             tags = f'{{"model":"{unique_model}"}}'
             w.writerow(["2025-01-01","2025-01-31",rid,"0.010000","Usage",tags])
 
-if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", choices=["1m","high-cardinality"], required=True)
-    ap.add_argument("--out", required=True)
-    ap.add_argument("--rows", type=int, default=None)
-    ap.add_argument("--prompts", type=int, default=1000)
-    args = ap.parse_args()
+
 
 def gen_estimates(path, prompts=1000):
     import json
