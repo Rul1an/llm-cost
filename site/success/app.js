@@ -7,7 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const sessionDisplay = document.getElementById('session-id-display');
 
     if (!sessionId) {
-        showError("Missing session_id");
+        // Redirect to pricing if accessed directly
+        window.location.replace("/pricing/?missing_session=1");
         return;
     }
 

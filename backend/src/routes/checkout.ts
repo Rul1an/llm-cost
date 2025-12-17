@@ -29,8 +29,9 @@ checkoutRoutes.post("/session", async (c) => {
         "line_items[0][price]": pid,
         "line_items[0][quantity]": "1",
 
-        success_url: `${c.env.SUCCESS_URL}?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: c.env.CANCEL_URL,
+        // Enforce trailing slash for Cloudflare Pages compatibility
+        success_url: `${c.env.SUCCESS_URL}/?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${c.env.CANCEL_URL}/?canceled=1`,
 
         client_reference_id: clientRef,
 
