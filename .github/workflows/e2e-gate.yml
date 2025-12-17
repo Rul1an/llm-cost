@@ -19,7 +19,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Zig
-        uses: mlugg/setup-zig@0399d821362e4975db3e470129dc3398c3e46c75 # v1
+        uses: mlugg/setup-zig@53fc45b17fe98b52f92ee5ea08ff48a85a3e7eb7 # v1
         with:
           version: 0.14.0
 

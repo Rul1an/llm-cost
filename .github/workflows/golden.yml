@@ -21,7 +21,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install tiktoken
-        run: pip install tiktoken
+        run: pip install tiktoken==0.8.0
 
       - name: Generate golden data
         run: python scripts/generate_golden.py
@@ -49,7 +49,7 @@ jobs:
           path: test/golden/
 
       - name: Setup Zig
-        uses: mlugg/setup-zig@0399d821362e4975db3e470129dc3398c3e46c75 # v1 (Replaces goto-bus-stop)
+        uses: mlugg/setup-zig@53fc45b17fe98b52f92ee5ea08ff48a85a3e7eb7 # v1 (Replaces goto-bus-stop)
         with:
           version: 0.14.0
 
