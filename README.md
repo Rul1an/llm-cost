@@ -2,7 +2,8 @@
 
 Static cost analysis for LLM workloads. Estimate spend, enforce budgets, diff costs in CI/CD.
 
-[![CI](https://github.com/Rul1an/llm-cost/actions/workflows/ci.yml/badge.svg)](https://github.com/Rul1an/llm-cost/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/Rul1an/llm-cost)](https://github.com/Rul1an/llm-cost/releases) [![License](https://img.shields.io/github/license/Rul1an/llm-cost)](LICENSE)
+[![CI](https://github.com/Rul1an/llm-cost/actions/workflows/ci.yml/badge.svg)](https://github.com/Rul1an/llm-cost/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/Rul1an/llm-cost)](https://github.com/Rul1an/llm-cost/releases) [![License](https://img.shields.io/github/license/Rul1an/llm-cost)](LICENSE) [![Website](https://img.shields.io/website?url=https%3A%2F%2Fllm-cost.dev&up_message=online&down_message=offline&label=llm-cost.dev)](https://llm-cost.dev/)
+
 
 ## 30 Seconds to Value
 ```bash

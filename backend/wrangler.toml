@@ -8,8 +8,8 @@ STRIPE_PRO_MONTHLY_PRICE_ID = "price_1Sey4eGjDRd4LQBlzoM3KLQc"
 STRIPE_PRO_ANNUAL_PRICE_ID = "price_1Sey4fGjDRd4LQBl6Zrzrk68"
 STRIPE_ENT_MONTHLY_PRICE_ID = "price_1Sey4gGjDRd4LQBlkjKMQYc6"
 STRIPE_ENT_ANNUAL_PRICE_ID = "price_1Sey4gGjDRd4LQBlMJnt0gh8"
-SUCCESS_URL = "https://llm-cost.dev/success"
-CANCEL_URL = "https://llm-cost.dev/pricing"
+SUCCESS_URL = "https://llm-cost.dev/success/"
+CANCEL_URL = "https://llm-cost.dev/pricing/"
 EMAIL_FROM = "llm-cost <hello@llm-cost.dev>"
 
 [[kv_namespaces]]
