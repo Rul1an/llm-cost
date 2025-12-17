@@ -211,12 +211,13 @@ jobs:
           # Flatten artifacts and generate checksums.txt
           mkdir -p release_assets
 
+          shopt -s nullglob
           # Iterate over downloaded artifact dirs
           for dir in artifacts/*-signed; do
             # The dir name is "llm-cost-<suffix>-signed"
             # Inside is "llm-cost-<suffix>" binary + sigs
             # We want to move everything to release_assets
-            cp "$dir"/* release_assets/
+            cp -- "$dir"/* release_assets/
           done
 
           # Add FinOps Audit
@@ -265,3 +266,6 @@ jobs:
           gh attestation verify llm-cost-linux-x86_64 --repo ${{ github.repository }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      attestations: read
