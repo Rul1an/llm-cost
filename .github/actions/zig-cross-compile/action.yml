@@ -1,0 +1,240 @@
+name: 'Zig Cross-Compile Action'
+description: 'Secure, cached, polyglot cross-compilation toolchain using Zig.'
+author: 'Rul1an'
+branding:
+  icon: 'package'
+  color: 'green'
+
+inputs:
+  # --- v2 Legacy Inputs (Backwards Compatible) ---
+  version:
+    description: "Zig version (e.g. 0.13.0, 0.13.x, stable)"
+    required: false
+    default: "0.13.0"
+  target:
+    description: "Zig target triple (e.g. x86_64-linux-gnu). Supersedes target_preset."
+    required: false
+  project-type:
+    description: "Project type: zig | c/go/rust/custom (polyglot env support only)"
+    required: false
+    default: "custom"
+  cmd:
+    description: "Build command to execute (run depends on project-type)"
+    required: false
+    default: ""
+  verify-level:
+    description: "Deprecated: no-op in v3."
+    required: false
+    default: "basic"
+
+  # --- v3 New Features ---
+  strict_version:
+    description: "Fail if the exact version cannot be resolved"
+    required: false
+    default: "true"
+
+  setup_only:
+    description: "Only set up toolchain/env, do not run build command"
+    required: false
+    default: "false"
+
+  target_preset:
+    description: "Target alias (e.g. linux-x86_64-musl, macos-arm64)"
+    required: false
+
+  use_cache:
+    description: "Enable caching of Zig artifacts (~/.cache/zig)"
+    required: false
+    default: "false"
+  cache_suffix:
+    description: "Optional suffix for cache keys"
+    required: false
+    default: ""
+
+  run_tests:
+    description: "Run tests before build"
+    required: false
+    default: "false"
+  test_script:
+    description: "Script to execute tests"
+    required: false
+    default: ""
+
+  perf_command:
+    description: "Optional performance benchmark command"
+    required: false
+    default: ""
+
+  sbom:
+    description: "Generate SBOM using Syft (Linux only)"
+    required: false
+    default: "false"
+  sbom_format:
+    description: "SBOM format"
+    required: false
+    default: "cyclonedx-json"
+  sbom_target:
+    description: "Path to input artifact for SBOM generation"
+    required: false
+    default: ""
+  sbom_output:
+    description: "SBOM output path"
+    required: false
+    default: "dist/sbom.cdx.json"
+
+  sign:
+    description: "Sign artifact using Cosign (Linux only)"
+    required: false
+    default: "false"
+  sign_artifact:
+    description: "Path to artifact to sign"
+    required: false
+    default: ""
+
+outputs:
+  zig_path:
+    description: "Path to installed Zig binary"
+    value: ${{ steps.install-zig.outputs.zig_path }}
+  zig_version_resolved:
+    description: "Resolved Zig version"
+    value: ${{ steps.install-zig.outputs.zig_version_resolved }}
+  zig_target_triple:
+    description: "Resolved target triple"
+    value: ${{ steps.setup-env.outputs.zig_target_triple }}
+  cache_hit:
+    description: "Cache hit status"
+    value: ${{ steps.cache-zig.outputs.cache-hit }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Zig
+      id: install-zig
+      shell: bash
+      env:
+        ZIG_VERSION: ${{ inputs.version }}
+        STRICT_VERSION: ${{ inputs.strict_version }}
+      run: |
+        "${GITHUB_ACTION_PATH}/scripts/install-zig.sh"
+
+    - name: Setup Environment
+      id: setup-env
+      shell: bash
+      env:
+        INPUT_TARGET_PRESET: ${{ inputs.target_preset }}
+        INPUT_ZIG_TARGET: ${{ inputs.target }}
+        INPUT_PROJECT_TYPE: ${{ inputs.project-type }}
+        INPUT_SETUP_ONLY: ${{ inputs.setup_only }}
+      run: |
+        source "${GITHUB_ACTION_PATH}/scripts/setup-env.sh"
+
+    - name: Restore Zig Cache
+      if: ${{ inputs.use_cache == 'true' }}
+      id: cache-zig
+      uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+      with:
+        path: |
+           ~/.cache/zig
+           zig-cache
+        key: zig-${{ runner.os }}-${{ inputs.version }}-${{ steps.setup-env.outputs.zig_target_triple }}-${{ hashFiles('build.zig','build.zig.zon','Cargo.lock','go.mod') }}-${{ inputs.cache_suffix }}
+        restore-keys: |
+          zig-${{ runner.os }}-${{ inputs.version }}-
+
+    - name: Run Tests
+      if: ${{ inputs.run_tests == 'true' && inputs.test_script != '' }}
+      shell: bash
+      run: |
+        echo "::group::Run Tests"
+        set -euo pipefail
+
+        # PR Safety Check
+        if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] && [ "${{ inputs.allow_unsafe_pr }}" != "true" ]; then
+          echo "::error::Refusing to run arbitrary commands on pull_request. Set allow_unsafe_pr=true to override."
+          exit 1
+        fi
+
+        # Execute passed script in the workspace context
+        bash -euo pipefail <<'EOF'
+        ${{ inputs.test_script }}
+        EOF
+        echo "::endgroup::"
+
+    - name: Run Performance Checks
+      if: ${{ inputs.perf_command != '' }}
+      shell: bash
+      run: |
+         echo "::group::Run Perf Check"
+         set -euo pipefail
+
+         # PR Safety Check
+         if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] && [ "${{ inputs.allow_unsafe_pr }}" != "true" ]; then
+           echo "::error::Refusing to run arbitrary commands on pull_request. Set allow_unsafe_pr=true to override."
+           exit 1
+         fi
+
+         bash -euo pipefail -c '${{ inputs.perf_command }}'
+         echo "::endgroup::"
+
+    - name: Build (Project Type Aware)
+      if: ${{ inputs.setup_only != 'true' }}
+      shell: bash
+      env:
+         CMD: ${{ inputs.cmd }}
+         PROJECT_TYPE: ${{ inputs.project-type }}
+      run: |
+         echo "::group::Build ($PROJECT_TYPE)"
+         set -euo pipefail
+
+         case "$PROJECT_TYPE" in
+            zig)
+                # Helper for 'project-type: zig'
+                # Safe arg parsing
+                read -r -a cmd_args <<< "${CMD:-}"
+                zig build -Dtarget="${ZIG_TARGET}" "${cmd_args[@]}"
+                ;;
+            custom|c|go|rust|auto)
+                # v2 compatible: run the user's cmd if provided.
+                if [ -n "$CMD" ]; then
+                     # PR Safety Check
+                     if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] && [ "${{ inputs.allow_unsafe_pr }}" != "true" ]; then
+                       echo "::error::Refusing to run arbitrary commands on pull_request. Set allow_unsafe_pr=true to override."
+                       exit 1
+                     fi
+
+                     bash -euo pipefail -c "$CMD"
+                fi
+                ;;
+            *)
+                echo "Unknown project-type: $PROJECT_TYPE"
+                exit 1
+                ;;
+         esac
+         echo "::endgroup::"
+
+    - name: Generate SBOM
+      if: ${{ inputs.sbom == 'true' }}
+      shell: bash
+      run: |
+         set -euo pipefail
+         if [ -z "${{ inputs.sbom_target }}" ]; then
+           echo "::error::sbom_target is required when sbom=true"
+           exit 1
+         fi
+
+         "${GITHUB_ACTION_PATH}/scripts/tools-audit.sh" syft
+
+         out="${{ inputs.sbom_output }}"
+         mkdir -p "$(dirname "$out")"
+
+         syft scan "file:${{ inputs.sbom_target }}" -o "${{ inputs.sbom_format }}" > "$out"
+
+    - name: Sign Artifact
+      if: ${{ inputs.sign == 'true' }}
+      shell: bash
+      run: |
+         "${GITHUB_ACTION_PATH}/scripts/tools-audit.sh" cosign
+         COSIGN_EXPERIMENTAL=1 cosign sign-blob \
+           --yes \
+           --output-signature "${{ inputs.sign_artifact }}.sig" \
+           --output-certificate "${{ inputs.sign_artifact }}.crt" \
+           "${{ inputs.sign_artifact }}"

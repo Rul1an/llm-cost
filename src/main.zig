@@ -6,7 +6,6 @@ const engine = @import("core/engine.zig");
 const pipe = @import("pipe.zig");
 const report = @import("report.zig");
 const analytics = @import("analytics/mod.zig");
-const update = @import("update.zig");
 const check = @import("check.zig");
 const init = @import("init.zig");
 const manifest = @import("core/manifest.zig");

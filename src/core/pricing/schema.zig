@@ -86,6 +86,10 @@ pub const PricingDB = struct {
     valid_until: []const u8,
     models: std.StringHashMap(PriceDef),
     aliases: std.StringHashMap([]const u8),
+    /// Audit Trail - Sources of Truth (Optional)
+    sources: ?[]const Source = null,
+    /// Audit Trail - Change Log (Optional)
+    changes: ?[]const Change = null,
 
     /// Check staleness with Defensive UX policy
     pub fn checkStale(self: *const PricingDB, force_stale: bool, is_ci: bool) StaleError!void {
@@ -120,4 +124,14 @@ pub const PricingDB = struct {
         _ = self;
         return .Fresh;
     }
+
+    pub const Source = struct {
+        url: []const u8,
+        observed_at: []const u8, // YYYY-MM-DD
+    };
+
+    pub const Change = struct {
+        type: []const u8, // e.g. "price_update", "new_model"
+        note: []const u8,
+    };
 };

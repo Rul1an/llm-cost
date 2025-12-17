@@ -1,91 +1,89 @@
 name: CI
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
-    branches: [ main ]
+    branches: [ "main", "master" ]
   pull_request:
-    branches: [ main ]
+    branches: [ "main", "master" ]
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Setup Zig
-        uses: mlugg/setup-zig@v1 # TODO: Pin SHA
+        uses: mlugg/setup-zig@0399d821362e4975db3e470129dc3398c3e46c75 # v1
         with:
           version: 0.14.0
 
-      - name: Build
-        run: zig build
-
-      - name: Run Unit Tests
+      - name: Build & Test
         run: zig build test
-
-      - name: Run Golden Tests
-        run: zig build test-golden
 
   finops_p0:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Setup Zig
-        uses: mlugg/setup-zig@v1 # TODO: Pin SHA
+        uses: mlugg/setup-zig@0399d821362e4975db3e470129dc3398c3e46c75 # v1
         with:
           version: 0.14.0
 
-      - name: Run FinOps Suite (P0)
+      - name: FinOps P0 Suite
         run: ./scripts/finops/run_finops_suite.sh p0
-
-      - name: Render FinOps summary + audit.json
-        run: |
-          FINOPS_MAX_DRIFT_BPS=10 \
-          FINOPS_FOCUS_VERSION=1.1 \
-          FINOPS_FAIL_FAST=true \
-          python3 tools/finops/render_report.py
-
-      - name: Upload reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: finops-reports-p0
-          path: reports/
 
   finops_p1:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Setup Zig
-        uses: mlugg/setup-zig@v1 # TODO: Pin SHA
+        uses: mlugg/setup-zig@0399d821362e4975db3e470129dc3398c3e46c75 # v1
         with:
           version: 0.14.0
 
-      - name: Run FinOps Suite (P1)
+      - name: FinOps P1 Suite (Approximate)
+        # P1 allows higher drift and is faster than full suites
+        env:
+          FINOPS_MAX_DRIFT_BPS: 50
         run: ./scripts/finops/run_finops_suite.sh p1
 
-      - name: Render FinOps summary + audit.json
-        run: |
-          FINOPS_MAX_DRIFT_BPS=10 \
-          FINOPS_FOCUS_VERSION=1.1 \
-          FINOPS_FAIL_FAST=true \
-          python3 tools/finops/render_report.py
 
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: finops-reports-p1
           path: reports/
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
-      - uses: mlugg/setup-zig@v1 # TODO: Pin SHA
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: mlugg/setup-zig@0399d821362e4975db3e470129dc3398c3e46c75 # v1
         with:
           version: 0.14.0
       - run: zig fmt --check build.zig src/

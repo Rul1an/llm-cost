@@ -1,0 +1,112 @@
+name: pricing-watch
+on:
+  schedule:
+    - cron: "17 6 * * *" # daily
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Check pricing pages (HEAD)
+        id: check
+        run: |
+          python3 - <<'PY'
+          import json, subprocess, sys, pathlib, hashlib
+
+          base_path = pathlib.Path(".github/pricing_watch_baseline.json")
+          if not base_path.exists():
+              print(f"Baseline not found at {base_path}")
+              sys.exit(0)
+
+          base = json.loads(base_path.read_text())
+          changed = []
+          snapshot = {}
+
+          def get_headers(url):
+            try:
+                # -L follows redirects, -I fetches headers. -s silent. -S show error.
+                out = subprocess.check_output(["curl","-sSIL",url], text=True, timeout=20)
+                h = {}
+                for line in out.splitlines():
+                  if ":" in line:
+                    k,v = line.split(":",1)
+                    h[k.strip().lower()] = v.strip()
+                return h.get("etag",""), h.get("last-modified","")
+            except Exception as e:
+                print(f"Failed to fetch headers {url}: {e}")
+                return "", ""
+
+          def get_prefix_hash(url):
+            try:
+                # Range 0-4095. -L follows redirects. Output bytes.
+                out = subprocess.check_output(["curl","-sL","-r","0-4095",url], timeout=20)
+                return hashlib.sha256(out).hexdigest()
+            except Exception as e:
+                print(f"Failed to fetch content {url}: {e}")
+                return ""
+
+          for name, cfg in base.items():
+            url = cfg["url"]
+            etag, lm = get_headers(url)
+            content_hash = ""
+
+            # Fallback if no strong headers
+            if not etag and not lm:
+                 content_hash = get_prefix_hash(url)
+
+            snapshot[name] = {"url": url, "etag": etag, "last_modified": lm, "content_hash": content_hash}
+
+            # Drift check
+            old_etag = cfg.get("etag","")
+            old_lm = cfg.get("last_modified","")
+            old_hash = cfg.get("content_hash","")
+
+            if etag and etag != old_etag:
+                changed.append(f"{name} (etag)")
+            elif lm and lm != old_lm:
+                 changed.append(f"{name} (last-modified)")
+            elif content_hash and content_hash != old_hash:
+                 changed.append(f"{name} (content-hash)")
+
+          pathlib.Path("/tmp/snapshot.json").write_text(json.dumps(snapshot, indent=2))
+          if changed:
+            pathlib.Path("/tmp/changed.txt").write_text("\n".join(changed))
+            print("changed=1")
+          else:
+            print("changed=0")
+          PY
+
+          echo "snapshot<<EOF" >> $GITHUB_OUTPUT
+          cat /tmp/snapshot.json >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          if [ -f /tmp/changed.txt ]; then
+            echo "changed_list<<EOF" >> $GITHUB_OUTPUT
+            cat /tmp/changed.txt >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Open issue
+        if: steps.check.outputs.changed_list != ''
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const changed = `${{ steps.check.outputs.changed_list }}`.trim().split("\n").filter(Boolean);
+            const snapshot = `${{ steps.check.outputs.snapshot }}`;
+            const title = `pricing-watch: upstream page changed`;
+            const body =
+              `One or more upstream pricing pages changed headers (ETag/Last-Modified).\n\n` +
+              `Changed:\n- ${changed.map(x => `\`${x}\``).join("\n- ")}\n\n` +
+              `Current HEAD snapshot:\n\`\`\`json\n${snapshot}\n\`\`\`\n\n` +
+              `Action: review pricing_db.json and publish a new manifest if needed.`;
+            await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo, title, body });
