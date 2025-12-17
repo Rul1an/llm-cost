@@ -4,141 +4,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>llm-cost - Token Counting & Cost Estimation CLI</title>
+    <title>llm-cost - Static Cost Analysis</title>
     <meta name="description"
-        content="A blazingly fast, local-first CLI for estimating LLM token counts and costs in CI/CD pipelines.">
-    <style>
-        :root {
-            --bg: #0a0a0a;
-            --text: #ffffff;
-            --accent: #3b82f6;
-            --accent-glow: rgba(59, 130, 246, 0.5);
-            --card-bg: #171717;
-            --border: #333;
-        }
-
-        body {
-            margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            overflow-x: hidden;
-        }
-
-        .container {
-            padding: 2rem;
-            max-width: 800px;
-            z-index: 10;
-        }
-
-        h1 {
-            font-size: 3.5rem;
-            margin-bottom: 1rem;
-            background: linear-gradient(to right, #fff, #a5b4fc);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            letter-spacing: -0.02em;
-        }
-
-        p.subtitle {
-            font-size: 1.25rem;
-            color: #a3a3a3;
-            margin-bottom: 2rem;
-            line-height: 1.6;
-        }
-
-        .code-block {
-            background: var(--card-bg);
-            border: 1px solid var(--border);
-            padding: 1.5rem;
-            border-radius: 12px;
-            font-family: "Menlo", "Monaco", "Courier New", monospace;
-            text-align: left;
-            margin-bottom: 2rem;
-            position: relative;
-            box-shadow: 0 0 40px -10px var(--accent-glow);
-        }
-
-        .code-block code {
-            color: #4ade80;
-        }
-
-        .buttons {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-
-        .btn {
-            text-decoration: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            font-weight: 600;
-            transition: all 0.2s;
-        }
-
-        .btn.primary {
-            background: var(--text);
-            color: var(--bg);
-        }
-
-        .btn.primary:hover {
-            background: #e5e5e5;
-            transform: translateY(-1px);
-        }
-
-        .btn.secondary {
-            background: transparent;
-            border: 1px solid var(--border);
-            color: var(--text);
-        }
-
-        .btn.secondary:hover {
-            border-color: #666;
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        /* Background Glow */
-        .glow {
-            position: absolute;
-            width: 600px;
-            height: 600px;
-            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 0;
-            pointer-events: none;
-            opacity: 0.2;
-        }
-    </style>
+        content="Predict LLM costs before you run. Locally verified, offline-first cost analysis for CI/CD.">
+    <!-- Use shared styles from pricing directory -->
+    <link rel="stylesheet" href="/pricing/styles.css">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; connect-src 'self' https://api.llm-cost.dev; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+    <meta name="referrer" content="no-referrer">
 </head>
 
 <body>
-    <div class="glow"></div>
-    <div class="container">
-        <h1>llm-cost</h1>
-        <p class="subtitle">
-            The standard for static cost analysis.<br>
-            Predict API costs. Enforce CI budgets. Offline & Secure.
-        </p>
+    <header class="container">
+        <nav>
+            <a href="/" class="brand">llm-cost_v1.5.0</a>
+            <div class="nav-links">
+                <a href="/pricing/">Pricing</a>
+                <a href="https://github.com/Rul1an/llm-cost" target="_blank" rel="noopener">GitHub</a>
+                <a href="/docs/">Docs</a>
+            </div>
+        </nav>
+    </header>
 
-        <div class="code-block">
-            <code>curl -sSfL https://get.llm-cost.dev | sh</code>
-        </div>
+    <main class="container">
+        <!-- Hero -->
+        <section class="hero-grid">
+            <div class="hero-content">
+                <h1>Predict costs<br>before they happen.</h1>
+                <p class="subtitle">
+                    The standard for static cost analysis.<br>
+                    Enforce budgets. Prevent rate drift. 100% Offline.
+                </p>
+                <div class="cta-group">
+                    <a href="/pricing/" class="btn primary">View Plans & Pricing</a>
+                    <a href="https://github.com/Rul1an/llm-cost" class="btn secondary">GitHub</a>
+                </div>
+            </div>
+            <div class="hero-code">
+                <div class="code-block">
+                    <div class="code-header">
+                        <span class="dot"></span>
+                        <span class="lang">terminal</span>
+                        <button class="copy-btn"
+                            onclick="navigator.clipboard.writeText(document.getElementById('install-cmd').innerText)">COPY</button>
+                    </div>
+                    <!-- Minimal install example -->
+                    <pre><code id="install-cmd">curl -sSfL https://get.llm-cost.dev | sh
+# Estimate prompt cost
+llm-cost estimate prompt.txt --model gpt-4</code></pre>
+                </div>
+            </div>
+        </section>
 
-        <div class="buttons">
-            <a href="/pricing/" class="btn primary">View Plans & Pricing →</a>
-            <a href="https://github.com/Rul1an/llm-cost" class="btn secondary">GitHub</a>
+        <!-- Trust / Features Summary -->
+        <section class="trust-footer" style="background: transparent; border: none; padding-top: 0;">
+            <div class="trust-badge">
+                <span class="icon">⚡</span> Zero Latency
+            </div>
+            <div class="trust-badge">
+                <span class="icon">🔒</span> Air-gapped Ready
+            </div>
+            <div class="trust-badge">
+                <span class="icon">✅</span> FinOps Certified
+            </div>
+        </section>
+
+        <!-- Brief Architecture / How it works (Simpler than Pricing) -->
+        <section class="how-it-works">
+            <div class="steps-grid">
+                <div class="step">
+                    <span class="step-num">01</span>
+                    <h3>Analyze</h3>
+                    <p>Parses your prompts locally using exact BPE tokenizers.</p>
+                </div>
+                <div class="step">
+                    <span class="step-num">02</span>
+                    <h3>Estimate</h3>
+                    <p>Applies signed pricing data to calculate precise costs.</p>
+                </div>
+                <div class="step">
+                    <span class="step-num">03</span>
+                    <h3>Enforce</h3>
+                    <p>Fails CI pipelines if costs exceed your defined budget.</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 llm-cost. Released under MIT (CLI).</p>
         </div>
-    </div>
+    </footer>
 </body>
 
 </html>
