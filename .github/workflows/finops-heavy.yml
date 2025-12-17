@@ -18,9 +18,9 @@ jobs:
 
       - run: zig build -Doptimize=ReleaseFast
 
-      - name: Generate 1M actuals
+      - name: Generate 1M actuals & matching estimates
         run: |
-          python3 tools/gen_finops_actuals.py --mode 1m --out /tmp/actuals-1m.focus.csv --rows 1000000 --prompts 1000
+          python3 tools/gen_finops_actuals.py --mode 1m --out /tmp/actuals-1m.focus.csv --estimates-out /tmp/estimates-1m.json --rows 1000000 --prompts 1000
 
       - name: Run calibrate (measure)
         run: |
@@ -28,7 +28,7 @@ jobs:
           # Output format varies, we grep for key metrics
           mkdir -p reports
           /usr/bin/time -v -o reports/perf_metrics.txt ./zig-out/bin/llm-cost calibrate \
-            --estimates testdata/finops/small/estimates.json \
+            --estimates /tmp/estimates-1m.json \
             --actuals /tmp/actuals-1m.focus.csv \
             > reports/heavy_1m_factors.toml
 
