@@ -1,0 +1,5 @@
+# Enforce trailing slashes for consistency
+/success /success/ 301
+/pricing /pricing/ 301
+
+# Root stays at / (landing page)
