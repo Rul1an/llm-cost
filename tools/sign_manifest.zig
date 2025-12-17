@@ -45,9 +45,7 @@ pub fn main() !void {
         return;
     };
 
-    const key_pair = try std.crypto.sign.Ed25519.KeyPair.fromSecretKey(
-        try std.crypto.sign.Ed25519.SecretKey.fromBytes(secret_bytes)
-    );
+    const key_pair = try std.crypto.sign.Ed25519.KeyPair.fromSecretKey(try std.crypto.sign.Ed25519.SecretKey.fromBytes(secret_bytes));
     const signature = try key_pair.sign(canonical_body, null);
 
     // 5. Encode Signature (Base64)

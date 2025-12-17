@@ -161,14 +161,14 @@ pub const FairnessAnalyzer = struct {
 
             // Load text
             const text = corpus_mod.loadLanguageText(self.allocator, lang_config) catch |err| {
-                std.debug.print("Warning: Could not load {s}: {}\n", .{ lang_config.path, err });
+                std.log.warn("Could not load {s}: {}", .{ lang_config.path, err });
                 continue;
             };
             defer self.allocator.free(text);
 
             // Count tokens
             const result = tok.count(self.allocator, text) catch {
-                std.debug.print("Warning: Tokenization failed for {s}\n", .{lang_code});
+                std.log.warn("Tokenization failed for {s}", .{lang_code});
                 continue;
             };
 

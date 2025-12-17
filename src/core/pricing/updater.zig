@@ -201,7 +201,10 @@ pub fn checkAndUpdate(
 
     // 6. Atomic Install
     try writer.writeAll("Installing...\n");
-    atomic.install(cache_dir, manifest_res.data, db_temp_name) catch return UpdateError.InstallFailed;
+    const compression = manifest_container.value.body.db.compression;
+    const target_filename = if (std.mem.eql(u8, compression, "zstd")) "pricing_db.json.zst" else "pricing_db.json";
+
+    atomic.install(cache_dir, manifest_res.data, db_temp_name, target_filename) catch return UpdateError.InstallFailed;
 
     // 7. Update State
     state.recordSuccess(manifest_container.value.body.version, now);

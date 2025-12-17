@@ -28,14 +28,14 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/core/pricing/manifest.zig"),
     });
 
-    // Documentation generation
-    const install_docs = b.addInstallDirectory(.{
-        .source_dir = exe.getEmittedDocs(),
-        .install_dir = .prefix,
-        .install_subdir = "docs",
-    });
-    const docs_step = b.step("docs", "Generate documentation");
-    docs_step.dependOn(&install_docs.step);
+    // Documentation generation disabled for 0.14.0 CI stability
+    // const install_docs = b.addInstallDirectory(.{
+    //    .source_dir = exe.getEmittedDocs(),
+    //    .install_dir = .prefix,
+    //    .install_subdir = "docs",
+    // });
+    // const docs_step = b.step("docs", "Generate documentation");
+    // docs_step.dependOn(&install_docs.step);
 
     // Run command
     const run_cmd = b.addRunArtifact(exe);
@@ -213,5 +213,5 @@ pub fn build(b: *std.Build) void {
         run_publisher.addArgs(args);
     }
     const publisher_step = b.step("run-publisher", "Run release publisher");
-    publisher_step.dependOn(&run_publisher.step);
+    publisher_step.dependOn(&run_publisher.step); // Found usage from error log context, ensuring dependOn is called
 }

@@ -3,31 +3,25 @@ const std = @import("std");
 /// Detect if running in a Continuous Integration environment.
 /// Checks common environment variables used by major CI providers.
 pub fn isCI(allocator: std.mem.Allocator) bool {
-    // Standard CI flag
-    if (std.posix.getenv("CI")) |_| return true;
+    // Helper to check encoded vars
+    const hasEnv = struct {
+        fn check(a: std.mem.Allocator, key: []const u8) bool {
+            if (std.process.getEnvVarOwned(a, key)) |val| {
+                a.free(val);
+                return true;
+            } else |_| return false;
+        }
+    }.check;
 
-    // GitHub Actions
-    if (std.posix.getenv("GITHUB_ACTIONS")) |_| return true;
+    if (hasEnv(allocator, "CI")) return true;
+    if (hasEnv(allocator, "GITHUB_ACTIONS")) return true;
+    if (hasEnv(allocator, "GITLAB_CI")) return true;
+    if (hasEnv(allocator, "JENKINS_URL")) return true;
+    if (hasEnv(allocator, "TF_BUILD")) return true;
+    if (hasEnv(allocator, "CIRCLECI")) return true;
+    if (hasEnv(allocator, "TRAVIS")) return true;
+    if (hasEnv(allocator, "LLM_COST_CI")) return true;
 
-    // GitLab CI
-    if (std.posix.getenv("GITLAB_CI")) |_| return true;
-
-    // Jenkins
-    if (std.posix.getenv("JENKINS_URL")) |_| return true;
-
-    // Azure Pipelines
-    if (std.posix.getenv("TF_BUILD")) |_| return true;
-
-    // CircleCI
-    if (std.posix.getenv("CIRCLECI")) |_| return true;
-
-    // Travis CI
-    if (std.posix.getenv("TRAVIS")) |_| return true;
-
-    // Custom override check (future proofing)
-    if (std.posix.getenv("LLM_COST_CI")) |_| return true;
-
-    _ = allocator; // Kept for API compatibility if we need to alloc later
     return false;
 }
 

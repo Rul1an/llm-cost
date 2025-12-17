@@ -4,7 +4,7 @@ const manifest = @import("manifest");
 // Fixture generated via openssl & sign_manifest tool.
 // See task Hardening Phase 3.
 const VALID_MANIFEST_JSON = @embedFile("testdata/manifest.valid.json");
-const TEST_PUBKEY_HEX = "0e9ca630cd62dbe20cf57941475ffa263cc8b7d7c7e53e5c56fa70010f7c81ed";
+const TEST_PUBKEY_HEX = "c0b11bc7f76f41a21931a0410ccba2d10fe365d02679c5537a8bed567ec5f7d3";
 
 test "TUF-lite: valid manifest verifies" {
     const alloc = std.testing.allocator;
@@ -54,6 +54,8 @@ test "TUF-lite: canonicalization is strictly minified" {
             .sha256 = "b",
             .size_bytes = 100,
             .model_count = 10,
+            .db_schema_version = 1,
+            .compression = "zstd",
         },
     };
 
@@ -63,7 +65,7 @@ test "TUF-lite: canonicalization is strictly minified" {
     try manifest.writeCanonicalBody(list.writer(), body_struct);
 
     // Expected strict minified JSON order (Zig std.json usually orders by struct field definition order)
-    const expected = "{\"schema_version\":1,\"version\":2025121501,\"generated_at\":1000,\"expires_at\":2000,\"key_id\":\"root\",\"db\":{\"url\":\"https://a\",\"sha256\":\"b\",\"size_bytes\":100,\"model_count\":10}}";
+    const expected = "{\"schema_version\":1,\"version\":2025121501,\"generated_at\":1000,\"expires_at\":2000,\"key_id\":\"root\",\"db\":{\"url\":\"https://a\",\"sha256\":\"b\",\"size_bytes\":100,\"model_count\":10,\"db_schema_version\":1,\"compression\":\"zstd\"}}";
 
     try std.testing.expectEqualStrings(expected, list.items);
 }

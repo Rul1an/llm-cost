@@ -1,5 +1,8 @@
 name: Determinism Check
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [ main ]
@@ -9,11 +12,12 @@ on:
 jobs:
   check-determinism:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Setup Zig
-        uses: mlugg/setup-zig@v1
+        uses: mlugg/setup-zig@53fc45b17fe98b52f92ee5ea08ff48a85a3e7eb7 # v1
         with:
           version: 0.14.0
 

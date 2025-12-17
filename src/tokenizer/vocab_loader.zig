@@ -32,6 +32,9 @@ pub const VocabLoader = struct {
         TruncatedData,
         InvalidTokenTable,
         OutOfMemory,
+        MissingByteToken, // Specific: Byte not found in vocab
+        ByteTokenMismatch, // Specific: Byte token content mismatch
+        InvalidMaxTokenLen, // Specific: max_token_len is 0 or wildly invalid
     };
 
     /// Load vocabulary from embedded binary data
@@ -56,6 +59,12 @@ pub const VocabLoader = struct {
         const blob_size = std.mem.readInt(u32, data[16..20], .little);
         // source_hash at 20..52 (for verification, not used at runtime)
         // reserved at 52..64
+
+        // Sanity check max_token_len
+        if (max_token_len == 0) return error.InvalidMaxTokenLen;
+        // Optional: warn or fail if max_token_len > blob_size/token_count?
+        // Ideally max_token_len shouldn't exceed the total blob size.
+        if (max_token_len > blob_size) return error.InvalidMaxTokenLen;
 
         // 2. Validate data size
         const token_table_size = @as(usize, token_count) * 8; // 2 * u32 per token
@@ -90,6 +99,7 @@ pub const VocabLoader = struct {
             }
 
             if (offset + length > blob_size) return error.InvalidTokenTable;
+            if (length > max_token_len) return error.InvalidTokenTable; // Validation
 
             const token_bytes = blob[offset .. offset + length];
 
@@ -100,12 +110,21 @@ pub const VocabLoader = struct {
 
         // 7. Build byte_to_token map (single-byte tokens)
         var byte_to_token: [256]u32 = undefined;
-        @memset(&byte_to_token, 0); // Default to token 0 (usually exists)
-
+        // Strict check: every byte MUST have a token ID in the vocab.
         for (0..256) |b| {
             const single_byte = [1]u8{@intCast(b)};
             if (rank_map.get(&single_byte)) |rank| {
                 byte_to_token[b] = rank;
+
+                // Extra hardening: Verify the mapped token is indeed [b]
+                // This protects against logic errors in rank_map construction or corrupted lookup
+                const bytes = token_slices[rank];
+                if (bytes.len != 1 or bytes[0] != @as(u8, @intCast(b))) {
+                    return error.ByteTokenMismatch;
+                }
+            } else {
+                // Critical failure for a complete BPE vocab
+                return error.MissingByteToken;
             }
         }
 
@@ -142,27 +161,6 @@ pub const VocabLoader = struct {
         return self.byte_to_token[byte];
     }
 
-    /// Check if a merge exists (used by BPE algorithm)
-    /// Returns the merged token's rank if bytes(left) ++ bytes(right) exists in vocab
-    pub fn getMergeRank(self: *const VocabLoader, left: u32, right: u32) ?u32 {
-        const left_bytes = self.getBytes(left) orelse return null;
-        const right_bytes = self.getBytes(right) orelse return null;
-
-        // Stack buffer for small merges (covers 99%+ of cases)
-        var buf: [256]u8 = undefined;
-        const total_len = left_bytes.len + right_bytes.len;
-
-        if (total_len > buf.len) {
-            // Token too long - can't be in vocab anyway
-            return null;
-        }
-
-        @memcpy(buf[0..left_bytes.len], left_bytes);
-        @memcpy(buf[left_bytes.len..][0..right_bytes.len], right_bytes);
-
-        return self.rank_map.get(buf[0..total_len]);
-    }
-
     /// Get source hash (for verification)
     pub fn getSourceHash(data: []const u8) ?[32]u8 {
         if (data.len < 52) return null;
@@ -180,6 +178,7 @@ pub const VocabLoader = struct {
 /// Implements the interface expected by bpe_v2_1.encodeLinear
 pub const VocabMergeTable = struct {
     vocab: *const VocabLoader,
+    scratch: []u8, // Must be >= vocab.max_token_len
 
     pub const MergeEntry = struct {
         id: u32,
@@ -187,8 +186,17 @@ pub const VocabMergeTable = struct {
     };
 
     pub fn lookup(self: *const VocabMergeTable, left: u32, right: u32) ?MergeEntry {
-        if (self.vocab.getMergeRank(left, right)) |merged_rank| {
-            return .{ .id = merged_rank, .rank = merged_rank };
+        const a = self.vocab.getBytes(left) orelse return null;
+        const b = self.vocab.getBytes(right) orelse return null;
+
+        const total = a.len + b.len;
+        if (total > self.scratch.len) return null;
+
+        @memcpy(self.scratch[0..a.len], a);
+        @memcpy(self.scratch[a.len..][0..b.len], b);
+
+        if (self.vocab.rank_map.get(self.scratch[0..total])) |merged| {
+            return .{ .id = merged, .rank = merged };
         }
         return null;
     }
@@ -199,33 +207,57 @@ pub const VocabMergeTable = struct {
 // =============================================================================
 
 test "VocabLoader: header parsing" {
-    // Create minimal valid header (Header + 1 Token Entry + 1 Byte Blob)
-    var data: [64 + 8 + 1]u8 = undefined;
-    @memset(&data, 0);
+    // Strict Mode requires all 256 bytes to be present in vocab.
+    // We generate a minimal valid vocab where every byte 0..255 maps to rank i.
+    const token_count: u32 = 256;
+    const blob_size: u32 = 256;
+    const header_size: usize = 64;
+    const table_size: usize = 256 * 8;
+    const total_size = header_size + table_size + blob_size;
+
+    var data = try std.testing.allocator.alloc(u8, total_size);
+    defer std.testing.allocator.free(data);
+    @memset(data, 0);
 
     // Magic
     @memcpy(data[0..4], "BPE2");
 
     // Version = 2
     std.mem.writeInt(u32, data[4..8], 2, .little);
-
-    // Token count = 1
-    std.mem.writeInt(u32, data[8..12], 1, .little);
-
+    // Token count
+    std.mem.writeInt(u32, data[8..12], token_count, .little);
     // Max token len = 1
     std.mem.writeInt(u32, data[12..16], 1, .little);
+    // Blob size
+    std.mem.writeInt(u32, data[16..20], blob_size, .little);
 
-    // Blob size = 1
-    std.mem.writeInt(u32, data[16..20], 1, .little);
+    // Write Token Table + Blob
+    // For each byte b (rank i):
+    // Table Entry: offset = b, length = 1
+    // Blob[b] = b
+    const table_start = header_size;
+    const blob_start = header_size + table_size;
 
-    // Token table entry: offset=0, length=1
-    std.mem.writeInt(u32, data[64..68], 0, .little);
-    std.mem.writeInt(u32, data[68..72], 1, .little);
+    for (0..256) |i| {
+        const offset: u32 = @intCast(i);
+        const length: u32 = 1;
 
-    const vocab = try VocabLoader.load(std.testing.allocator, &data);
+        // Table entry at table_start + i*8
+        const entry_off = table_start + i * 8;
+        std.mem.writeInt(u32, data[entry_off..][0..4], offset, .little);
+        std.mem.writeInt(u32, data[entry_off + 4 ..][0..4], length, .little);
+
+        // Blob byte
+        data[blob_start + i] = @intCast(i);
+    }
+
+    const vocab = try VocabLoader.load(std.testing.allocator, data);
     defer @constCast(&vocab).deinit(std.testing.allocator);
 
-    try std.testing.expectEqual(@as(u32, 1), vocab.token_count);
+    try std.testing.expectEqual(@as(u32, 256), vocab.token_count);
+
+    // Check random byte
+    try std.testing.expectEqual(@as(u32, 65), vocab.getByteToken(65)); // 'A' -> rank 65
 }
 
 test "VocabLoader: invalid magic" {
@@ -245,4 +277,38 @@ test "VocabLoader: truncated data" {
         VocabLoader.LoadError.TruncatedData,
         VocabLoader.load(std.testing.allocator, data),
     );
+}
+
+test "VocabLoader: embedded header sanity + reserved zeros" {
+    // Only run this test if the file exists (it is gitignored but expected by build)
+    // For CI parity, we check cl100k_base.bin if present.
+    // If we can't depend on the file existing during unit tests without download, we skip or use @embedFile in a try/catch way?
+    // Actually, @embedFile is compile time. If file missing, compile fails.
+    // We assume the build system ensures this file exists (via tools/convert_vocab.zig).
+    // Let's use @embedFile but we need to assume the path "../vocab/cl100k_base.bin" relative to this file.
+    // However, vocab_loader.zig is in src/tokenizer/.
+    // The previous code in registry.zig used @embedFile("../vocab/cl100k_base.bin").
+    // Duplicating @embedFile here might be redundant but safe for a test.
+
+    // NOTE: This test requires 'src/vocab/cl100k_base.bin' to exist.
+    // IF IT DOES NOT EXIST compilation will fail.
+    // This is consistent with audit requirements: build fails if assets missing.
+    const data = @embedFile("../vocab/cl100k_base.bin");
+
+    // 1. Magic
+    try std.testing.expect(std.mem.eql(u8, data[0..4], "BPE2"));
+
+    // 2. Version
+    try std.testing.expectEqual(@as(u32, 2), std.mem.readInt(u32, data[4..8], .little));
+
+    // 3. Reserved zeros (52..64)
+    for (data[52..64]) |b| {
+        try std.testing.expectEqual(@as(u8, 0), b);
+    }
+
+    // 4. Source hash exists
+    const h = VocabLoader.getSourceHash(data) orelse return error.MissingHash;
+    // We don't check content (requires separate tool), just presence.
+    // Hash is [32]u8, unlikely to be all zeros if valid, but check just in case it's not empty slice.
+    try std.testing.expect(h.len == 32);
 }

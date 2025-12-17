@@ -1,0 +1,13 @@
+{
+    "schema_version": 1,
+    "version": 2026011501,
+    "generated_at": 1768462500,
+    "expires_at": 1769067300,
+    "key_id": "root-2025",
+    "db": {
+        "url": "https://cdn.llm-cost.dev/v1/pricing/2026011501/pricing_db.json.zst",
+        "sha256": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+        "size_bytes": 145203,
+        "model_count": 127
+    }
+}

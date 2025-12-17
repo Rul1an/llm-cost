@@ -5,6 +5,7 @@ import json
 import tiktoken
 from pathlib import Path
 import sys
+import os
 
 # Test cases organized by category
 TEST_CASES = {
@@ -93,6 +94,52 @@ TEST_CASES = {
     ],
 }
 
+# 1. Version Pinning (Audit Requirement)
+# We strictly test against 0.8.0 to prevent upstream drift invalidated the parity audit.
+EXPECTED_TIKTOKEN_VERSION = "0.8.0"
+assert tiktoken.__version__ == EXPECTED_TIKTOKEN_VERSION, \
+    f"Expected tiktoken {EXPECTED_TIKTOKEN_VERSION}, got {tiktoken.__version__}"
+
+# 2. Test Cases
+# We include specific "nasty" cases for parity.
+TEST_CASES = {
+    "simple": [
+        "hello world",
+        "Hello World",
+        " hello world",
+        "hello world ",
+    ],
+    "scaling": [
+        "a" * 100,
+        "test " * 50,
+    ],
+    "special_literals": [
+        # Must be treated as TEXT in ordinary mode!
+        "<|endoftext|>",
+        "<|fim_prefix|>hello<|fim_suffix|>",
+    ],
+    "unicode": [
+        "💩",
+        "Hello 💩 World",
+        "こんにちは世界", # Japanese
+        "안녕하세요", # Korean
+        "你好世界", # Chinese
+        "مرحبا بالعالم", # Arabic (RTL)
+    ],
+    "code": [
+        "fn main() { print(\"hello\"); }",
+        "print('hello world')",
+        "<div>html test</div>",
+        "class Foo extends Bar { constructor() { super(); } }",
+    ],
+    "whitespace": [
+        "   ",
+        "\t\t\t",
+        "\n\n\n",
+        "  hello  \n  world  ",
+    ]
+}
+
 ENCODINGS = ["cl100k_base", "o200k_base"]
 
 LOREM_IPSUM = """Lorem ipsum dolor sit amet, consectetur adipiscing elit.
@@ -105,45 +152,40 @@ def fibonacci(n):
     return fibonacci(n-1) + fibonacci(n-2)
 """
 
-def generate_golden(output_path: Path):
-    """Generate golden test file."""
-    results = []
-    case_id = 0
+def generate_golden():
+    os.makedirs("test/golden", exist_ok=True)
+    out_path = "test/golden/corpus_v2.jsonl"
 
-    print(f"Generating golden corpus for encodings: {ENCODINGS}")
+    with open(out_path, "w") as f:
+        print(f"Generating {out_path} using tiktoken {tiktoken.__version__}...")
 
-    for encoding_name in ENCODINGS:
-        try:
-            enc = tiktoken.get_encoding(encoding_name)
-        except Exception:
-            print(f"WARN: Encoding {encoding_name} not found, skipping...")
-            continue
+        count = 0
+        for enc_name in ENCODINGS:
+            try:
+                enc = tiktoken.get_encoding(enc_name)
+            except:
+                print(f"Skipping {enc_name} (not found)")
+                continue
 
-        for category, texts in TEST_CASES.items():
-            for text in texts:
-                try:
-                    # Generic handling: try to encode. If invalid UTF-8/surrogate, tiktoken might raise or standard python might.
-                    # allowed_special="all" allows special tokens if they appear in text (rare here)
-                    tokens = enc.encode(text, allowed_special="all")
-                    results.append({
-                        "id": f"{category}_{case_id:04d}",
-                        "encoding": encoding_name,
+            for category, inputs in TEST_CASES.items():
+                for i, text in enumerate(inputs):
+                    # 3. Usage of encode_ordinary
+                    # Our Zig tokenizer is "dumb" (pure BPE), specials are handled upstream.
+                    # So we verify against encode_ordinary to ensure <|endoftext|> is tokenized as literals.
+                    tokens = enc.encode_ordinary(text)
+
+                    case = {
+                        "id": f"{enc_name}_{category}_{i}",
+                        "encoding": enc_name,
                         "category": category,
                         "text": text,
                         "tokens": tokens,
                         "token_count": len(tokens),
-                    })
-                    case_id += 1
-                except Exception as e:
-                    print(f"Warning: Failed to encode text in '{category}' [{encoding_name}]: {e}")
+                    }
+                    f.write(json.dumps(case, ensure_ascii=False) + "\n")
+                    count += 1
 
-    # Write JSONL
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        for item in results:
-            f.write(json.dumps(item, ensure_ascii=False) + "\n")
-
-    print(f"Generated {len(results)} test cases to {output_path}")
+    print(f"Generated {count} test cases to {out_path}")
 
 def generate_long_tests(output_path: Path):
     """Generate long text test cases."""
@@ -193,5 +235,5 @@ if __name__ == "__main__":
         sys.exit(1)
 
     output = Path("test/golden/corpus_v2.jsonl")
-    generate_golden(output)
+    generate_golden()
     generate_long_tests(output)

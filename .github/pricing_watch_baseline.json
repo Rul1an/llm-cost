@@ -1,0 +1,12 @@
+{
+    "openai": {
+        "url": "https://openai.com/api/pricing/",
+        "etag": "",
+        "last_modified": ""
+    },
+    "anthropic": {
+        "url": "https://www.anthropic.com/pricing",
+        "etag": "",
+        "last_modified": ""
+    }
+}

@@ -1,5 +1,13 @@
 const std = @import("std");
 
+// LEGACY: This file implements the old "naive" BPE logic.
+// It is superseded by `bpe_v2.zig` (text-based heap) and `bpe_v2_1.zig` (token-based heap).
+// Do not use this for new code.
+comptime {
+    // Soft deprecation for now to avoid breaking legacy tests if any run.
+    // @compileError("bpe.zig is legacy; do not use. Use bpe_v2_1.");
+}
+
 /// The binary file layout (Must match tools/convert_vocab.zig)
 const Header = extern struct {
     magic: u32,

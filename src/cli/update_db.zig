@@ -34,7 +34,16 @@ pub fn run(allocator: std.mem.Allocator, raw_args: []const []const u8) !u8 {
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
 
-    const token = resolveToken(args.license);
+    var env_token: ?[]u8 = null;
+    defer if (env_token) |t| allocator.free(t);
+
+    var token = args.license;
+    if (token == null) {
+        if (std.process.getEnvVarOwned(allocator, "LLM_COST_LICENSE")) |t| {
+            env_token = t;
+            token = t;
+        } else |_| {}
+    }
 
     const result = updater.checkAndUpdate(allocator, .{
         .endpoint = args.endpoint orelse "https://api.llm-cost.dev/v1",
@@ -70,10 +79,4 @@ pub fn run(allocator: std.mem.Allocator, raw_args: []const []const u8) !u8 {
             };
         },
     }
-}
-
-fn resolveToken(cli_arg: ?[]const u8) ?[]const u8 {
-    if (cli_arg) |t| return t;
-    if (std.posix.getenv("LLM_COST_LICENSE")) |env| return env;
-    return null;
 }
