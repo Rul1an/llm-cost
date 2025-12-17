@@ -64,6 +64,33 @@ jobs:
       should_run: ${{ steps.check.outputs.should_run }}
       is_pr_comment: ${{ steps.check.outputs.is_pr_comment }}
     steps:
+      - id: check
+        name: Check if benchmark should run
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const eventName = context.eventName;
+            let shouldRun = false;
+            let isPrComment = false;
+
+            if (eventName === 'schedule' || eventName === 'workflow_dispatch') {
+              shouldRun = true;
+            } else if (eventName === 'issue_comment') {
+              if (context.payload.issue.pull_request && context.payload.comment.body.includes('/benchmark')) {
+                 shouldRun = true;
+                 isPrComment = true;
+                 // React to comment
+                 await github.rest.reactions.createForIssueComment({
+                   owner: context.repo.owner,
+                   repo: context.repo.repo,
+                   comment_id: context.payload.comment.id,
+                   content: 'rocket'
+                 });
+              }
+            }
+
+            core.setOutput('should_run', shouldRun.toString());
+            core.setOutput('is_pr_comment', isPrComment.toString());
 
   # Main benchmark job
   benchmark:
