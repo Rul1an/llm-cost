@@ -7,96 +7,133 @@
     <title>llm-cost - Static Cost Analysis</title>
     <meta name="description"
         content="Predict LLM costs before you run. Locally verified, offline-first cost analysis for CI/CD.">
-    <!-- Use shared styles from pricing directory -->
+    <!-- Use shared styles for typography and components -->
     <link rel="stylesheet" href="/pricing/styles.css">
-    <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; connect-src 'self' https://api.llm-cost.dev; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
-    <meta name="referrer" content="no-referrer">
+    <style>
+        /* INVERTED / DARK MODE OVERRIDES */
+        :root {
+            --bg: #0a0a0a;
+            --text: #ffffff;
+            --text-muted: #a3a3a3;
+            --border: #333;
+            --border-light: #262626;
+            --accent: #3b82f6;
+            --accent-glow: rgba(59, 130, 246, 0.5);
+            /* Override button colors for dark mode */
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            /* Centralized layout */
+        }
+
+        /* Adjustments for dark mode buttons */
+        .btn.primary {
+            background: #fff;
+            color: #000;
+            border-color: #fff;
+        }
+
+        .btn.primary:hover {
+            background: #e5e5e5;
+            color: #000;
+        }
+
+        .btn.secondary {
+            color: #fff;
+            border-color: #333;
+        }
+
+        .btn.secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: #666;
+        }
+
+        /* Centralized Hero adjustments */
+        .hero-content h1 {
+            font-size: 4rem;
+            /* Larger impact */
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.04em;
+        }
+
+        .code-block {
+            background: #111;
+            border-color: #333;
+            margin: 2rem auto;
+            /* Center it */
+            max-width: 600px;
+            text-align: left;
+            position: relative;
+            z-index: 10;
+        }
+
+        /* The Glow Effect */
+        .glow {
+            position: absolute;
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 60%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: -1;
+            pointer-events: none;
+            opacity: 0.15;
+        }
+
+        /* Overrides to hide Nav/Footer to focus on landing experience,
+           or keep them minimal?
+           User liked "centralized llm-cost".
+           I will put a minimal refined brand header.
+        */
+        nav {
+            justify-content: center;
+            /* Center the links? Or separate? */
+            margin-bottom: 2rem;
+        }
+
+        .container {
+            position: relative;
+            /* For glow z-index context */
+        }
+    </style>
 </head>
 
 <body>
-    <header class="container">
-        <nav>
-            <a href="/" class="brand">llm-cost_v1.5.0</a>
-            <div class="nav-links">
-                <a href="/pricing/">Pricing</a>
-                <a href="https://github.com/Rul1an/llm-cost" target="_blank" rel="noopener">GitHub</a>
-                <a href="/docs/">Docs</a>
-            </div>
-        </nav>
-    </header>
+    <div class="glow"></div>
 
     <main class="container">
-        <!-- Hero -->
-        <section class="hero-grid">
-            <div class="hero-content">
-                <h1>Predict costs<br>before they happen.</h1>
-                <p class="subtitle">
-                    The standard for static cost analysis.<br>
-                    Enforce budgets. Prevent rate drift. 100% Offline.
-                </p>
-                <div class="cta-group">
-                    <a href="/pricing/" class="btn primary">View Plans & Pricing</a>
-                    <a href="https://github.com/Rul1an/llm-cost" class="btn secondary">GitHub</a>
-                </div>
-            </div>
-            <div class="hero-code">
-                <div class="code-block">
-                    <div class="code-header">
-                        <span class="dot"></span>
-                        <span class="lang">terminal</span>
-                        <button class="copy-btn"
-                            onclick="navigator.clipboard.writeText(document.getElementById('install-cmd').innerText)">COPY</button>
-                    </div>
-                    <!-- Minimal install example -->
-                    <pre><code id="install-cmd">curl -sSfL https://get.llm-cost.dev | sh
-# Estimate prompt cost
-llm-cost estimate prompt.txt --model gpt-4</code></pre>
-                </div>
-            </div>
-        </section>
+        <!-- Minimal Brand Header -->
+        <h1 style="font-size: 1.5rem; margin-bottom: 3rem; color: var(--text-muted); font-weight: 400;">llm-cost_v1.5.0
+        </h1>
 
-        <!-- Trust / Features Summary -->
-        <section class="trust-footer" style="background: transparent; border: none; padding-top: 0;">
-            <div class="trust-badge">
-                <span class="icon">⚡</span> Zero Latency
-            </div>
-            <div class="trust-badge">
-                <span class="icon">🔒</span> Air-gapped Ready
-            </div>
-            <div class="trust-badge">
-                <span class="icon">✅</span> FinOps Certified
-            </div>
-        </section>
+        <div class="hero-content">
+            <h1>Predict costs<br>before they happen.</h1>
+            <p class="subtitle" style="font-size: 1.5rem; max-width: 600px; margin: 0 auto 3rem auto;">
+                The standard for static cost analysis.<br>
+                Enforce budgets. Prevent rate drift. 100% Offline.
+            </p>
 
-        <!-- Brief Architecture / How it works (Simpler than Pricing) -->
-        <section class="how-it-works">
-            <div class="steps-grid">
-                <div class="step">
-                    <span class="step-num">01</span>
-                    <h3>Analyze</h3>
-                    <p>Parses your prompts locally using exact BPE tokenizers.</p>
+            <div class="code-block">
+                <div class="code-header">
+                    <span class="dot" style="background:none; border:none; padding:0; color:#666;">$</span>
+                    <span class="lang">install</span>
                 </div>
-                <div class="step">
-                    <span class="step-num">02</span>
-                    <h3>Estimate</h3>
-                    <p>Applies signed pricing data to calculate precise costs.</p>
-                </div>
-                <div class="step">
-                    <span class="step-num">03</span>
-                    <h3>Enforce</h3>
-                    <p>Fails CI pipelines if costs exceed your defined budget.</p>
-                </div>
+                <pre><code>curl -sSfL https://get.llm-cost.dev | sh</code></pre>
             </div>
-        </section>
 
-    </main>
-
-    <footer>
-        <div class="container">
-            <p>&copy; 2025 llm-cost. Released under MIT (CLI).</p>
+            <div class="cta-group" style="justify-content: center; margin-top: 3rem;">
+                <a href="/pricing/" class="btn primary">View Plans & Pricing →</a>
+                <a href="https://github.com/Rul1an/llm-cost" class="btn secondary">GitHub</a>
+            </div>
         </div>
-    </footer>
+    </main>
 </body>
 
 </html>
