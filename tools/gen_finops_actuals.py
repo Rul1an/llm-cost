@@ -24,13 +24,32 @@ def gen_high_cardinality(path, rows=100_000):
             tags = f'{{"model":"{unique_model}"}}'
             w.writerow(["2025-01-01","2025-01-31",rid,"0.010000","Usage",tags])
 
+
+
+def gen_estimates(path, prompts=1000):
+    import json
+    data = {"version": "1", "prompts": []}
+    for i in range(prompts):
+        data["prompts"].append({
+            "resource_id": f"prompt-{i}",
+            "model": "gpt-4o",
+            "scenario": "default",
+            "cost_usd": float(f"{random.uniform(0.001, 0.1):.6f}")
+        })
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["1m","high-cardinality"], required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--estimates-out", help="Path to generate matching estimates JSON")
     ap.add_argument("--rows", type=int, default=None)
     ap.add_argument("--prompts", type=int, default=1000)
     args = ap.parse_args()
+
+    if args.estimates_out:
+        gen_estimates(args.estimates_out, prompts=args.prompts)
 
     if args.mode == "1m":
         gen_1m(args.out, rows=args.rows or 1_000_000, prompts=args.prompts)
