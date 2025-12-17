@@ -57,9 +57,6 @@ env:
 
 jobs:
   # Gate job: only run benchmarks on /benchmark comment in PRs
-# ... (Lines 1-58 unchanged)
-jobs:
-  # Gate job: only run benchmarks on /benchmark comment in PRs
   check-trigger:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -67,7 +64,6 @@ jobs:
       should_run: ${{ steps.check.outputs.should_run }}
       is_pr_comment: ${{ steps.check.outputs.is_pr_comment }}
     steps:
-      # ... (Lines 66-89 unchanged)
 
   # Main benchmark job
   benchmark:
