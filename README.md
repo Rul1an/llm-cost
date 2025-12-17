@@ -34,7 +34,6 @@ curl -sSfL https://get.llm-cost.dev | sh
 Or download pre-built binaries from [Releases](https://github.com/Rul1an/llm-cost/releases).
 ```
 
-Or download from [Releases](../../releases).
 
 ## CI/CD Integration
 
