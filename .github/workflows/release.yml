@@ -248,8 +248,6 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     timeout-minutes: 10
-    permissions:
-      contents: read
     steps:
       - name: Verify Released Artifacts
         run: |
