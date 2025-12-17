@@ -37,6 +37,9 @@ resolve_platform_and_asset() {
   case "$OS_RAW" in
     Linux)  OS_CANDS="linux" ;;
     Darwin) OS_CANDS="macos darwin" ;; # Probe both (legacy=macos, new=darwin)
+    MINGW*|MSYS*|CYGWIN*)
+        error "Windows is not supported by this installer.\n\nOptions:\n  1. Use WSL2 (Recommended)\n  2. Download manually from https://github.com/${REPO}/releases"
+        ;;
     *) error "Unsupported OS: $OS_RAW" ;;
   esac
 
@@ -162,8 +165,12 @@ main() {
     error "Cannot install to $INSTALL_DIR (permission denied; no sudo)"
   fi
 
-  echo "✓ Installed to $DEST"
-  echo "  Tip: run 'llm-cost --help'"
+  echo "✓ Installed llm-cost $VERSION to $DEST"
+  echo ""
+  echo "Get started:"
+  echo "  llm-cost estimate prompt.txt --model gpt-4o"
+  echo "  llm-cost --help"
+  echo ""
   if [ "$INSTALL_DIR" = "${HOME:-}/.local/bin" ]; then
     echo "  Ensure ~/.local/bin is on PATH"
   fi

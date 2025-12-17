@@ -21,6 +21,7 @@ const calibrate_cmd = @import("calibrate/cmd.zig");
 const update_db_cmd = @import("cli/update_db.zig");
 const upgrade_cmd = @import("cli/upgrade.zig");
 const verify_license_cmd = @import("cli/verify_license.zig");
+const version_cmd = @import("commands/version.zig");
 
 pub const version_str = "1.2.2";
 
@@ -48,11 +49,35 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     if (args.len < 2) {
-        try printUsage(stderr);
-        std.process.exit(1);
+        try stdout.print(
+            \\llm-cost - Static cost analysis for LLM workloads
+            \\
+            \\Usage: llm-cost <command> [options]
+            \\
+            \\Commands:
+            \\  estimate   Estimate cost for prompt files
+            \\  check      Enforce budget/policy gates
+            \\  diff       Compare costs between git refs
+            \\  export     Export FOCUS CSV for FinOps tools
+            \\  update-db  Fetch latest pricing database
+            \\
+            \\Run 'llm-cost <command> --help' for details.
+            \\Run 'llm-cost --help' for all options.
+            \\
+        , .{});
+        return;
     }
 
-    const command = args[1];
+    var command: []const u8 = args[1];
+
+    // Alias Handling
+    if (std.mem.eql(u8, command, "price")) {
+        try stderr.print("⚠️  'price' is deprecated, use 'estimate' instead\n", .{});
+        command = "estimate"; // Redirect
+    } else if (std.mem.eql(u8, command, "cost")) {
+        try stderr.print("⚠️  'cost' is deprecated, use 'estimate' instead\n", .{});
+        command = "estimate"; // Redirect
+    }
 
     if (std.mem.eql(u8, command, "help") or std.mem.eql(u8, command, "--help") or std.mem.eql(u8, command, "-h")) {
         try printUsage(stdout);
@@ -60,7 +85,8 @@ pub fn main() !void {
     }
 
     if (std.mem.eql(u8, command, "version") or std.mem.eql(u8, command, "--version")) {
-        try stdout.print("llm-cost v{s} ({s})\n", .{ version_str, @tagName(builtin.mode) });
+        // Updated to use new version command with check
+        try version_cmd.run(allocator, version_str, stdout);
         return;
     }
 
@@ -76,7 +102,7 @@ pub fn main() !void {
         try runModels(state, args[2..]);
     } else if (std.mem.eql(u8, command, "tokens") or std.mem.eql(u8, command, "count")) {
         try runCount(state, args[2..]);
-    } else if (std.mem.eql(u8, command, "price") or std.mem.eql(u8, command, "estimate")) {
+    } else if (std.mem.eql(u8, command, "estimate")) {
         try estimate_cmd.run(state, args[2..]);
     } else if (std.mem.eql(u8, command, "pipe")) {
         try runPipe(state, args[2..]);
