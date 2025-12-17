@@ -248,8 +248,10 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     timeout-minutes: 10
+
     permissions:
       contents: read
+      attestations: read
     steps:
       - name: Verify Released Artifacts
         run: |
@@ -266,6 +268,3 @@ jobs:
           gh attestation verify llm-cost-linux-x86_64 --repo ${{ github.repository }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    permissions:
-      contents: read
-      attestations: read
