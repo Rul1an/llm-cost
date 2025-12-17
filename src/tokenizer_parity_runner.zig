@@ -23,7 +23,7 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    const corpus_path = if (args.len > 1) args[1] else "data/corpus.jsonl";
+    const corpus_path = if (args.len > 1) args[1] else "test/golden/corpus_v2.jsonl";
 
     // Default corpus path if not provided
     const stdout = std.io.getStdOut().writer();
@@ -83,19 +83,34 @@ pub fn main() !void {
         const line = line_opt orelse break;
         if (line.len == 0) continue;
 
+        // Use arena per-line to avoid fragmentation and simplify cleanup
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        defer arena.deinit();
+        const arena_alloc = arena.allocator();
+
         // Verify JSON validity
-        const parsed = json.parseFromSlice(json.Value, allocator, line, .{}) catch |err| {
+        const parsed = json.parseFromSlice(json.Value, arena_alloc, line, .{}) catch |err| {
             try stdout.print("SKIP [Line {d}]: JSON parse error: {}\n", .{ line_num, err });
             skipped += 1;
             continue;
         };
-        defer parsed.deinit();
+        // No defer parsed.deinit() needed, arena handles it
 
         const obj = parsed.value.object;
         const case_id = obj.get("id").?.string;
         const encoding = obj.get("encoding").?.string;
         const text = obj.get("text").?.string;
         const expected_tokens_val = obj.get("tokens").?.array;
+
+        // Consistency check
+        if (obj.get("token_count")) |tc_val| {
+            const token_count_json = @as(usize, @intCast(tc_val.integer));
+            if (token_count_json != expected_tokens_val.items.len) {
+                try stdout.print("SKIP [{s}]: token_count mismatch (json says {d}, array has {d})\n", .{ case_id, token_count_json, expected_tokens_val.items.len });
+                skipped += 1;
+                continue;
+            }
+        }
 
         // Select tokenizer
         const tok_ptr: ?*openai.OpenAITokenizer = if (std.mem.eql(u8, encoding, "cl100k_base"))
@@ -111,30 +126,42 @@ pub fn main() !void {
             continue;
         }
 
-        // Encode
-        const actual_tokens = tok_ptr.?.encode(allocator, text) catch |err| {
+        // Encode - use arena_alloc (or allocator if we want it to outlive arena, but we don't needed to)
+        // Wait, tok_ptr.encode uses passed allocator for result slice.
+        // It's fine to use arena_alloc, it will be freed at end of loop.
+        const actual_tokens = tok_ptr.?.encode(arena_alloc, text) catch |err| {
             try stdout.print("FAIL [{s}]: encode error: {}\n", .{ case_id, err });
             failed += 1;
             continue;
         };
-        defer allocator.free(actual_tokens);
+
+        // Check 1: All expected tokens valid integers?
+        var invalid_golden = false;
+        for (expected_tokens_val.items, 0..) |val, i| {
+            if (val != .integer) {
+                try stdout.print("SKIP [{s}]: invalid token type in golden at idx {d} (expected integer)\n", .{ case_id, i });
+                skipped += 1;
+                invalid_golden = true;
+                break;
+            }
+        }
+        if (invalid_golden) continue;
 
         // Compare
         var mismatch = false;
+        var mismatch_index: ?usize = null;
+
         if (actual_tokens.len != expected_tokens_val.items.len) {
             mismatch = true;
+            mismatch_index = @min(actual_tokens.len, expected_tokens_val.items.len);
         } else {
             for (actual_tokens, 0..) |actual, i| {
-                const expected_val = expected_tokens_val.items[i];
-                // JSON parser might parse numbers as integer or float? Usually integer.
-                // Safely cast.
-                const expected: u32 = switch (expected_val) {
-                    .integer => |vals| @intCast(vals),
-                    else => 0, // Should not happen for valid golden file
-                };
+                // Safe decode because we checked .integer above
+                const expected = @as(u32, @intCast(expected_tokens_val.items[i].integer));
 
                 if (actual != expected) {
                     mismatch = true;
+                    mismatch_index = i;
                     break;
                 }
             }
@@ -142,13 +169,34 @@ pub fn main() !void {
 
         if (mismatch) {
             try stdout.print("FAIL [{s}]: Mismatch\n", .{case_id});
-            try stdout.print("  Text (len={d}): \"{s}\"\n", .{ text.len, truncate(text, 50) });
+            try stdout.print("  Text (len={d}): \"{}\"\n", .{ text.len, std.zig.fmtEscapes(truncate(text, 200)) });
             try stdout.print("  Expected ({d}): ", .{expected_tokens_val.items.len});
             printTokensPrefix(stdout, expected_tokens_val.items, 10);
             try stdout.print("\n", .{});
             try stdout.print("  Actual   ({d}): ", .{actual_tokens.len});
             printTokensSlicePrefix(stdout, actual_tokens, 10);
             try stdout.print("\n", .{});
+
+            // Mismatch Diagnostics
+            if (actual_tokens.len != expected_tokens_val.items.len) {
+                try stdout.print("  Length mismatch: expected {d}, actual {d}\n", .{ expected_tokens_val.items.len, actual_tokens.len });
+            }
+            if (mismatch_index) |mi| {
+                try stdout.print("  First mismatch at index {d}\n", .{mi});
+
+                if (mi >= expected_tokens_val.items.len) {
+                    try stdout.print("    Expected ended\n", .{});
+                } else {
+                    try stdout.print("    Expected: {d}\n", .{expected_tokens_val.items[mi].integer});
+                }
+
+                if (mi >= actual_tokens.len) {
+                    try stdout.print("    Actual ended\n", .{});
+                } else {
+                    try stdout.print("    Actual:   {d}\n", .{actual_tokens[mi]});
+                }
+            }
+
             failed += 1;
         } else {
             passed += 1;

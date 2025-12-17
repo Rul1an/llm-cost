@@ -38,26 +38,7 @@ pub const TokenizerConfig = struct {
 
 pub const TokenResult = struct {
     tokens: usize,
-};
-
-pub const CostResult = struct {
-    model_name: []const u8,
-
-    input_tokens: usize,
-    output_tokens: usize,
-    reasoning_tokens: usize = 0,
-
-    cost_input: f64,
-    cost_output: f64,
-    cost_reasoning: f64 = 0.0,
-
-    cost_total: f64,
-    currency: []const u8 = "USD",
-
-    /// Round to nearest cent (useful for logging/CI).
-    pub fn roundedCents(self: CostResult) i64 {
-        return @intFromFloat(@round(self.cost_total * 100.0));
-    }
+    // Add other fields if needed, e.g. text offsets
 };
 
 fn isAllowedSpecial(name: []const u8, mode: SpecialMode) bool {
@@ -87,15 +68,19 @@ fn findDisallowedSpecial(
     }
 
     // Simple O(#specials * N * len) approach.
+    var best: ?usize = null;
+
     for (spec.special_tokens) |tok| {
         if (isAllowedSpecial(tok.token, mode)) continue;
 
         if (std.mem.indexOfPos(u8, text, 0, tok.token)) |idx| {
-            // Return first occurrence of disallowed token
-            return idx;
+            // Found a match, check if it's the earliest so far
+            if (best == null or idx < best.?) {
+                best = idx;
+            }
         }
     }
-    return null;
+    return best;
 }
 
 /// Resolves best tokenizer configuration for a given model ID.
@@ -209,5 +194,20 @@ test "findDisallowedSpecial logic" {
     const safe_text = "Just normal text";
     if (findDisallowedSpecial(safe_text, spec, .strict)) |_| {
         return error.TestExpectedNull;
+    }
+
+    // Test Earliest Occurrence:
+    // Text has <|special|> at index 6 and <|endoftext|> at index 20.
+    // Logic must return 6, not 20, regardless of spec iteration order.
+    // Note: in our dummy spec, endoftext is first in list (rank 1), special is second (rank 2).
+    // If logic was "return first match in loop", it might find endoftext first if it processed full text for each token in order.
+    // Wait, simple loop `for (specials) |tok| { indexOf }` finds `endoftext` at 20. Then finds `special` at 6.
+    // If we didn't track min, we'd return 20 (first iteration match).
+    // With tracking min, we should get 6.
+    const multi_text = "Hello <|special|> and <|endoftext|>";
+    if (findDisallowedSpecial(multi_text, spec, .strict)) |idx| {
+        try std.testing.expectEqual(@as(usize, 6), idx);
+    } else {
+        return error.TestExpectedFound;
     }
 }

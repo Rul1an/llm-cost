@@ -4,13 +4,15 @@
         "version": 2025121501,
         "generated_at": 1735000000,
         "expires_at": 1735003600,
-        "key_id": "test-root",
+        "key_id": "root",
         "db": {
-            "url": "https://example.test/pricing_db.json.zst",
-            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-            "size_bytes": 123,
-            "model_count": 7
+            "url": "https://example.com/db.zst",
+            "sha256": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+            "size_bytes": 1024,
+            "model_count": 50,
+            "db_schema_version": 1,
+            "compression": "zstd"
         }
     },
-    "signature": "Pns9COSTL6JuIqFJoTrjrrwo5Vp5N6Ms2CiX9cv+VcO3comtwmuPhTWgzo/iyo7mK8lY7+VS/DegyvdgdDR9Ag=="
+    "signature": "n+zV3R+9+68Tag4SKKLH9oW8SHmvKN0uoRxrzU2w6TwvISxN23zhIHVB+4fBohfToNPGAjMbB5BspBDDekruBg=="
 }

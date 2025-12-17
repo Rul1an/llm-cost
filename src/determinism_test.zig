@@ -111,3 +111,37 @@ test "Export Rows Sorting" {
     // Cleanup
     for (rows.items) |*r| r.deinit();
 }
+
+// --- 3. Proof of Drift: f64 vs i128 (MicroUsd) ---
+// --- 3. Proof of Drift: f64 vs i128 (Smoking Gun) ---
+test "Financial Math: Smoking gun (loss of significance in f64)" {
+    const iterations: usize = 10_000_000;
+    const micro_per_item: i128 = 3; // 3 micro = $0.000003
+    const delta: f64 = 0.000003;
+
+    var acc_i128: i128 = 0;
+
+    // Start with a huge base (1e16) where ulp (unit in last place) is > 3e-6.
+    // 1e16 is ~2^53. ULP is 2.0.
+    // Wait, 2^53 = 9e15. 1e16 > 2^53.
+    // Double precision (f64) has 53 bits of significand.
+    // At 1e16, machine epsilon is 2.0 (since 1e16 > 2^53).
+    // Adding 0.000003 to 1e16 results in NO change.
+    var acc_f64: f64 = 1e16;
+
+    for (0..iterations) |_| {
+        acc_i128 += micro_per_item;
+        acc_f64 += delta; // will not change acc_f64 (increments lost)
+    }
+
+    acc_f64 -= 1e16;
+
+    // i128 exact: 10_000_000 * 3 micro = 30_000_000 micro
+    try testing.expectEqual(@as(i128, 30_000_000), acc_i128);
+
+    // f64: expected would be 30.0, but we get 0.0 deterministically because of catastrophic cancellation/loss.
+    // This is a "safe" assertion on any IEEE-754 compliant system.
+    try testing.expectEqual(0.0, acc_f64);
+
+    // std.debug.print("\n[Audit] f64 Loss: Expected 30.0, Got {d}\n", .{acc_f64});
+}

@@ -16,6 +16,7 @@ pub fn install(
     cache_dir: std.fs.Dir,
     manifest_data: []const u8,
     db_source_name: []const u8,
+    db_target_name: []const u8,
 ) !void {
     // 1. Write manifest to temp/manifest.json
     // We assume 'temp' directory exists (implied by db_source_name being in it).
@@ -28,8 +29,11 @@ pub fn install(
         };
     };
 
-    // 2. Rename DB source -> temp/pricing_db.json
-    const db_target_path = "temp/pricing_db.json";
+    // 2. Rename DB source -> temp/<db_target_name>
+    // e.g. temp/pricing_db.json.zst
+    const db_target_path = try std.fs.path.join(std.heap.page_allocator, &[_][]const u8{ "temp", db_target_name });
+    defer std.heap.page_allocator.free(db_target_path);
+
     cache_dir.rename(db_source_name, db_target_path) catch |err| {
         return switch (err) {
             error.AccessDenied => error.AccessDenied,

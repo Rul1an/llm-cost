@@ -188,7 +188,7 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
         } else {
             try state.stdout.print("Model:       {s}\n", .{model_name});
             try state.stdout.print("Tokens In:   {d}\n", .{token_count});
-            if ((output_tokens_arg orelse 0) > 0) try state.stdout.print("Tokens Out:  {d}\n", .{output_tokens_arg orelse 0});
+            try state.stdout.print("Tokens Out:  {d}\n", .{output_tokens_arg orelse 0});
             try state.stdout.print("Cost (est):  ${d:.6}\n", .{Pricing.PriceDef.toUsd(cost)});
             try state.stdout.print("Resource ID: {s} ({s})\n", .{ rid.value, @tagName(rid.source) });
         }
@@ -254,6 +254,7 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
                 } else {
                     try state.stdout.print("File:        {s}\n", .{path});
                     try state.stdout.print("Tokens In:   {d}\n", .{token_count});
+                    try state.stdout.print("Tokens Out:  {d}\n", .{output_tokens_arg orelse 0});
                     try state.stdout.print("Cost (est):  ${d:.6}\n", .{Pricing.PriceDef.toUsd(cost)});
                     try state.stdout.print("Resource ID: {s} ({s})\n\n", .{ rid.value, @tagName(rid.source) });
                 }

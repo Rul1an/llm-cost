@@ -213,5 +213,5 @@ pub fn build(b: *std.Build) void {
         run_publisher.addArgs(args);
     }
     const publisher_step = b.step("run-publisher", "Run release publisher");
-    publisher_step.dependOn(&run_publisher.step);
+    publisher_step.dependOn(&run_publisher.step); // Found usage from error log context, ensuring dependOn is called
 }

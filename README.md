@@ -27,12 +27,24 @@ cached@60%  $0.0033   -37%
 ```
 
 ## Installation
-```bash
+### Linux & macOS
 ```bash
 curl -sSfL https://get.llm-cost.dev | sh
 ```
 
-Or download pre-built binaries from [Releases](https://github.com/Rul1an/llm-cost/releases).
+### Windows
+Windows is not currently supported via the install script.
+
+**Options:**
+1. **WSL2** (recommended): Use the Linux install method.
+2. **Manual**: Download `llm-cost-windows-x86_64.exe` from [Releases](https://github.com/Rul1an/llm-cost/releases).
+
+**CI/CD on Windows:**
+```yaml
+- name: Install llm-cost
+  run: |
+    Invoke-WebRequest -Uri "https://github.com/rul1an/llm-cost/releases/latest/download/llm-cost-windows-x86_64.exe" -OutFile "llm-cost.exe"
+    .\llm-cost.exe --version
 ```
 
 
@@ -116,7 +128,7 @@ Filter and group by `Tags.team`, `Tags.app`, or `Tags.model` in your FinOps dash
 
 | Command | Purpose |
 |---------|---------|
-| `estimate` | Cost estimate for prompt files |
+| `estimate` | Cost estimate for prompt files (alias: `price` is deprecated) |
 | `count` | Token count only |
 | `check` | Budget/policy enforcement |
 | `diff` | Cost comparison between git refs |

@@ -72,7 +72,13 @@ pub const OpenAITokenizer = struct {
 
             // 3. Process chunks
             var total_tokens: usize = 0;
-            const merge_table = vocab_loader.VocabMergeTable{ .vocab = l };
+
+            // Allocate scratch buffer for merges once (max_token_len from header)
+            // Use general allocator (or arena if we want)
+            const scratch = try alloc.alloc(u8, l.max_token_len + 16); // +margin
+            defer alloc.free(scratch);
+
+            const merge_table = vocab_loader.VocabMergeTable{ .vocab = l, .scratch = scratch };
 
             // Arena for per-chunk BPE allows fast cleanup
             var arena = std.heap.ArenaAllocator.init(alloc);
@@ -80,6 +86,9 @@ pub const OpenAITokenizer = struct {
             const arena_alloc = arena.allocator();
 
             for (pre_tokens) |chunk| {
+                // Reset arena per chunk to keep memory usage proportional to chunk size
+                _ = arena.reset(.retain_capacity);
+
                 // a. Convert bytes to initial tokens
                 var initial = try arena_alloc.alloc(u32, chunk.text.len);
                 for (chunk.text, 0..) |byte, i| {
@@ -89,12 +98,6 @@ pub const OpenAITokenizer = struct {
                 // b. Run BPE
                 const bpe_tokens = try bpe_algo.encodeLinear(arena_alloc, initial, &merge_table);
                 total_tokens += bpe_tokens.len;
-
-                // Reset arena periodically? For CLI count on reasonable text, just defer deinit is fine.
-                // But for huge files, we might want to reset.
-                // Given pre_tokenizer returns all chunks at once, memory is usage is O(N).
-                // Phase 2 optimization: streaming pre-tokenizer.
-                // For now, this is correct.
             }
 
             return Result{ .tokens = total_tokens, .approximate = false };
@@ -123,7 +126,11 @@ pub const OpenAITokenizer = struct {
             var result = std.ArrayList(u32).init(alloc);
             errdefer result.deinit();
 
-            const merge_table = vocab_loader.VocabMergeTable{ .vocab = l };
+            // Scratch buffer
+            const scratch = try alloc.alloc(u8, l.max_token_len + 16);
+            defer alloc.free(scratch);
+
+            const merge_table = vocab_loader.VocabMergeTable{ .vocab = l, .scratch = scratch };
 
             // Use separate arena for temp BPE structs
             var arena = std.heap.ArenaAllocator.init(alloc);
@@ -131,6 +138,10 @@ pub const OpenAITokenizer = struct {
             const arena_alloc = arena.allocator();
 
             for (pre_tokens) |chunk| {
+                // Reset arena per chunk to keep memory usage proportional to chunk size
+                _ = arena.reset(.retain_capacity);
+
+                // a. Convert bytes to initial tokens
                 var initial = try arena_alloc.alloc(u32, chunk.text.len);
                 for (chunk.text, 0..) |byte, i| {
                     initial[i] = l.getByteToken(byte);
