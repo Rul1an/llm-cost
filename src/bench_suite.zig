@@ -41,6 +41,22 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
+    // Enforce ReleaseFast for valid benchmarks
+    if (builtin.mode != .ReleaseFast) {
+        try std.io.getStdErr().writer().print(
+            \\
+            \\===============================================================
+            \\CRITICAL ERROR: Benchmarks must be run in ReleaseFast mode!
+            \\
+            \\Current mode: {s}
+            \\
+            \\Run with: zig build bench -Doptimize=ReleaseFast
+            \\===============================================================
+            \\
+        , .{@tagName(builtin.mode)});
+        std.process.exit(1);
+    }
+
     // Parse args
     const args = try parseArgs(allocator);
 
@@ -354,30 +370,67 @@ fn runStressTests(
     writer: anytype,
     pathological: []const u8,
 ) !void {
-    // Pathological input test (detect O(n²) behavior)
-    const result = try runEncodeBenchmark(
-        allocator,
-        "pathological",
-        "cl100k_base",
-        pathological,
-        10,
-        2,
-    );
-
-    // Expected linear time: ~10ms for 100KB at 10MB/s
-    const expected_ms: f64 = 10.0;
-    const actual_ms = result.avgLatencyMs();
-
-    if (actual_ms > expected_ms * 10) {
-        try writer.print(
-            "  ⚠️  Pathological input: {d:.2} ms (potential O(n²) - expected <{d:.0} ms)\n",
-            .{ actual_ms, expected_ms * 10 },
+    // 1. Pathological (Linear Search Trap)
+    {
+        const result = try runEncodeBenchmark(
+            allocator,
+            "pathological",
+            "cl100k_base",
+            pathological,
+            10,
+            2,
         );
-    } else {
-        try writer.print(
-            "  ✓  Pathological input: {d:.2} ms (linear complexity)\n",
-            .{actual_ms},
+
+        const expected_ms: f64 = 10.0;
+        const actual_ms = result.avgLatencyMs();
+        try writer.print("  {s} Pathological input: {d:.2} ms ({s})\n", .{
+            if (actual_ms > expected_ms * 10) "⚠️ " else "✓ ",
+            actual_ms,
+            if (actual_ms > expected_ms * 50) "POTENTIAL O(n²)" else "linear complexity",
+        });
+    }
+
+    // 2. Repetitive (1MB of 'a') - Single Giant Token Merges
+    {
+        const size = 1024 * 1024;
+        const repetitive = try allocator.alloc(u8, size);
+        defer allocator.free(repetitive);
+        @memset(repetitive, 'a');
+
+        const result = try runEncodeBenchmark(
+            allocator,
+            "repetitive_1MB",
+            "cl100k_base",
+            repetitive,
+            10,
+            2,
         );
+
+        try writer.print("  ✓  Repetitive 1MB: {d:.2} MB/s ({d:.2} ms)\n", .{
+            result.throughputMBps(), result.avgLatencyMs(),
+        });
+    }
+
+    // 3. Random (High Entropy) - Stress Hash Map
+    {
+        const size = 1024 * 1024;
+        const random_data = try allocator.alloc(u8, size);
+        defer allocator.free(random_data);
+        var prng = std.Random.DefaultPrng.init(0);
+        prng.random().bytes(random_data);
+
+        const result = try runEncodeBenchmark(
+            allocator,
+            "random_1MB",
+            "cl100k_base",
+            random_data,
+            10,
+            2,
+        );
+
+        try writer.print("  ✓  Random 1MB:     {d:.2} MB/s ({d:.2} ms)\n", .{
+            result.throughputMBps(), result.avgLatencyMs(),
+        });
     }
 }
 

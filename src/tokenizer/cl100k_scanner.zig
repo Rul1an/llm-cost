@@ -82,8 +82,53 @@ pub const Cl100kScanner = struct {
                         }
                     },
                     // Branch 7: Whitespace (Generic)
-                    // Note: Branch 5/6 may overlap. Skipping fastpath for whitespace to ensure correctness.
-                    .Whitespace => {},
+                    // Note: Branch 5/6 may overlap.
+                    .Whitespace => {
+                        var len: usize = 1;
+                        var valid = true;
+                        var found_newline = (c == '\r' or c == '\n');
+                        var last_newline_idx: usize = if (found_newline) 0 else 0;
+
+                        while (len < remainder.len) {
+                            const b = remainder[len];
+                            if (b >= 0x80) {
+                                // Hit Unicode. Check if it's whitespace.
+                                // We need full unicode check here.
+                                // If it IS whitespace, our greedy scan was incomplete -> Abort.
+                                // If it is NOT whitespace, we are safe to yield.
+                                // But `unicode.isWhitespace` needs codepoint.
+                                // SafeUtf8Iterator logic needed?
+                                // Optimization: Just abort on any high-bit byte to be safe/simple.
+                                valid = false;
+                                break;
+                            }
+
+                            const cls_b = ASCII_CLASSES[b];
+                            if (cls_b == .Whitespace) {
+                                if (b == '\r' or b == '\n') {
+                                    found_newline = true;
+                                    last_newline_idx = len;
+                                }
+                                len += 1;
+                            } else {
+                                break;
+                            }
+                        }
+
+                        // If valid, apply Branch 5 (End at newline) priority
+                        if (valid) {
+                            if (found_newline) {
+                                // Branch 5: \s*[\r\n]
+                                // Yield up to and including last newline
+                                len = last_newline_idx + 1;
+                            }
+                            // Else Branch 6/7: Yield full run
+
+                            try handler(handler_ctx, .{ .text = remainder[0..len] });
+                            i += len;
+                            continue;
+                        }
+                    },
                     else => {},
                 }
             }

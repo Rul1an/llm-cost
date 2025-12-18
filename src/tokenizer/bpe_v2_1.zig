@@ -23,34 +23,38 @@ pub const MergeCandidate = struct {
 /// Workspace for zero-allocation BPE encoding.
 /// Reuses memory across specialized buffer arrays and the priority queue.
 pub const BpeWorkspace = struct {
+    allocator: std.mem.Allocator,
+
     // Buffers for index-based linked list (Structure of Arrays)
-    tokens: std.ArrayList(TokenId),
-    prev: std.ArrayList(Index),
-    next: std.ArrayList(Index),
-    valid: std.ArrayList(bool),
+    // Using ArrayListUnmanaged to avoid storing the allocator in each list + cleaner memory layout
+    tokens: std.ArrayListUnmanaged(TokenId),
+    prev: std.ArrayListUnmanaged(Index),
+    next: std.ArrayListUnmanaged(Index),
+    valid: std.ArrayListUnmanaged(bool),
 
     // Custom Binary Heap (Min-Heap)
     // We manage the slice explicitly to allow O(1) clear.
-    heap_items: std.ArrayList(MergeCandidate),
+    heap_items: std.ArrayListUnmanaged(MergeCandidate),
     heap_len: usize,
 
     pub fn init(allocator: std.mem.Allocator) BpeWorkspace {
         return .{
-            .tokens = std.ArrayList(TokenId).init(allocator),
-            .prev = std.ArrayList(Index).init(allocator),
-            .next = std.ArrayList(Index).init(allocator),
-            .valid = std.ArrayList(bool).init(allocator),
-            .heap_items = std.ArrayList(MergeCandidate).init(allocator),
+            .allocator = allocator,
+            .tokens = .{},
+            .prev = .{},
+            .next = .{},
+            .valid = .{},
+            .heap_items = .{},
             .heap_len = 0,
         };
     }
 
     pub fn deinit(self: *BpeWorkspace) void {
-        self.tokens.deinit();
-        self.prev.deinit();
-        self.next.deinit();
-        self.valid.deinit();
-        self.heap_items.deinit();
+        self.tokens.deinit(self.allocator);
+        self.prev.deinit(self.allocator);
+        self.next.deinit(self.allocator);
+        self.valid.deinit(self.allocator);
+        self.heap_items.deinit(self.allocator);
     }
 
     /// O(1) clear logic
@@ -66,17 +70,12 @@ pub const BpeWorkspace = struct {
     fn heapPush(self: *BpeWorkspace, item: MergeCandidate) !void {
         // Ensure capacity
         if (self.heap_len >= self.heap_items.items.len) {
-            try self.heap_items.ensureTotalCapacity(self.heap_len + 1);
-            self.heap_items.items.len = self.heap_items.capacity; // Unsafe? No, we own the memory.
-            // Actually, simplest is just appendAssumeCapacity if we checked ensures.
-            // But we want to reuse the slice size.
-            // Let's use append logic but manage len.
+            try self.heap_items.ensureTotalCapacity(self.allocator, self.heap_len + 1);
+            self.heap_items.items.len = self.heap_items.capacity;
         }
-        // Expand logical slice if needed (ArrayList usually tracks items.len)
-        // usage: heap_items is the storage. self.heap_len is the heap size.
-        // We should keep heap_items.items.len high enough.
+        // Expand logical slice if needed
         if (self.heap_len == self.heap_items.items.len) {
-            try self.heap_items.append(undefined);
+            try self.heap_items.append(self.allocator, undefined);
         }
 
         self.heap_items.items[self.heap_len] = item;
@@ -162,10 +161,10 @@ pub const BpeWorkspace = struct {
         const n = initial_tokens.len;
         if (n >= SENTINEL) return error.InputTooLarge;
 
-        try self.tokens.ensureTotalCapacity(n);
-        try self.prev.ensureTotalCapacity(n);
-        try self.next.ensureTotalCapacity(n);
-        try self.valid.ensureTotalCapacity(n);
+        try self.tokens.ensureTotalCapacity(self.allocator, n);
+        try self.prev.ensureTotalCapacity(self.allocator, n);
+        try self.next.ensureTotalCapacity(self.allocator, n);
+        try self.valid.ensureTotalCapacity(self.allocator, n);
 
         // 3. Initialize buffers (append assumes capacity reserved)
         self.tokens.appendSliceAssumeCapacity(initial_tokens);
@@ -291,4 +290,36 @@ test "BpeWorkspace: basic encoding" {
     const input2 = [_]TokenId{ 10, 11 };
     const output2 = try ws.encode(&input2, &table);
     try std.testing.expectEqualSlices(TokenId, &[_]TokenId{20}, output2);
+}
+
+test "BpeWorkspace: min-heap correctness" {
+    const allocator = std.testing.allocator;
+    var ws = BpeWorkspace.init(allocator);
+    defer ws.deinit();
+
+    // Push chaotic: 5, 1, 3, 2, 4
+    // Ranks determine priority (lower = popped first)
+    try ws.heapPush(.{ .left_pos = 0, .rank = 50 });
+    try ws.heapPush(.{ .left_pos = 1, .rank = 10 });
+    try ws.heapPush(.{ .left_pos = 2, .rank = 30 });
+    try ws.heapPush(.{ .left_pos = 3, .rank = 20 });
+    try ws.heapPush(.{ .left_pos = 4, .rank = 40 });
+
+    // Expect Order: 10, 20, 30, 40, 50
+    const p1 = ws.heapPop().?;
+    try std.testing.expectEqual(@as(u32, 10), p1.rank);
+
+    const p2 = ws.heapPop().?;
+    try std.testing.expectEqual(@as(u32, 20), p2.rank);
+
+    const p3 = ws.heapPop().?;
+    try std.testing.expectEqual(@as(u32, 30), p3.rank);
+
+    const p4 = ws.heapPop().?;
+    try std.testing.expectEqual(@as(u32, 40), p4.rank);
+
+    const p5 = ws.heapPop().?;
+    try std.testing.expectEqual(@as(u32, 50), p5.rank);
+
+    try std.testing.expect(ws.heapPop() == null);
 }
