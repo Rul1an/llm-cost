@@ -14,11 +14,14 @@ permissions:
   contents: read
 
 jobs:
-  # Lane A: PR Gate (Fast)
+  # Lane A: PR Gate (Fast & Safe)
   pr-gate:
     if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        optimize: [ReleaseSafe, ReleaseFast]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -26,8 +29,10 @@ jobs:
         with:
           version: 0.14.0
 
-      - name: Differential Fuzz (10k)
-        run: zig build test-simd-fuzz -Doptimize=ReleaseFast
+      - name: Differential Fuzz (10k) - ${{ matrix.optimize }}
+        run: |
+          zig build test-simd-fuzz -Doptimize=${{ matrix.optimize }}
+          zig build test-simd-boundaries -Doptimize=${{ matrix.optimize }}
         env:
           FUZZ_ITERATIONS: 10000
 
@@ -35,7 +40,10 @@ jobs:
   nightly-deep:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
+    strategy:
+      matrix:
+        optimize: [ReleaseSafe, ReleaseFast]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -43,8 +51,10 @@ jobs:
         with:
           version: 0.14.0
 
-      - name: Differential Fuzz (100k)
-        run: zig build test-simd-fuzz -Doptimize=ReleaseFast
+      - name: Differential Fuzz (100k) - ${{ matrix.optimize }}
+        run: |
+          zig build test-simd-fuzz -Doptimize=${{ matrix.optimize }}
+          zig build test-simd-boundaries -Doptimize=${{ matrix.optimize }}
         env:
           FUZZ_ITERATIONS: 100000
 
@@ -52,5 +62,27 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
-          name: fuzz-failures
+          name: fuzz-failures-${{ matrix.optimize }}
           path: testdata/failures/
+
+  # Lane C: NEON Deep Verify (ARM64)
+  neon-deep-verify:
+    if: github.event_name == 'schedule' || github.event_name == 'pull_request'
+    runs-on: macos-14
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        optimize: [ReleaseSafe] # Just check safety on ARM for now
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: mlugg/setup-zig@v1
+        with:
+          version: 0.14.0
+
+      - name: NEON Verification
+        run: |
+          zig build test-simd-fuzz -Doptimize=${{ matrix.optimize }}
+          zig build test-simd-boundaries -Doptimize=${{ matrix.optimize }}
+        env:
+          FUZZ_ITERATIONS: 10000

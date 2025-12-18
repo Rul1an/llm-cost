@@ -24,6 +24,7 @@ If you discover a security issue, please contact the maintainer directly or emai
 ## CI/CD Security
 This project enforces strict supply chain security:
 - All actions are pinned to SHA.
+- **Root of Trust**: Zig compiler pinned to `0.14.0`.
 - Least privilege permissions.
 - Hermetic builds.
 

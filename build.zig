@@ -169,6 +169,18 @@ pub fn build(b: *std.Build) void {
     const simd_fuzz_step = b.step("test-simd-fuzz", "Run differential fuzzing (SIMD vs Scalar)");
     simd_fuzz_step.dependOn(&run_simd_fuzz.step);
 
+    // Deep Verification: Deterministic SIMD Boundaries
+    const simd_boundary_tests = b.addTest(.{
+        .root_source_file = b.path("src/tests/simd_boundaries.zig"),
+        .target = resolved_target,
+        .optimize = optimize,
+    });
+    simd_boundary_tests.root_module.addImport("tokenizer", tokenizer_mod);
+
+    const run_simd_boundaries = b.addRunArtifact(simd_boundary_tests);
+    const simd_boundary_step = b.step("test-simd-boundaries", "Run deterministic SIMD boundary traps");
+    simd_boundary_step.dependOn(&run_simd_boundaries.step);
+
     // Golden tests (CLI contract)
     // Tokenizer Parity Runner (Executes src/tokenizer_parity_runner.zig)
     const parity_runner_exe = b.addExecutable(.{
