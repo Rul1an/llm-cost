@@ -30,7 +30,7 @@ pub fn build(b: *std.Build) void {
     // (Logic below checks if we strictly need to modify something, but standardTargetOptions is generally sufficient if we don't force native)
 
     // Main executable
-    var version = std.SemanticVersion{ .major = 1, .minor = 3, .patch = 0 };
+    var version = std.SemanticVersion{ .major = 1, .minor = 6, .patch = 0 };
     if (b.option([]const u8, "version", "Override version string")) |ver_str| {
         version = std.SemanticVersion.parse(ver_str) catch std.debug.panic("Invalid version format: {s}", .{ver_str});
     }
