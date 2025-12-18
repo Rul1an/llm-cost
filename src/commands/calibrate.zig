@@ -146,3 +146,9 @@ fn printUsage(w: anytype) !void {
         \\
     , .{});
 }
+
+test "CliOptions defaults to null (Regression)" {
+    const opts = CliOptions{};
+    try std.testing.expect(opts.estimates_path == null);
+    try std.testing.expect(opts.actuals_path == null);
+}
