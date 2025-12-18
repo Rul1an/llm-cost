@@ -52,7 +52,7 @@ pub const LineReader = struct {
         return .{
             .allocator = allocator,
             // context points to heap now
-            .r = boxed.any(),
+            .r = boxed.*.any(),
             .reader_ctx = boxed,
             .destroy_ctx = destroyImpl(R),
 
@@ -143,7 +143,7 @@ pub const LineReader = struct {
                 @memcpy(self.line_buf[out_len .. out_len + n], data);
                 out_len += n;
 
-                if (out_len >= self.max_line_bytes) return error.LineTooLong;
+                if (out_len > self.max_line_bytes) return error.LineTooLong;
             }
         }
     }

@@ -1,30 +1,157 @@
 const std = @import("std");
-const cmd = @import("../commands/calibrate.zig");
+pub const types = @import("types.zig");
+pub const focus = @import("focus_import.zig");
+pub const stats = @import("stats.zig");
+pub const report = @import("report.zig");
+pub const key_intern = @import("key_intern.zig");
+const recs_mod = @import("recommendations.zig");
+
+pub const Status = enum { ok, warn, @"error", insufficient_data };
 
 pub const CalibrationResult = struct {
+    estimated_total: types.MicroUSD,
+    actual_total: types.MicroUSD,
+    drift_abs: types.MicroUSD,
+    drift_bps: types.BasisPoints,
+
+    sample_count: u64,
+    days_covered: u32,
+
+    // parameters (optional, add later)
+    cache_hit_ratio_bps: ?u16 = null,
+    avg_input_tokens: ?u32 = null,
+    avg_output_tokens: ?u32 = null,
+
     status: Status,
-    // Add other fields later
-    pub const Status = enum { ok, warn, @"error", insufficient_data };
+
+    recommendations: []recs_mod.Recommendation = &[_]recs_mod.Recommendation{},
+
+    pub fn deinit(self: CalibrationResult, allocator: std.mem.Allocator) void {
+        for (self.recommendations) |r| {
+            allocator.free(r.rationale);
+        }
+        allocator.free(self.recommendations);
+    }
 };
 
-pub fn run(
-    allocator: std.mem.Allocator,
-    opts: cmd.CliOptions,
-) !CalibrationResult {
-    _ = allocator;
-    _ = opts;
-    // Stub implementation
-    return CalibrationResult{
-        .status = .ok,
+pub const Error = error{
+    InvalidEstimates,
+    InvalidActuals,
+    MissingColumn,
+    InsufficientData,
+    IoError,
+    OutOfMemory,
+    SoftwareError,
+    Bad,
+};
+
+pub const RunOptions = struct {
+    estimates_path: []const u8,
+    actuals_path: []const u8,
+
+    warning_threshold_bps: u32 = 2000,
+    error_threshold_bps: u32 = 5000,
+    min_samples: u32 = 100,
+
+    max_line_bytes: usize = 10 * 1024 * 1024,
+};
+
+pub fn run(allocator: std.mem.Allocator, opts: RunOptions, registry: anytype, interner: *key_intern.StringInterner) Error!CalibrationResult {
+    const est = parseEstimatesFile(allocator, opts.estimates_path) catch return error.InvalidEstimates;
+
+    var file = std.fs.cwd().openFile(opts.actuals_path, .{}) catch return error.IoError;
+    defer file.close();
+
+    var parser = focus.FocusParser.initFile(allocator, file, opts.max_line_bytes) catch |e| switch (e) {
+        error.MissingRequiredColumn => return error.MissingColumn,
+        error.InvalidCsv => return error.InvalidActuals,
+        error.LineTooLong => return error.InvalidActuals,
+        error.IoError => return error.IoError,
+        error.OutOfMemory => return error.OutOfMemory,
+    };
+    defer parser.deinit();
+
+    var s = stats.CalibrationStats.init(allocator, interner);
+    defer s.deinit();
+
+    while (true) {
+        const rec_opt = parser.next() catch |e| switch (e) {
+            error.InvalidNumber, error.InvalidBoolean => return error.InvalidActuals,
+            error.LineTooLong => return error.InvalidActuals,
+            error.IoError => return error.IoError,
+            error.OutOfMemory => return error.OutOfMemory,
+        };
+        if (rec_opt == null) break;
+        try s.update(rec_opt.?);
+    }
+
+    if (s.sample_count < opts.min_samples) return error.InsufficientData;
+
+    const actual_total = s.total_cost_micro;
+    const diff = actual_total - est.estimated_total;
+
+    const drift_bps = types.computeDriftBps(diff, est.estimated_total) catch return error.InvalidEstimates;
+
+    const st: Status = if (@abs(drift_bps) >= @as(i32, @intCast(opts.error_threshold_bps)))
+        .@"error"
+    else if (@abs(drift_bps) >= @as(i32, @intCast(opts.warning_threshold_bps)))
+        .warn
+    else
+        .ok;
+
+    // Generate recommendations
+    // Note: 'registry' must support get(name) and iterator()
+    const recs = recs_mod.generate(allocator, &s, registry, .{}) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+    };
+
+    return .{
+        .estimated_total = est.estimated_total,
+        .actual_total = actual_total,
+        .drift_abs = diff,
+        .drift_bps = drift_bps,
+        .sample_count = s.sample_count,
+        .days_covered = s.daysCovered(),
+        .status = st,
+        .recommendations = recs,
     };
 }
 
-pub fn formatOutput(
-    result: CalibrationResult,
-    format: cmd.CliOptions.OutputFormat,
-    writer: anytype,
-) !void {
-    _ = result;
-    _ = format;
-    try writer.print("Calibration stub output\n", .{});
+pub fn formatOutput(result: CalibrationResult, format: report.OutputFormat, writer: anytype) !void {
+    try report.format(result, format, writer);
+}
+
+/// Minimal estimates parser:
+/// - Expects JSON with {"estimated_total_usd":"123.456789"} OR micro-usd int.
+/// - Strict: money must be string-decimal or integer micros.
+const Estimates = struct {
+    estimated_total: types.MicroUSD,
+};
+
+fn parseEstimatesFile(allocator: std.mem.Allocator, path: []const u8) !Estimates {
+    var f = try std.fs.cwd().openFile(path, .{});
+    defer f.close();
+
+    const data = try f.readToEndAlloc(allocator, 64 * 1024 * 1024);
+    defer allocator.free(data);
+
+    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, data, .{});
+    defer parsed.deinit();
+
+    if (parsed.value != .object) return error.Bad;
+
+    if (parsed.value.object.get("estimated_total_micro_usd")) |v| {
+        if (v == .integer) return .{ .estimated_total = @intCast(v.integer) };
+        return error.Bad;
+    }
+
+    if (parsed.value.object.get("estimated_total_usd")) |v| {
+        if (v == .string) {
+            const micros = try types.parseMicroUSDDecimal(v.string);
+            return .{ .estimated_total = micros };
+        }
+        return error.Bad;
+    }
+
+    return error.Bad;
 }

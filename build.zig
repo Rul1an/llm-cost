@@ -142,11 +142,25 @@ pub fn build(b: *std.Build) void {
 
     const run_calibration_core_tests = b.addRunArtifact(test_calibration_core);
 
+    // New Integration Tests
+    const test_calibration_integration = b.addTest(.{
+        .root_source_file = b.path("src/tests/calibration_integration.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    // Allow integration test to import mod.zig (which pulls in everything else via relative imports)
+    // We create a "calibration" module for cleanliness
+    const cal_mod = b.createModule(.{ .root_source_file = b.path("src/calibration/mod.zig") });
+    test_calibration_integration.root_module.addImport("calibration", cal_mod);
+
+    const run_calibration_integration_tests = b.addRunArtifact(test_calibration_integration);
+
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_security_tests.step);
     test_step.dependOn(&run_determinism_tests.step);
     test_step.dependOn(&run_calibration_core_tests.step);
+    test_step.dependOn(&run_calibration_integration_tests.step);
 
     // Fuzz/Chaos tests
     const fuzz_tests = b.addTest(.{

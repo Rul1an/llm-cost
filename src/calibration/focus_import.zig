@@ -111,16 +111,7 @@ pub const FocusParser = struct {
         while (try it.next()) |field_raw| : (idx += 1) {
             const name = trimField(field_raw);
 
-            if (std.mem.eql(u8, name, "BilledCost")) self.col.BilledCost = idx
-            else if (std.mem.eql(u8, name, "EffectiveCost")) self.col.EffectiveCost = idx
-            else if (std.mem.eql(u8, name, "UsageQuantity")) self.col.UsageQuantity = idx
-            else if (std.mem.eql(u8, name, "UsageUnit")) self.col.UsageUnit = idx
-            else if (std.mem.eql(u8, name, "ChargeCategory")) self.col.ChargeCategory = idx
-            else if (std.mem.eql(u8, name, "ResourceId")) self.col.ResourceId = idx
-            else if (std.mem.eql(u8, name, "x-llm-model")) self.col.@"x-llm-model" = idx
-            else if (std.mem.eql(u8, name, "x-llm-input-tokens")) self.col.@"x-llm-input-tokens" = idx
-            else if (std.mem.eql(u8, name, "x-llm-output-tokens")) self.col.@"x-llm-output-tokens" = idx
-            else if (std.mem.eql(u8, name, "x-llm-cache-hit")) self.col.@"x-llm-cache-hit" = idx;
+            if (std.mem.eql(u8, name, "BilledCost")) self.col.BilledCost = idx else if (std.mem.eql(u8, name, "EffectiveCost")) self.col.EffectiveCost = idx else if (std.mem.eql(u8, name, "UsageQuantity")) self.col.UsageQuantity = idx else if (std.mem.eql(u8, name, "UsageUnit")) self.col.UsageUnit = idx else if (std.mem.eql(u8, name, "ChargeCategory")) self.col.ChargeCategory = idx else if (std.mem.eql(u8, name, "ResourceId")) self.col.ResourceId = idx else if (std.mem.eql(u8, name, "x-llm-model")) self.col.@"x-llm-model" = idx else if (std.mem.eql(u8, name, "x-llm-input-tokens")) self.col.@"x-llm-input-tokens" = idx else if (std.mem.eql(u8, name, "x-llm-output-tokens")) self.col.@"x-llm-output-tokens" = idx else if (std.mem.eql(u8, name, "x-llm-cache-hit")) self.col.@"x-llm-cache-hit" = idx;
         }
     }
 
@@ -209,7 +200,7 @@ const CsvFieldIter = struct {
         if (self.i > self.line.len) return null;
         if (self.i == self.line.len) {
             self.i += 1; // move past end
-            return "";   // trailing empty field
+            return ""; // trailing empty field
         }
 
         // reset scratch each field

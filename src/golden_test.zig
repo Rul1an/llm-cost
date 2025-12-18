@@ -494,7 +494,7 @@ test "Contract: 'calibrate' respects CLI contract" {
     // Wait, stub implementation in mod.zig returns .ok?
     // Let's check mod.zig...
     // Yes, stub returns .ok. So with valid args, it should return 0.
-    const args_ok = [_][]const u8{"--estimates", "e.json", "--actuals", "a.csv"};
+    const args_ok = [_][]const u8{ "--estimates", "e.json", "--actuals", "a.csv" };
     const exit_ok = try calibrate_cmd.run(mock.allocator, &args_ok, mock.stdout_buf.writer().any(), mock.stderr_buf.writer().any());
     try std.testing.expectEqual(@as(u8, 0), exit_ok);
 

@@ -31,8 +31,8 @@ pub fn parseMicroUSDDecimal(input: []const u8) ParseMoneyError!MicroUSD {
     }
 
     var int_part: u128 = 0;
-    var frac_part: u32 = 0;       // 0..999999
-    var frac_digits: u8 = 0;      // 0..6
+    var frac_part: u32 = 0; // 0..999999
+    var frac_digits: u8 = 0; // 0..6
     var saw_dot = false;
     var round_up = false;
 
@@ -109,7 +109,7 @@ pub fn formatMicroUSD(value: MicroUSD, buf: []u8) []const u8 {
 
 /// Compute drift in basis points using integer arithmetic with rounding.
 /// drift_bps = round( (diff / estimated) * 10000 )
-pub fn computeDriftBps(diff: MicroUSD, estimated: MicroUSD) error{InvalidEstimates, SoftwareError}!BasisPoints {
+pub fn computeDriftBps(diff: MicroUSD, estimated: MicroUSD) error{ InvalidEstimates, SoftwareError }!BasisPoints {
     if (estimated == 0) return error.InvalidEstimates;
 
     // numer = diff * 10000

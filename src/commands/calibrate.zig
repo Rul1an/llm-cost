@@ -1,11 +1,12 @@
 const std = @import("std");
 const calibrate = @import("../calibration/mod.zig");
+const report = @import("../calibration/report.zig");
+const pricing = @import("../core/pricing/mod.zig");
 
 pub const ExitCode = enum(u8) {
     ok = 0,
     usage_error = 64,
     data_error = 65,
-    software_error = 70,
     software_error = 70,
 
     pub fn int(self: ExitCode) u8 {
@@ -13,17 +14,21 @@ pub const ExitCode = enum(u8) {
     }
 };
 
-pub const CliOptions = struct {
-    estimates_path: []const u8,
-    actuals_path: []const u8,
-    format: OutputFormat = .table,
-    fail_on_drift: FailOnDrift = .never,
-    warning_threshold_bps: u32 = 2000, // 20%
-    error_threshold_bps: u32 = 5000,   // 50%
-    min_samples: u32 = 100,
+pub const FailDrift = enum { never, warn, @"error" };
 
-    pub const OutputFormat = enum { table, json, toml };
-    pub const FailOnDrift = enum { never, warn, @"error" };
+pub const CliOptions = struct {
+    estimates_path: ?[]const u8 = null,
+    actuals_path: ?[]const u8 = null,
+    format: report.OutputFormat = .table,
+    fail_on_drift: FailDrift = .never,
+};
+
+pub const Error = error{
+    InvalidArg,
+    InvalidArgValue,
+    HelpShown,
+    MissingArg, // Added missing error
+    InvalidArgs,
 };
 
 pub fn run(
@@ -37,17 +42,39 @@ pub fn run(
         return ExitCode.usage_error.int();
     };
 
+    if (opts.estimates_path == null or opts.actuals_path == null) {
+        try stderr.print("Error: --estimates and --actuals are required.\n", .{});
+        return ExitCode.usage_error.int();
+    }
+
+    // Init Pricing Registry
+    var registry = pricing.Registry.init(allocator, .{}) catch |err| {
+        try stderr.print("Warning: Failed to load pricing registry: {s}. Recommendations will be limited.\n", .{@errorName(err)});
+        // We can continue with a dummy/empty registry or fail.
+        // For robustness, maybe we want to fail if it's critical, but here it's enhancement.
+        // However, generic `anytype` in `mod.run` means we need a compatible type.
+        // If we fail here, we should probably exit (software error).
+        return ExitCode.software_error.int();
+    };
+    defer registry.deinit();
+
+    const run_opts = calibrate.RunOptions{
+        .estimates_path = opts.estimates_path.?,
+        .actuals_path = opts.actuals_path.?,
+    };
+
+    var interner = @import("../calibration/key_intern.zig").StringInterner.init(allocator);
+    defer interner.deinit();
+
     // run calibration logic
-    const result = calibrate.run(allocator, opts) catch |err| {
+    const result = calibrate.run(allocator, run_opts, &registry, &interner) catch |err| {
         switch (err) {
             error.InvalidEstimates, error.InvalidActuals, error.MissingColumn, error.InsufficientData => {
                 try stderr.print("Data Error: {s}\n", .{@errorName(err)});
                 return ExitCode.data_error.int();
             },
-            error.IoError => return ExitCode.software_error.int(),
-            error.OutOfMemory => return ExitCode.software_error.int(),
-            else => {
-                try stderr.print("Unexpected Error: {s}\n", .{@errorName(err)});
+            error.IoError, error.OutOfMemory, error.SoftwareError, error.Bad => {
+                try stderr.print("Software Error: {s}\n", .{@errorName(err)});
                 return ExitCode.software_error.int();
             },
         }
@@ -90,23 +117,17 @@ fn parseArgs(args: []const []const u8, stderr: anytype) !CliOptions {
         } else if (std.mem.eql(u8, arg, "--format")) {
             if (i + 1 >= args.len) return error.MissingArg;
             const fmt = args[i + 1];
-            if (std.mem.eql(u8, fmt, "json")) opts.format = .json
-            else if (std.mem.eql(u8, fmt, "toml")) opts.format = .toml
-            else if (std.mem.eql(u8, fmt, "table")) opts.format = .table
-            else return error.InvalidArgValue;
+            if (std.mem.eql(u8, fmt, "json")) opts.format = .json else if (std.mem.eql(u8, fmt, "toml")) opts.format = .toml else if (std.mem.eql(u8, fmt, "table")) opts.format = .table else return error.InvalidArgValue;
             i += 1;
         } else if (std.mem.eql(u8, arg, "--fail-on-drift")) {
             if (i + 1 >= args.len) return error.MissingArg;
             const val = args[i + 1];
-            if (std.mem.eql(u8, val, "warn")) opts.fail_on_drift = .warn
-            else if (std.mem.eql(u8, val, "error")) opts.fail_on_drift = .@"error"
-            else if (std.mem.eql(u8, val, "never")) opts.fail_on_drift = .never
-            else return error.InvalidArgValue;
+            if (std.mem.eql(u8, val, "warn")) opts.fail_on_drift = .warn else if (std.mem.eql(u8, val, "error")) opts.fail_on_drift = .@"error" else if (std.mem.eql(u8, val, "never")) opts.fail_on_drift = .never else return error.InvalidArgValue;
             i += 1;
         }
     }
 
-    if (opts.estimates_path.len == 0 or opts.actuals_path.len == 0) {
+    if (opts.estimates_path == null or opts.actuals_path == null) {
         try stderr.print("Error: --estimates and --actuals are required.\n", .{});
         try printUsage(stderr);
         return error.InvalidArgs;
@@ -125,5 +146,3 @@ fn printUsage(w: anytype) !void {
         \\
     , .{});
 }
-
-
