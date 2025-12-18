@@ -251,7 +251,7 @@ pub const BpeEngineV2 = struct {
         };
 
         var pq = std.PriorityQueue(Merge, void, Merge.lessThan).init(alloc, {});
-        defer pq.deinit();
+        defer pq.deinit(); // Valid if PQ managed? If not, deinit() no args?
 
         // Initialize nodes (one per byte)
         for (0..word.len) |i| {

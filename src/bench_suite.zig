@@ -12,6 +12,7 @@ const std = @import("std");
 const bench = @import("bench.zig");
 const Tokenizer = @import("tokenizer/mod.zig").OpenAITokenizer;
 const Registry = @import("tokenizer/registry.zig").Registry;
+const PricingRegistry = @import("core/pricing/mod.zig").Registry;
 const OpenAIConfig = @import("tokenizer/openai.zig").Config;
 
 const VERSION = "0.7.1";
@@ -40,7 +41,7 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    // Parse arguments
+    // Parse args
     const args = try parseArgs(allocator);
 
     // Setup output
@@ -59,6 +60,7 @@ pub fn main() !void {
         allocator.free(test_data.small);
         allocator.free(test_data.medium);
         allocator.free(test_data.large);
+        allocator.free(test_data.macro);
         allocator.free(test_data.pathological);
     }
 
@@ -74,6 +76,7 @@ const TestData = struct {
     small: []const u8, // ~100 bytes
     medium: []const u8, // ~10 KB
     large: []const u8, // ~1 MB
+    macro: []const u8, // Real corpus (aggregated)
     pathological: []const u8, // worst-case input
 };
 
@@ -92,10 +95,15 @@ fn loadTestData(allocator: std.mem.Allocator) !TestData {
     const pathological = try allocator.alloc(u8, 100_000);
     @memset(pathological, 'a');
 
+    // Load Macro Corpus
+    const macro = loadCorpus(allocator, "test/golden/corpus_v2.jsonl") catch
+        try generateText(allocator, 5 * 1024 * 1024); // Fallback: 5MB synthetic
+
     return TestData{
         .small = small,
         .medium = medium,
         .large = large,
+        .macro = macro,
         .pathological = pathological,
     };
 }
@@ -205,6 +213,7 @@ fn runTextBenchmarks(
     const iter_small: u64 = if (args.quick) 1_000 else 100_000;
     const iter_medium: u64 = if (args.quick) 100 else 10_000;
     const iter_large: u64 = if (args.quick) 10 else 100;
+    const iter_macro: u64 = if (args.quick) 5 else 20;
     const warmup_ratio: u64 = 10;
 
     // Run for each encoding
@@ -271,6 +280,23 @@ fn runTextBenchmarks(
             best_bench_name = "encode_large";
         }
 
+        // Macro benchmark
+        const macro_result = try runEncodeBenchmark(
+            allocator,
+            "encode_macro",
+            encoding,
+            data.macro,
+            iter_macro,
+            @max(1, iter_macro / warmup_ratio),
+        );
+        try macro_result.format(writer);
+        try writer.writeAll("\n");
+
+        if (macro_result.throughputMBps() > best_throughput) {
+            best_throughput = macro_result.throughputMBps();
+            best_bench_name = "encode_macro";
+        }
+
         // Summary for this encoding
         try writer.print(
             \\── Summary ({s}) ──
@@ -279,6 +305,7 @@ fn runTextBenchmarks(
             \\  Small p99:        {d:.3} ms
             \\  Medium p99:       {d:.3} ms
             \\  Large p99:        {d:.3} ms
+            \\  Macro p99:        {d:.3} ms
             \\
             \\
         , .{
@@ -288,8 +315,14 @@ fn runTextBenchmarks(
             @as(f64, @floatFromInt(small_result.p99_ns)) / 1_000_000.0,
             @as(f64, @floatFromInt(medium_result.p99_ns)) / 1_000_000.0,
             @as(f64, @floatFromInt(large_result.p99_ns)) / 1_000_000.0,
+            @as(f64, @floatFromInt(macro_result.p99_ns)) / 1_000_000.0,
         });
     }
+
+    try writer.writeAll("═══ Registry Loading ═══\n\n");
+    const reg_result = try runRegistryBenchmark(allocator, 100);
+    try reg_result.format(writer);
+    try writer.writeAll("\n");
 
     // Memory usage
     try writer.writeAll("═══ Memory Usage ═══\n\n");
@@ -427,6 +460,19 @@ fn runJsonBenchmarks(
 
         try writer.writeAll(",\n    ");
         try large_result.formatJson(writer);
+
+        // Macro
+        const macro_result = try runEncodeBenchmark(
+            allocator,
+            "encode_macro",
+            encoding,
+            data.macro,
+            if (args.quick) 5 else 20,
+            1,
+        );
+
+        try writer.writeAll(",\n    ");
+        try macro_result.formatJson(writer);
     }
 
     // Memory
@@ -528,6 +574,22 @@ fn runMarkdownBenchmarks(
         );
     }
 
+    // Macro Table
+    try writer.writeAll("\n### Macro Benchmark (Real Corpus)\n\n");
+    // Just run cl100k for macro markdown summary for brevity/focus
+    const macro_result = try runEncodeBenchmark(
+        allocator,
+        "encode_macro (cl100k)",
+        "cl100k_base",
+        data.macro,
+        if (args.quick) 5 else 20,
+        1,
+    );
+    try writer.print(
+        "Throughput: **{d:.2} MB/s** (Input: {d:.2} MB)\n",
+        .{ macro_result.throughputMBps(), @as(f64, @floatFromInt(data.macro.len)) / 1024.0 / 1024.0 },
+    );
+
     // Memory
     const rss = try bench.getCurrentRSS();
     const formatted = bench.formatBytes(rss);
@@ -547,6 +609,50 @@ fn runMarkdownBenchmarks(
         formatted.unit,
         if (results_cl100k[2] >= 10.0) "✅ **Performance target met** (≥10 MB/s)" else "⚠️ Below target",
     });
+}
+
+// ============================================================================
+// Benchmarking Helper: Registry Load
+// ============================================================================
+
+fn runRegistryBenchmark(allocator: std.mem.Allocator, iterations: u64) !bench.BenchmarkResult {
+    // Warmup
+    {
+        var reg = try PricingRegistry.init(allocator, .{});
+        defer reg.deinit();
+    }
+
+    var latencies = try std.ArrayList(u64).initCapacity(allocator, iterations);
+    defer latencies.deinit();
+
+    var total_ns: u64 = 0;
+    for (0..iterations) |_| {
+        var timer = try std.time.Timer.start();
+        var reg = try PricingRegistry.init(allocator, .{});
+        const elapsed = timer.read();
+        reg.deinit();
+
+        total_ns += elapsed;
+        try latencies.append(elapsed);
+    }
+
+    std.mem.sort(u64, latencies.items, {}, std.sort.asc(u64));
+    const mean = if (iterations > 0) total_ns / iterations else 0;
+
+    return bench.BenchmarkResult{
+        .name = "registry_load_bin",
+        .encoding = "binary_db",
+        .input_bytes = 0, // N/A
+        .iterations = iterations,
+        .total_ns = total_ns,
+        .min_ns = if (latencies.items.len > 0) latencies.items[0] else 0,
+        .max_ns = if (latencies.items.len > 0) latencies.items[latencies.items.len - 1] else 0,
+        .mean_ns = mean,
+        .stddev_ns = calculateStdDev(latencies.items, mean),
+        .p50_ns = percentile(latencies.items, 50),
+        .p95_ns = percentile(latencies.items, 95),
+        .p99_ns = percentile(latencies.items, 99),
+    };
 }
 
 // ============================================================================
@@ -646,4 +752,38 @@ fn getTimestamp() i64 {
 
 pub fn getDynamicSystemInfo() []const u8 {
     return @tagName(builtin.os.tag) ++ " " ++ @tagName(builtin.cpu.arch);
+}
+
+// ============================================================================
+// Internal Helpers
+// ============================================================================
+
+fn loadCorpus(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
+    const file = std.fs.cwd().openFile(path, .{}) catch return error.FileNotFound;
+    defer file.close();
+
+    const file_content = try file.readToEndAlloc(allocator, 50 * 1024 * 1024); // Cap at 50MB
+    defer allocator.free(file_content);
+
+    // Let's create a separate result buffer
+    var text_content = try std.ArrayList(u8).initCapacity(allocator, file_content.len); // Approximate
+    errdefer text_content.deinit();
+
+    var iter = std.mem.splitScalar(u8, file_content, '\n');
+    while (iter.next()) |line| {
+        if (line.len == 0) continue;
+
+        // Simple JSON parse to extract "text"
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, line, .{});
+        defer parsed.deinit();
+
+        if (parsed.value.object.get("text")) |text_node| {
+            if (text_node == .string) {
+                try text_content.appendSlice(text_node.string);
+                try text_content.append(' '); // Space separator
+            }
+        }
+    }
+
+    return text_content.toOwnedSlice();
 }

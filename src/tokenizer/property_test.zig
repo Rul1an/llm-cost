@@ -1,6 +1,7 @@
 const std = @import("std");
 const testing = std.testing;
 const VocabLoader = @import("vocab_loader.zig").VocabLoader;
+const pre_tokenizer = @import("pre_tokenizer.zig");
 const scanner = @import("cl100k_scanner.zig");
 
 // Fuzz config
@@ -23,8 +24,19 @@ test "Property: Scanner Forward Progress & Conservation" {
         // Pre-tokenize
         // We use cl100k scanner interface
         const pt = scanner.Cl100kScanner.interface();
-        const tokens = try pt.tokenize(allocator, input);
-        defer allocator.free(tokens);
+
+        var collector = std.ArrayList(pre_tokenizer.PreToken).init(allocator);
+        defer collector.deinit();
+
+        const Helper = struct {
+            pub fn handle(ctx: *anyopaque, token: pre_tokenizer.PreToken) !void {
+                const list: *std.ArrayList(pre_tokenizer.PreToken) = @ptrCast(@alignCast(ctx));
+                try list.append(token);
+            }
+        };
+
+        try pt.tokenize(input, &collector, Helper.handle);
+        const tokens = collector.items;
 
         // Verify Properties
         // 1. Total length of tokens matches input length (Conservation of mass)

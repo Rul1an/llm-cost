@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   watch:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -88,11 +88,13 @@ jobs:
 
           echo "snapshot<<EOF" >> $GITHUB_OUTPUT
           cat /tmp/snapshot.json >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
           if [ -f /tmp/changed.txt ]; then
             echo "changed_list<<EOF" >> $GITHUB_OUTPUT
             cat /tmp/changed.txt >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
           fi
 

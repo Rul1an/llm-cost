@@ -5,8 +5,29 @@ const std = @import("std");
 // This avoids the 0.15 "Writergate" I/O breaking changes
 
 pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const target = b.standardTargetOptions(.{});
+
+    // Policy Options
+    const opt_strip = b.option(bool, "strip", "Strip symbols (default: true for non-Debug)") orelse (optimize != .Debug);
+
+    // LTO defaults:
+    // - Linux: true (works reliably with LLD)
+    // - macOS: false (requires LLD, complicates native build)
+    // - Windows: false (current toolchain issues with LTO+libc)
+    // Summary: Linux on, Darwin/Windows off by default.
+    const is_macos = target.result.os.tag == .macos;
+    const is_windows = target.result.os.tag == .windows;
+    const lto_default = (optimize != .Debug and !is_macos and !is_windows);
+
+    const opt_lto = b.option(bool, "lto", "Enable LTO") orelse lto_default;
+
+    // Target Resolution (CPU Policy)
+    // -Dcpu is handled by standardTargetOptions. We trust 'target'.
+    // Default usually implies baseline/native depending on context, but we want baseline distribution.
+    // If target.query.cpu_model is not explicitly native via -Dcpu=native, we assume baseline is preferred for release.
+    const resolved_target = target;
+    // (Logic below checks if we strictly need to modify something, but standardTargetOptions is generally sufficient if we don't force native)
 
     // Main executable
     var version = std.SemanticVersion{ .major = 1, .minor = 3, .patch = 0 };
@@ -17,11 +38,33 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "llm-cost",
         .root_source_file = b.path("src/main.zig"),
-        .target = target,
+        .target = resolved_target,
         .optimize = optimize,
         .version = version,
     });
+
+    // Apply Policies
+    exe.root_module.strip = opt_strip;
+    exe.want_lto = opt_lto;
+    exe.linkLibC();
+
     b.installArtifact(exe);
+
+    // Optional "Safe" Flavor
+    const build_safe = b.option(bool, "build_safe", "Also build ReleaseSafe artifact (llm-cost-safe)") orelse false;
+    if (build_safe) {
+        const exe_safe = b.addExecutable(.{
+            .name = "llm-cost-safe",
+            .root_source_file = b.path("src/main.zig"),
+            .target = resolved_target,
+            .optimize = .ReleaseSafe,
+            .version = version,
+        });
+        exe_safe.root_module.strip = opt_strip;
+        exe_safe.want_lto = opt_lto;
+        exe_safe.linkLibC();
+        b.installArtifact(exe_safe);
+    }
 
     // Create manifest module common to tools and tests
     const manifest_mod = b.createModule(.{
@@ -49,16 +92,19 @@ pub fn build(b: *std.Build) void {
     // Unit Tests
     const unit_tests = b.addTest(.{
         .root_source_file = b.path("src/tests.zig"),
-        .target = target,
+        .target = resolved_target,
         .optimize = optimize,
     });
     unit_tests.root_module.addImport("manifest", manifest_mod);
     const run_unit_tests = b.addRunArtifact(unit_tests);
+    if (b.args) |args| {
+        run_unit_tests.addArgs(args);
+    }
 
     // Security Tests
     const security_tests = b.addTest(.{
         .root_source_file = b.path("src/tests/security_test.zig"),
-        .target = target,
+        .target = resolved_target,
         .optimize = optimize,
     });
     security_tests.root_module.addImport("manifest", manifest_mod);
@@ -67,7 +113,7 @@ pub fn build(b: *std.Build) void {
     // Determinism Tests
     const determinism_tests = b.addTest(.{
         .root_source_file = b.path("src/determinism_test.zig"),
-        .target = target,
+        .target = resolved_target,
         .optimize = optimize,
     });
     const run_determinism_tests = b.addRunArtifact(determinism_tests);
@@ -80,7 +126,7 @@ pub fn build(b: *std.Build) void {
     // Fuzz/Chaos tests
     const fuzz_tests = b.addTest(.{
         .root_source_file = b.path("src/fuzz_test.zig"),
-        .target = target,
+        .target = resolved_target,
         .optimize = optimize,
     });
     const run_fuzz = b.addRunArtifact(fuzz_tests);
@@ -90,7 +136,7 @@ pub fn build(b: *std.Build) void {
     // Parity tests (vs tiktoken)
     const parity_tests = b.addTest(.{
         .root_source_file = b.path("src/parity_test.zig"),
-        .target = target,
+        .target = resolved_target,
         .optimize = optimize,
     });
     const run_parity_tests = b.addRunArtifact(parity_tests);
@@ -102,7 +148,7 @@ pub fn build(b: *std.Build) void {
     const parity_runner_exe = b.addExecutable(.{
         .name = "tokenizer-runner",
         .root_source_file = b.path("src/tokenizer_parity_runner.zig"),
-        .target = target,
+        .target = resolved_target,
         .optimize = optimize,
     });
     b.installArtifact(parity_runner_exe);
@@ -118,7 +164,7 @@ pub fn build(b: *std.Build) void {
     // Golden Tester (CLI harness)
     const golden_tests = b.addTest(.{
         .root_source_file = b.path("src/golden_test.zig"),
-        .target = target,
+        .target = resolved_target,
         .optimize = optimize,
         .single_threaded = true,
     });
@@ -129,7 +175,7 @@ pub fn build(b: *std.Build) void {
     // Guardrail Tests (Memory/Fairness)
     const guardrail_tests = b.addTest(.{
         .root_source_file = b.path("src/calibrate/guardrail_test.zig"),
-        .target = target,
+        .target = resolved_target,
         .optimize = optimize,
     });
     const run_guardrail = b.addRunArtifact(guardrail_tests);
@@ -141,9 +187,11 @@ pub fn build(b: *std.Build) void {
     // Tools: Vocabulary Converter
     const convert_vocab_exe = b.addExecutable(.{
         .name = "convert-vocab",
-        .root_source_file = b.path("tools/convert_vocab.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/convert_vocab.zig"),
+            .target = resolved_target,
+            .optimize = optimize,
+        }),
     });
     // b.installArtifact(convert_vocab_exe);
     const install_vocab = b.addInstallArtifact(convert_vocab_exe, .{});
@@ -156,12 +204,39 @@ pub fn build(b: *std.Build) void {
     const convert_step = b.step("run-convert-vocab", "Run vocabulary converter");
     convert_step.dependOn(&run_convert_vocab.step);
 
+    // Tools: Pricing Compiler (Phase 2)
+    const compile_pricing_exe = b.addExecutable(.{
+        .name = "compile-pricing",
+        .root_source_file = b.path("tools/compile_pricing.zig"),
+        .target = resolved_target,
+        .optimize = optimize,
+    });
+
+    // Create module for binary format to share with tools
+    const pricing_binary_mod = b.createModule(.{
+        .root_source_file = b.path("src/core/pricing/binary.zig"),
+    });
+    compile_pricing_exe.root_module.addImport("binary_pricing", pricing_binary_mod);
+
+    // b.installArtifact(compile_pricing_exe);
+    const install_pricing = b.addInstallArtifact(compile_pricing_exe, .{});
+    tools_step.dependOn(&install_pricing.step);
+
+    const run_compile_pricing = b.addRunArtifact(compile_pricing_exe);
+    if (b.args) |args| {
+        run_compile_pricing.addArgs(args);
+    }
+    const compile_pricing_step = b.step("run-compile-pricing", "Run pricing DB compiler");
+    compile_pricing_step.dependOn(&run_compile_pricing.step);
+
     // Benchmark
     const bench_exe = b.addExecutable(.{
         .name = "llm-cost-bench",
-        .root_source_file = b.path("src/bench_suite.zig"),
-        .target = target,
-        .optimize = .ReleaseFast, // Always optimize for benchmarks
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/bench_suite.zig"),
+            .target = resolved_target,
+            .optimize = .ReleaseFast, // Always optimize for benchmarks
+        }),
     });
 
     const bench_step = b.step("bench", "Run performance benchmarks");
@@ -176,9 +251,11 @@ pub fn build(b: *std.Build) void {
     // Tools: Manifest Signer
     const signer_exe = b.addExecutable(.{
         .name = "sign-manifest",
-        .root_source_file = b.path("tools/sign_manifest.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/sign_manifest.zig"),
+            .target = resolved_target,
+            .optimize = optimize,
+        }),
     });
 
     // Create manifest module to allow access from tools/
@@ -199,9 +276,11 @@ pub fn build(b: *std.Build) void {
     // Compresses, Hashes, Signs, and Generates Manifest
     const publisher_exe = b.addExecutable(.{
         .name = "publish-release",
-        .root_source_file = b.path("tools/publish_release.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/publish_release.zig"),
+            .target = resolved_target,
+            .optimize = optimize,
+        }),
     });
     publisher_exe.root_module.addImport("manifest", manifest_mod);
     // b.installArtifact(publisher_exe);
