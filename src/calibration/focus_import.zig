@@ -127,26 +127,18 @@ pub const FocusParser = struct {
         while (try it.next()) |field_raw| : (idx += 1) {
             const field = trimField(field_raw);
 
-            if (self.col.BilledCost) |cidx| {
-                if (cidx == idx) rec.BilledCost = types.parseMicroUSDDecimal(field) catch return error.InvalidNumber;
-            }
-            if (self.col.EffectiveCost) |cidx| {
-                if (cidx == idx) rec.EffectiveCost = types.parseMicroUSDDecimal(field) catch return error.InvalidNumber;
-            } else {
-                // Fallback if EffectiveCost column missing entirely?
-                // Done after loop.
-            }
-            if (self.col.UsageQuantity) |cidx| {
-                if (cidx == idx) rec.UsageQuantity = std.fmt.parseInt(u64, field, 10) catch return error.InvalidNumber;
-            }
-            if (self.col.UsageUnit) |cidx| {
-                if (cidx == idx) rec.UsageUnit = try ally.dupe(u8, field);
-            }
-            if (self.col.ChargeCategory) |cidx| {
-                if (cidx == idx) rec.ChargeCategory = try ally.dupe(u8, field);
-            }
-            if (self.col.ResourceId) |cidx| {
-                if (cidx == idx) rec.ResourceId = try ally.dupe(u8, field);
+            if (self.col.BilledCost != null and self.col.BilledCost.? == idx) {
+                rec.BilledCost = types.parseMicroUSDDecimal(field) catch return error.InvalidNumber;
+            } else if (self.col.EffectiveCost != null and self.col.EffectiveCost.? == idx) {
+                rec.EffectiveCost = types.parseMicroUSDDecimal(field) catch return error.InvalidNumber;
+            } else if (self.col.UsageQuantity != null and self.col.UsageQuantity.? == idx) {
+                rec.UsageQuantity = std.fmt.parseInt(u64, field, 10) catch return error.InvalidNumber;
+            } else if (self.col.UsageUnit != null and self.col.UsageUnit.? == idx) {
+                rec.UsageUnit = try ally.dupe(u8, field);
+            } else if (self.col.ChargeCategory != null and self.col.ChargeCategory.? == idx) {
+                rec.ChargeCategory = try ally.dupe(u8, field);
+            } else if (self.col.ResourceId != null and self.col.ResourceId.? == idx) {
+                rec.ResourceId = try ally.dupe(u8, field);
             } else if (self.col.@"x-llm-model" != null and self.col.@"x-llm-model".? == idx) {
                 if (field.len != 0) rec.@"x-llm-model" = try ally.dupe(u8, field);
             } else if (self.col.@"x-llm-input-tokens" != null and self.col.@"x-llm-input-tokens".? == idx) {
