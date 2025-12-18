@@ -7,7 +7,7 @@ pub fn withTempCwd(
     dir: std.fs.Dir,
     comptime F: anytype,
     args: anytype,
-) !void {
+) @TypeOf(@call(.auto, F, args)) {
     g_cwd_mutex.lock();
     defer g_cwd_mutex.unlock();
 

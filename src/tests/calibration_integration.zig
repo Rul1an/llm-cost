@@ -95,9 +95,9 @@ test "End-to-end: Calibration Run (Matches Output)" {
     const result = try calibration.run(allocator, opts, &reg, &interner);
     defer result.deinit(allocator);
 
-    try std.testing.expectEqual(@as(i128, 100_000_000), result.estimated_total);
-    try std.testing.expectEqual(@as(i128, 120_000_000), result.actual_total);
-    try std.testing.expectEqual(@as(i128, 20_000_000), result.drift_abs);
+    try std.testing.expectEqual(@as(i128, 100_000_000), result.estimated_total_micro);
+    try std.testing.expectEqual(@as(i128, 120_000_000), result.actual_total_micro);
+    try std.testing.expectEqual(@as(i128, 20_000_000), result.drift_absolute_micro);
     try std.testing.expectEqual(@as(i32, 2000), result.drift_bps);
     try std.testing.expectEqual(@as(u64, 2), result.sample_count);
 
@@ -162,7 +162,7 @@ test "End-to-end: Nasty CSV (Quotes, CRLF)" {
     defer result.deinit(allocator);
 
     // 50 + 50 = 100.00 actual vs 100.00 estimated = 0 drift
-    try std.testing.expectEqual(@as(i128, 100_000_000), result.actual_total);
+    try std.testing.expectEqual(@as(i128, 100_000_000), result.actual_total_micro);
     try std.testing.expectEqual(@as(i32, 0), result.drift_bps);
     try std.testing.expectEqual(calibration.Status.ok, result.status);
     try std.testing.expectEqual(@as(u64, 2), result.sample_count);
