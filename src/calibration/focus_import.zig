@@ -11,14 +11,33 @@ pub const FocusRecord = struct {
     ChargeCategory: []const u8,
     ResourceId: []const u8,
 
-    // Extensions
     @"x-llm-model": ?[]const u8 = null,
     @"x-llm-input-tokens": ?u32 = null,
     @"x-llm-output-tokens": ?u32 = null,
     @"x-llm-cache-hit": ?bool = null,
 
+    // v1.2 Optional
+    InvoiceIssuerName: ?[]const u8 = null,
+
     // Optional timestamp (if you add support)
     timestamp: ?i64 = null,
+};
+
+fn stripBom(s: []const u8) []const u8 {
+    // UTF-8 BOM: EF BB BF
+    if (s.len >= 3 and s[0] == 0xEF and s[1] == 0xBB and s[2] == 0xBF) return s[3..];
+    return s;
+}
+
+fn headerEq(name: []const u8, expected: []const u8) bool {
+    const cleaned = std.mem.trim(u8, stripBom(name), " \t\r\n");
+    return std.mem.eql(u8, cleaned, expected);
+}
+
+pub const FocusVersion = enum {
+    unknown,
+    v1_0,
+    v1_2,
 };
 
 pub const ParseError = error{
@@ -42,6 +61,7 @@ pub const FocusParser = struct {
     scratch: std.ArrayList(u8),
 
     col: ColumnIndices,
+    version: FocusVersion = .unknown,
     line_no: u64 = 0,
 
     const ColumnIndices = struct {
@@ -51,6 +71,11 @@ pub const FocusParser = struct {
         UsageUnit: ?usize = null,
         ChargeCategory: ?usize = null,
         ResourceId: ?usize = null,
+        InvoiceIssuerName: ?usize = null,
+
+        // v1.2 signals
+        InvoiceId: ?usize = null,
+        CapacityReservationId: ?usize = null,
 
         @"x-llm-model": ?usize = null,
         @"x-llm-input-tokens": ?usize = null,
@@ -95,10 +120,32 @@ pub const FocusParser = struct {
         var it = CsvFieldIter.init(line, &self.scratch);
 
         var idx: usize = 0;
-        while (try it.next()) |field_raw| : (idx += 1) {
-            const name = trimField(field_raw);
+        var saw_v1_2_signal = false;
 
-            if (std.mem.eql(u8, name, "BilledCost")) self.col.BilledCost = idx else if (std.mem.eql(u8, name, "EffectiveCost")) self.col.EffectiveCost = idx else if (std.mem.eql(u8, name, "UsageQuantity")) self.col.UsageQuantity = idx else if (std.mem.eql(u8, name, "UsageUnit")) self.col.UsageUnit = idx else if (std.mem.eql(u8, name, "ChargeCategory")) self.col.ChargeCategory = idx else if (std.mem.eql(u8, name, "ResourceId")) self.col.ResourceId = idx else if (std.mem.eql(u8, name, "x-llm-model")) self.col.@"x-llm-model" = idx else if (std.mem.eql(u8, name, "x-llm-input-tokens")) self.col.@"x-llm-input-tokens" = idx else if (std.mem.eql(u8, name, "x-llm-output-tokens")) self.col.@"x-llm-output-tokens" = idx else if (std.mem.eql(u8, name, "x-llm-cache-hit")) self.col.@"x-llm-cache-hit" = idx;
+        while (try it.next()) |field_raw| : (idx += 1) {
+            // Note: raw field might contain BOM if it's the first one.
+            // headerEq handles BOM + trimming.
+
+            if (headerEq(field_raw, "BilledCost")) self.col.BilledCost = idx else if (headerEq(field_raw, "EffectiveCost")) self.col.EffectiveCost = idx else if (headerEq(field_raw, "UsageQuantity")) self.col.UsageQuantity = idx else if (headerEq(field_raw, "UsageUnit")) self.col.UsageUnit = idx else if (headerEq(field_raw, "ChargeCategory")) self.col.ChargeCategory = idx else if (headerEq(field_raw, "ResourceId")) self.col.ResourceId = idx else if (headerEq(field_raw, "x-llm-model")) self.col.@"x-llm-model" = idx else if (headerEq(field_raw, "x-llm-input-tokens")) self.col.@"x-llm-input-tokens" = idx else if (headerEq(field_raw, "x-llm-output-tokens")) self.col.@"x-llm-output-tokens" = idx else if (headerEq(field_raw, "x-llm-cache-hit")) self.col.@"x-llm-cache-hit" = idx
+
+                // v1.2 signals
+            else if (headerEq(field_raw, "InvoiceIssuerName")) {
+                self.col.InvoiceIssuerName = idx;
+                saw_v1_2_signal = true;
+            } else if (headerEq(field_raw, "InvoiceId")) {
+                self.col.InvoiceId = idx;
+                saw_v1_2_signal = true;
+            } else if (headerEq(field_raw, "CapacityReservationId")) {
+                self.col.CapacityReservationId = idx;
+                saw_v1_2_signal = true;
+            }
+        }
+
+        // Detect Version
+        if (saw_v1_2_signal) {
+            self.version = .v1_2;
+        } else {
+            self.version = .v1_0;
         }
     }
 
@@ -147,6 +194,8 @@ pub const FocusParser = struct {
                 if (field.len != 0) rec.@"x-llm-output-tokens" = std.fmt.parseInt(u32, field, 10) catch return error.InvalidNumber;
             } else if (self.col.@"x-llm-cache-hit" != null and self.col.@"x-llm-cache-hit".? == idx) {
                 if (field.len != 0) rec.@"x-llm-cache-hit" = parseBool(field) catch return error.InvalidBoolean;
+            } else if (self.col.InvoiceIssuerName != null and self.col.InvoiceIssuerName.? == idx) {
+                if (field.len != 0) rec.InvoiceIssuerName = try ally.dupe(u8, field);
             }
         }
 

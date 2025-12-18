@@ -166,6 +166,21 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_calibration_core_tests.step);
     test_step.dependOn(&run_calibration_integration_tests.step);
 
+    // Hybrid Parser Tests (PR7.2)
+    const test_focus_hybrid = b.addTest(.{
+        .root_source_file = b.path("src/tests/focus_hybrid.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    // Inject dependencies same as calibration core
+    test_focus_hybrid.root_module.addImport("../calibration/types.zig", cal_types);
+    test_focus_hybrid.root_module.addImport("../calibration/key_intern.zig", cal_intern);
+    test_focus_hybrid.root_module.addImport("../calibration/line_reader.zig", cal_lines);
+    test_focus_hybrid.root_module.addImport("../calibration/focus_import.zig", cal_focus);
+
+    const run_focus_hybrid = b.addRunArtifact(test_focus_hybrid);
+    test_step.dependOn(&run_focus_hybrid.step);
+
     // Fuzz/Chaos tests
     const fuzz_tests = b.addTest(.{
         .root_source_file = b.path("src/fuzz_test.zig"),
