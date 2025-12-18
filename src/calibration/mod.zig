@@ -53,7 +53,7 @@ pub const RunOptions = struct {
     error_threshold_bps: u32 = 5000,
     min_samples: u32 = 100,
 
-    max_line_bytes: usize = 10 * 1024 * 1024,
+    max_line_bytes: usize = 64 * 1024,
 };
 
 pub fn run(allocator: std.mem.Allocator, opts: RunOptions, registry: anytype, interner: *key_intern.StringInterner) Error!CalibrationResult {
@@ -139,6 +139,36 @@ fn parseEstimatesFile(allocator: std.mem.Allocator, path: []const u8) !Estimates
     defer parsed.deinit();
 
     if (parsed.value != .object) return error.Bad;
+
+    // Check for "prompts" array (detailed output)
+    if (parsed.value.object.get("prompts")) |p| {
+        if (p == .array) {
+            var total: types.MicroUSD = 0;
+            for (p.array.items) |item| {
+                if (item != .object) continue;
+
+                // Try micros (int) first
+                if (item.object.get("cost_micro_usd")) |micros| {
+                    if (micros == .integer) {
+                        total += @intCast(micros.integer);
+                        continue;
+                    }
+                }
+
+                // Try USD (float/int)
+                if (item.object.get("cost_usd")) |usd| {
+                    const val_f: f64 = switch (usd) {
+                        .float => |fl| fl,
+                        .integer => |i| @floatFromInt(i),
+                        else => 0.0,
+                    };
+                    const m: i128 = @intFromFloat(@round(val_f * 1_000_000.0));
+                    total += m;
+                }
+            }
+            return .{ .estimated_total = total };
+        }
+    }
 
     if (parsed.value.object.get("estimated_total_micro_usd")) |v| {
         if (v == .integer) return .{ .estimated_total = @intCast(v.integer) };
