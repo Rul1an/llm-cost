@@ -9,7 +9,7 @@ pub const Recommendation = struct {
     alternative_model: []const u8,
 
     savings_bps: i32, // -6200 = 62% cheaper
-    monthly_savings: types.MicroUSD, // based on observed spend
+    monthly_savings_micro: types.MicroUSD, // based on observed spend
     rationale: []const u8, // small deterministic string
 
     quality_impact: QualityImpact = .unknown,
@@ -82,12 +82,12 @@ pub fn generate(
             // approx: spend * savings_ratio.
             // Note: savings_bps is positive here (percentage cheaper).
             // Logic: if 50% cheaper, savings is cost * 0.5.
-            const monthly_savings = microMulBps(ms.cost_micro, savings_bps);
+            const monthly_savings_micro = microMulBps(ms.cost_micro, savings_bps);
 
             try cands.append(.{
                 .alt = alt_name,
                 .savings_bps = savings_bps, // positive: 9000 = 90% cheaper
-                .monthly_savings = monthly_savings,
+                .monthly_savings_micro = monthly_savings_micro,
             });
         }
 
@@ -106,7 +106,7 @@ pub fn generate(
                 .current_model = ms.model,
                 .alternative_model = c.alt,
                 .savings_bps = c.savings_bps,
-                .monthly_savings = c.monthly_savings,
+                .monthly_savings_micro = c.monthly_savings_micro,
                 .rationale = rationale,
                 .quality_impact = classifyFamily(ms.model, c.alt),
             });
@@ -130,7 +130,7 @@ const ModelSpend = struct {
 const Candidate = struct {
     alt: []const u8,
     savings_bps: i32,
-    monthly_savings: types.MicroUSD,
+    monthly_savings_micro: types.MicroUSD,
 
     fn bestFirst(_: void, a: Candidate, b: Candidate) bool {
         // a.savings_bps = 5000 (50%). b.savings_bps = 1000 (10%).

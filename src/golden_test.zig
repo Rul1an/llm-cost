@@ -415,6 +415,8 @@ test "v0.10: Estimate JSON Output" {
     try std.testing.expect(std.mem.indexOf(u8, out, "\"prompts\": [") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"resource_id\":\"json-test-txt\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"resource_id_source\":\"path_slug\"") != null);
+    // PR7.1: Check for integer micros
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"cost_micro\":") != null);
 }
 
 test "v1.0: FOCUS Export (Vantage-subset)" {
@@ -520,4 +522,37 @@ test "Contract: 'calibrate' insufficient data -> Exit 3" {
     });
 
     try std.testing.expectEqual(@as(u8, 3), exit_code);
+    try std.testing.expectEqual(@as(u8, 3), exit_code);
+}
+
+test "Contract: 'calibrate --json' produces valid schema" {
+    var env = TestEnv.init(std.testing.allocator);
+    defer env.deinit();
+
+    // est.json with new estimated_total_micro key (input test)
+    try env.write("est.json", "{\"estimated_total_micro\": 1000}");
+    try env.write("act.csv", "BilledCost,UsageQuantity,ResourceId\n0.001000,1,a"); // cost=1000 micro
+
+    var mock = try MockState.init(std.testing.allocator);
+    defer mock.deinit();
+
+    const calibrate_cmd = @import("commands/calibrate.zig");
+    // min-samples 1 to pass
+    const args = [_][]const u8{ "--estimates", "est.json", "--actuals", "act.csv", "--min-samples", "1", "--format", "json" };
+
+    const exit_code = try withTempCwd(std.testing.allocator, env.tmp.dir, calibrate_cmd.run, .{
+        mock.allocator,
+        &args,
+        mock.stdout_buf.writer().any(),
+        mock.stderr_buf.writer().any(),
+    });
+
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+
+    const out = mock.stdout_buf.items;
+    // Inspect JSON
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"estimated_total_micro\":1000") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"actual_total_micro\":1000") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"drift_absolute_micro\":0") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"drift_bps\":0") != null);
 }

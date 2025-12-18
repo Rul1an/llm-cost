@@ -75,8 +75,8 @@ pub fn run(
     const result = calibrate.run(allocator, run_opts, &registry, &interner) catch |err| {
         switch (err) {
             error.InsufficientData => {
-                 try stderr.print("Insufficient Data: {s}\n", .{@errorName(err)});
-                 return ExitCode.insufficient_data.int();
+                try stderr.print("Insufficient Data: {s}\n", .{@errorName(err)});
+                return ExitCode.insufficient_data.int();
             },
             error.InvalidEstimates, error.InvalidActuals, error.MissingColumn => {
                 try stderr.print("Data Error: {s}\n", .{@errorName(err)});
@@ -107,7 +107,7 @@ pub fn run(
     }
     if (result.status == .@"error") {
         // Always exit 2 on error threshold
-         return ExitCode.@"error".int();
+        return ExitCode.@"error".int();
     }
 
     return ExitCode.ok.int();

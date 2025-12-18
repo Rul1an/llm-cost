@@ -12,7 +12,7 @@ pub fn withTempCwd(
     target_dir: std.fs.Dir,
     comptime func: anytype,
     args: anytype,
-) !@typeInfo(@typeInfo(@TypeOf(func)).@"fn".return_type.?).error_union.payload {
+) @TypeOf(@call(.auto, func, args)) {
     const original_cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
     defer allocator.free(original_cwd);
 

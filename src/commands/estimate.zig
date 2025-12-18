@@ -292,6 +292,7 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
             var cost_buf: [32]u8 = undefined;
             const cost_s = try std.fmt.bufPrint(&cost_buf, "{d:.6}", .{Pricing.PriceDef.toUsd(res.cost_micro)});
             try jw.putString("cost_usd", cost_s);
+            try jw.putInt("cost_micro", res.cost_micro);
 
             try jw.write(state.stdout);
 
@@ -310,6 +311,7 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
             var cost_buf: [32]u8 = undefined;
             const cost_s = try std.fmt.bufPrint(&cost_buf, "{d:.6}", .{Pricing.PriceDef.toUsd(total_cost)});
             try jw.putString("total_cost_usd", cost_s);
+            try jw.putInt("total_cost_micro", total_cost);
 
             try jw.write(state.stdout);
         }

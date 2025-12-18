@@ -9,9 +9,9 @@ const recs_mod = @import("recommendations.zig");
 pub const Status = enum { ok, warn, @"error", insufficient_data };
 
 pub const CalibrationResult = struct {
-    estimated_total: types.MicroUSD,
-    actual_total: types.MicroUSD,
-    drift_abs: types.MicroUSD,
+    estimated_total_micro: types.MicroUSD,
+    actual_total_micro: types.MicroUSD,
+    drift_absolute_micro: types.MicroUSD,
     drift_bps: types.BasisPoints,
 
     sample_count: u64,
@@ -106,9 +106,9 @@ pub fn run(allocator: std.mem.Allocator, opts: RunOptions, registry: anytype, in
     };
 
     return .{
-        .estimated_total = est.estimated_total,
-        .actual_total = actual_total,
-        .drift_abs = diff,
+        .estimated_total_micro = est.estimated_total,
+        .actual_total_micro = actual_total,
+        .drift_absolute_micro = diff,
         .drift_bps = drift_bps,
         .sample_count = s.sample_count,
         .days_covered = s.daysCovered(),
@@ -178,6 +178,12 @@ fn parseEstimatesFile(allocator: std.mem.Allocator, path: []const u8) !Estimates
     }
 
     if (parsed.value.object.get("estimated_total_micro_usd")) |v| {
+        if (v == .integer) return .{ .estimated_total = @intCast(v.integer) };
+        return error.Bad;
+    }
+
+    // New format (PR7.1)
+    if (parsed.value.object.get("estimated_total_micro")) |v| {
         if (v == .integer) return .{ .estimated_total = @intCast(v.integer) };
         return error.Bad;
     }
