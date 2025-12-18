@@ -67,36 +67,36 @@ test "Key Interning Lifetime" {
 
 // --- 3. CSV / FocusParser Tests ---
 
-// test "LineReader Carry Correctness" {
-//     const input = "line1";
-//     var fbs = std.io.fixedBufferStream(input);
+test "LineReader Carry Correctness" {
+    // Input: "a\nb\nc" with mix of newlines
+    const input = "a\nb\nc";
+    var fbs = std.io.fixedBufferStream(input);
 
-//     var lr = try line_reader.LineReader.init(std.testing.allocator, fbs.reader(), 1024);
-//     defer lr.deinit();
+    var lr = try line_reader.LineReader.init(std.testing.allocator, fbs.reader(), 1024);
+    defer lr.deinit();
 
-//     const l1 = (try lr.nextLine()).?;
-//     try std.testing.expectEqualStrings("line1", l1);
+    try std.testing.expectEqualStrings("a", (try lr.nextLine()).?);
+    try std.testing.expectEqualStrings("b", (try lr.nextLine()).?);
+    try std.testing.expectEqualStrings("c", (try lr.nextLine()).?);
+    try std.testing.expect((try lr.nextLine()) == null);
+}
 
-//     const l2 = try lr.nextLine();
-//     try std.testing.expect(l2 == null);
-// }
+test "FocusParser Quoted/Escaped" {
+    const csv =
+        \\ResourceId,BilledCost,EffectiveCost,UsageQuantity,UsageUnit,ChargeCategory,x-llm-model,x-tags
+        \\"res,1",100,100,1,req,usage,"model""quoted""", "{""team"":""finops""}"
+    ;
 
-// test "FocusParser Quoted/Escaped" {
-//     const csv =
-//         \\ResourceId,BilledCost,EffectiveCost,UsageQuantity,UsageUnit,ChargeCategory,x-llm-model,x-tags
-//         \\"res,1",100,100,1,req,usage,"model""quoted""", "{""team"":""finops""}"
-//     ;
-//
-//     var fbs = std.io.fixedBufferStream(csv);
-//     var parser = try focus.FocusParser.initFromReader(std.testing.allocator, fbs.reader(), 4096);
-//     defer parser.deinit();
-//
-//     const rec = (try parser.next()).?;
-//     // ResourceId: "res,1" (comma inside quotes)
-//     try std.testing.expectEqualStrings("res,1", rec.ResourceId);
-//
-//     // Model: model"quoted"
-//     try std.testing.expectEqualStrings("model\"quoted\"", rec.@"x-llm-model".?);
-//
-//     // Tags are not in struct yet, but we tested the parser didn't crash on comma inside tags
-// }
+    var fbs = std.io.fixedBufferStream(csv);
+    var parser = try focus.FocusParser.initFromReader(std.testing.allocator, fbs.reader(), 4096);
+    defer parser.deinit();
+
+    const rec = (try parser.next()).?;
+    // ResourceId: "res,1" (comma inside quotes)
+    try std.testing.expectEqualStrings("res,1", rec.ResourceId);
+
+    // Model: model"quoted"
+    try std.testing.expectEqualStrings("model\"quoted\"", rec.@"x-llm-model".?);
+
+    // Tags are not in struct yet, but we tested the parser didn't crash on comma inside tags
+}

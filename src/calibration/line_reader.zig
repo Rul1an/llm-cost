@@ -15,6 +15,10 @@ pub const LineReader = struct {
     allocator: std.mem.Allocator,
     r: std.io.AnyReader,
 
+    // NEW: boxed reader storage + destructor
+    reader_ctx: ?*anyopaque = null,
+    destroy_ctx: ?*const fn (std.mem.Allocator, *anyopaque) void = null,
+
     // Carry buffer for bytes read beyond newline
     carry: []u8,
     carry_len: usize,
@@ -26,14 +30,32 @@ pub const LineReader = struct {
     line_buf: []u8,
     max_line_bytes: usize,
 
+    fn destroyImpl(comptime R: type) *const fn (std.mem.Allocator, *anyopaque) void {
+        return struct {
+            fn f(a: std.mem.Allocator, p: *anyopaque) void {
+                const rp: *R = @ptrCast(@alignCast(p));
+                a.destroy(rp);
+            }
+        }.f;
+    }
+
     pub fn init(
         allocator: std.mem.Allocator,
         reader: anytype,
         max_line_bytes: usize,
     ) !LineReader {
+        const R = @TypeOf(reader);
+        const boxed = try allocator.create(R);
+        errdefer allocator.destroy(boxed);
+        boxed.* = reader;
+
         return .{
             .allocator = allocator,
-            .r = reader.any(),
+            // context points to heap now
+            .r = boxed.any(),
+            .reader_ctx = boxed,
+            .destroy_ctx = destroyImpl(R),
+
             .carry = try allocator.alloc(u8, 8 * 1024),
             .carry_len = 0,
             .chunk = try allocator.alloc(u8, 16 * 1024),
@@ -43,6 +65,9 @@ pub const LineReader = struct {
     }
 
     pub fn deinit(self: *LineReader) void {
+        if (self.reader_ctx) |ctx| {
+            self.destroy_ctx.?(self.allocator, ctx);
+        }
         self.allocator.free(self.carry);
         self.allocator.free(self.chunk);
         self.allocator.free(self.line_buf);

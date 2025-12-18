@@ -109,11 +109,13 @@ pub fn formatMicroUSD(value: MicroUSD, buf: []u8) []const u8 {
 
 /// Compute drift in basis points using integer arithmetic with rounding.
 /// drift_bps = round( (diff / estimated) * 10000 )
-pub fn computeDriftBps(diff: MicroUSD, estimated: MicroUSD) error{InvalidEstimates}!BasisPoints {
+pub fn computeDriftBps(diff: MicroUSD, estimated: MicroUSD) error{InvalidEstimates, SoftwareError}!BasisPoints {
     if (estimated == 0) return error.InvalidEstimates;
 
     // numer = diff * 10000
-    const numer: i128 = diff * 10_000;
+    const numer_res = @mulWithOverflow(diff, 10_000);
+    if (numer_res[1] != 0) return error.SoftwareError; // Or map to existing error
+    const numer: i128 = numer_res[0];
 
     const neg = numer < 0;
     const abs_numer: i128 = if (neg) -numer else numer;

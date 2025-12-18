@@ -35,6 +35,9 @@ pub const FocusParser = struct {
     allocator: std.mem.Allocator,
     lr: LineReader,
 
+    // Per-line arena for string fields
+    arena: std.heap.ArenaAllocator,
+
     // Scratch buffer for unescaped quoted fields (reused)
     scratch: std.ArrayList(u8),
 
@@ -66,6 +69,7 @@ pub const FocusParser = struct {
         var p = FocusParser{
             .allocator = allocator,
             .lr = lr,
+            .arena = std.heap.ArenaAllocator.init(allocator),
             .scratch = std.ArrayList(u8).init(allocator),
             .col = .{},
         };
@@ -86,6 +90,7 @@ pub const FocusParser = struct {
 
     pub fn deinit(self: *FocusParser) void {
         self.lr.deinit();
+        self.arena.deinit();
         self.scratch.deinit();
     }
 
@@ -120,7 +125,11 @@ pub const FocusParser = struct {
     }
 
     /// Read next record. Returns null on EOF.
+    /// Strings in FocusRecord are allocated in internally managed Arena, valid until next call.
     pub fn next(self: *FocusParser) !?FocusRecord {
+        // Reset arena for new line
+        _ = self.arena.reset(.retain_capacity);
+
         const line = (try self.readLineOrNull()) orelse return null;
         self.line_no += 1;
 
@@ -135,6 +144,8 @@ pub const FocusParser = struct {
 
         var it = CsvFieldIter.init(line, &self.scratch);
         var idx: usize = 0;
+        const ally = self.arena.allocator();
+
         while (try it.next()) |field_raw| : (idx += 1) {
             const field = trimField(field_raw);
 
@@ -145,13 +156,13 @@ pub const FocusParser = struct {
             } else if (self.col.UsageQuantity == idx) {
                 rec.UsageQuantity = std.fmt.parseInt(u64, field, 10) catch return error.InvalidNumber;
             } else if (self.col.UsageUnit == idx) {
-                rec.UsageUnit = field;
+                rec.UsageUnit = try ally.dupe(u8, field);
             } else if (self.col.ChargeCategory == idx) {
-                rec.ChargeCategory = field;
+                rec.ChargeCategory = try ally.dupe(u8, field);
             } else if (self.col.ResourceId == idx) {
-                rec.ResourceId = field;
+                rec.ResourceId = try ally.dupe(u8, field);
             } else if (self.col.@"x-llm-model" != null and self.col.@"x-llm-model".? == idx) {
-                if (field.len != 0) rec.@"x-llm-model" = field;
+                if (field.len != 0) rec.@"x-llm-model" = try ally.dupe(u8, field);
             } else if (self.col.@"x-llm-input-tokens" != null and self.col.@"x-llm-input-tokens".? == idx) {
                 if (field.len != 0) rec.@"x-llm-input-tokens" = std.fmt.parseInt(u32, field, 10) catch return error.InvalidNumber;
             } else if (self.col.@"x-llm-output-tokens" != null and self.col.@"x-llm-output-tokens".? == idx) {
