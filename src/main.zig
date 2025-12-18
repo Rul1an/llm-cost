@@ -129,7 +129,8 @@ pub fn main() !void {
     } else if (std.mem.eql(u8, command, "verify")) {
         try verify_cmd.run(state.allocator, args[2..], state.stdout, state.stderr);
     } else if (std.mem.eql(u8, command, "calibrate")) {
-        const exit_code = try calibrate_cmd.run(state.allocator, args[2..], state.registry, state.stdout, state.stderr);
+        const cmd_calibrate = @import("commands/calibrate.zig");
+        const exit_code = try cmd_calibrate.run(state.allocator, args[2..], state.stdout, state.stderr);
         if (exit_code != 0) std.process.exit(@intCast(exit_code));
     } else if (std.mem.eql(u8, command, "upgrade")) {
         const exit_code = try upgrade_cmd.run(state.allocator, args[2..]);
