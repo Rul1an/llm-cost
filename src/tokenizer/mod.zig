@@ -1,13 +1,10 @@
-pub const generic = @import("generic.zig");
 pub const openai = @import("openai.zig");
-pub const OpenAITokenizer = openai.OpenAITokenizer; // Expose directly
 pub const registry = @import("registry.zig");
-pub const EncodingSpec = registry.EncodingSpec; // Expose directly
-pub const model_registry = @import("model_registry.zig");
+pub const bpe = @import("bpe_v2_1.zig");
+pub const Cl100kScanner = @import("cl100k_scanner.zig").Cl100kScanner;
+pub const O200kScanner = @import("o200k_scanner.zig").O200kScanner;
 pub const pre_tokenizer = @import("pre_tokenizer.zig");
-pub const bpe_v2 = @import("bpe_v2.zig");
-pub const bpe_v2_1 = @import("bpe_v2_1.zig");
-pub const bpe_legacy = @import("bpe.zig");
-pub const o200k_scanner = @import("o200k_scanner.zig");
-pub const cl100k_scanner = @import("cl100k_scanner.zig");
-pub const vocab_loader = @import("vocab_loader.zig");
+// Re-export specific types for compatibility with bench_suite.zig
+pub const OpenAITokenizer = openai.OpenAITokenizer;
+// Re-export model_registry for fuzz_test.zig
+pub const model_registry = @import("model_registry.zig");

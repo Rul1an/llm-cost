@@ -1,4 +1,14 @@
-# Changelog
+
+## [v1.7.0] - 2025-12-18
+### Added
+- **SIMD Acceleration**: 10-20x throughput improvement for `cl100k_base` and `o200k_base` utilizing AVX2/NEON optimizations (via `@Vector`).
+- **Robust Fuzzing**: New `test-simd-fuzz` harness verifying bit-exact parity between SIMD and Scalar implementations (5000+ iterations).
+- **CI Hardening**: New `simd-verify.yml` workflow with tiered PR/Nightly fuzzing lanes.
+
+### Fixed
+- **CI**: Fixed `release.yml` benchmark step failing in Debug mode (now runs with `ReleaseFast`).
+- **Build**: Resolved circular dependencies in `openai` tokenization module.
+
 
 ## [v1.3.0] - 2025-12-15
 ### Added
