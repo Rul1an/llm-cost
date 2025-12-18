@@ -17,7 +17,7 @@ jobs:
       - name: Setup Zig
         uses: goto-bus-stop/setup-zig@v2
         with:
-          version: 0.13.0 # Or 0.14.0-dev matching project version
+          version: 0.14.0 # Matching project version
 
       - name: Build and Test
         run: |

@@ -489,16 +489,11 @@ test "Contract: 'calibrate' respects CLI contract" {
     const exit_missing = try calibrate_cmd.run(mock.allocator, &args_missing, mock.stdout_buf.writer().any(), mock.stderr_buf.writer().any());
     try std.testing.expectEqual(@as(u8, 64), exit_missing);
 
-    // 2. Valid Args, Stub Fail -> Exit 65 (Data)
-    // Stub currently returns .ok (exit 0) if args invoke run() successfully.
-    // Wait, stub implementation in mod.zig returns .ok?
-    // Let's check mod.zig...
-    // Yes, stub returns .ok. So with valid args, it should return 0.
+    // 2. Valid Args, Missing Files -> Exit 65 (Data Error)
+    // "e.json" does not exist, so parseEstimatesFile returns InvalidEstimates (mapped to 65).
     const args_ok = [_][]const u8{ "--estimates", "e.json", "--actuals", "a.csv" };
     const exit_ok = try calibrate_cmd.run(mock.allocator, &args_ok, mock.stdout_buf.writer().any(), mock.stderr_buf.writer().any());
-    try std.testing.expectEqual(@as(u8, 0), exit_ok);
+    try std.testing.expectEqual(@as(u8, 65), exit_ok);
 
-    // 3. Format Output
-    const out = mock.stdout_buf.items;
-    try std.testing.expect(std.mem.indexOf(u8, out, "Calibration stub output") != null);
+    // Stub output check removed.
 }

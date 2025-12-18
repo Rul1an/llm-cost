@@ -2,9 +2,11 @@ const std = @import("std");
 const tok = @import("tokenizer");
 const Cl100kScanner = tok.Cl100kScanner;
 const pre_tokenizer = tok.pre_tokenizer;
-// We assume vector width is 32 (AVX2/Neon common case),
+const builtin = @import("builtin");
+
+// We assume vector width is 32 (AVX2/common) or 16 (Neon),
 // but even if slightly off, we check a range around it.
-const LANES = 32;
+const LANES = if (builtin.cpu.arch.isAarch64()) 16 else 32;
 
 test "Deep Verification: SIMD Boundary Traps" {
     const allocator = std.testing.allocator;
@@ -52,7 +54,7 @@ test "Deep Verification: SIMD Boundary Traps" {
     var buf: [512]u8 = undefined;
 
     // We scan around boundaries: 0..[2 * LANES + 16]
-    inline for (0..(2 * LANES + 16)) |off| {
+    for (0..(2 * LANES + 16)) |off| {
         for (patterns) |p| {
             // Fill background with noise to detect over-reads
             @memset(&buf, 'x');

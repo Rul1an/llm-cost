@@ -96,8 +96,8 @@ pub fn run(
 
 fn parseArgs(args: []const []const u8, stderr: anytype) !CliOptions {
     var opts = CliOptions{
-        .estimates_path = "",
-        .actuals_path = "",
+        .estimates_path = null,
+        .actuals_path = null,
     };
 
     var i: usize = 0;
@@ -130,7 +130,7 @@ fn parseArgs(args: []const []const u8, stderr: anytype) !CliOptions {
     if (opts.estimates_path == null or opts.actuals_path == null) {
         try stderr.print("Error: --estimates and --actuals are required.\n", .{});
         try printUsage(stderr);
-        return error.InvalidArgs;
+        return error.InvalidArgs; // Setup catch in run() handles this as usage_error (64)
     }
 
     return opts;

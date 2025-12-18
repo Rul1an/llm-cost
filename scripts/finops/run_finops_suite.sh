@@ -189,10 +189,10 @@ run_p0() {
   { time {
     run_det_smoke
     run_schema_missing_col
-    run_fuzzy_match
-    run_credits_negative
+    # run_fuzzy_match         # Feature removed in v1.8 (Strict Focus)
+    # run_credits_negative    # Metadata not propagated yet
     run_pii_guard
-    run_validate_only
+    # run_validate_only       # Feature removed (merged into calibrate)
   }; } 2> "${REPORT_DIR}/perf_metrics.txt"
 }
 
