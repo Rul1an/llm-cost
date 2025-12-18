@@ -117,15 +117,15 @@ pub const Cl100kScanner = struct {
 
                         // If valid, apply Branch 5 (End at newline) priority
                         if (valid) {
-                            // Priority Check: Branch 2 (Word) and Branch 4 (Punctuation) allow a leading space.
+                            // Priority Check: Branch 1 (contractions), Branch 2 (words), and Branch 4 (punctuation /
+                            // other non-whitespace/non-letter/non-number chars) can all follow a single leading space.
                             // Branch 7 (\s+) has lower priority.
                             // If we matched exactly 1 char (e.g. ' '), and the NEXT char is NOT a Digit,
-                            // then it might be a Word or Punctuation token starting with space.
-                            // (Digits \p{N} do not allow space prefix).
-                            // We must yield to the scalar/regex fallback to be safe.
+                            // then it might be a contraction, word, punctuation token, or other Branch 4 match
+                            // starting with a space (digits \p{N} do not allow a space prefix).
+                            // We must yield to the scalar/regex fallback in all such non-digit cases to be safe.
                             if (len == 1 and len < remainder.len) {
-                                const c0 = remainder[0];
-                                if (c0 != '\r' and c0 != '\n') {
+                                if (c != '\r' and c != '\n') {
                                     const next = remainder[len];
                                     // Check if next is a Digit (safe to split)
                                     var next_is_digit = false;
