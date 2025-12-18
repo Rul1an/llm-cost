@@ -117,6 +117,30 @@ pub const Cl100kScanner = struct {
 
                         // If valid, apply Branch 5 (End at newline) priority
                         if (valid) {
+                            // Priority Check: Branch 2 (Word) and Branch 4 (Punctuation) allow a leading space.
+                            // Branch 7 (\s+) has lower priority.
+                            // If we matched exactly 1 char (e.g. ' '), and the NEXT char is NOT a Digit,
+                            // then it might be a Word or Punctuation token starting with space.
+                            // (Digits \p{N} do not allow space prefix).
+                            // We must yield to the scalar/regex fallback to be safe.
+                            if (len == 1 and len < remainder.len) {
+                                const c0 = remainder[0];
+                                if (c0 != '\r' and c0 != '\n') {
+                                    const next = remainder[len];
+                                    // Check if next is a Digit (safe to split)
+                                    var next_is_digit = false;
+                                    if (next < 0x80 and ASCII_CLASSES[next] == .Digit) {
+                                        next_is_digit = true;
+                                    }
+
+                                    if (!next_is_digit) {
+                                        valid = false;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (valid) {
                             if (found_newline) {
                                 // Branch 5: \s*[\r\n]
                                 // Yield up to and including last newline
