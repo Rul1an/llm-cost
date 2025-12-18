@@ -154,6 +154,13 @@ fn parseEstimatesFile(allocator: std.mem.Allocator, path: []const u8) !Estimates
                         continue;
                     }
                 }
+                // Legacy key
+                if (item.object.get("cost_micro")) |micros| {
+                    if (micros == .integer) {
+                        total += @intCast(micros.integer);
+                        continue;
+                    }
+                }
 
                 // Try USD (float/int)
                 if (item.object.get("cost_usd")) |usd| {
