@@ -6,7 +6,7 @@ pub const ExitCode = enum(u8) {
     usage_error = 64,
     data_error = 65,
     software_error = 70,
-    io_error = 74,
+    software_error = 70,
 
     pub fn int(self: ExitCode) u8 {
         return @intFromEnum(self);
@@ -44,7 +44,7 @@ pub fn run(
                 try stderr.print("Data Error: {s}\n", .{@errorName(err)});
                 return ExitCode.data_error.int();
             },
-            error.IoError => return ExitCode.io_error.int(),
+            error.IoError => return ExitCode.software_error.int(),
             error.OutOfMemory => return ExitCode.software_error.int(),
             else => {
                 try stderr.print("Unexpected Error: {s}\n", .{@errorName(err)});
@@ -92,14 +92,16 @@ fn parseArgs(args: []const []const u8, stderr: anytype) !CliOptions {
             const fmt = args[i + 1];
             if (std.mem.eql(u8, fmt, "json")) opts.format = .json
             else if (std.mem.eql(u8, fmt, "toml")) opts.format = .toml
-            else opts.format = .table;
+            else if (std.mem.eql(u8, fmt, "table")) opts.format = .table
+            else return error.InvalidArgValue;
             i += 1;
         } else if (std.mem.eql(u8, arg, "--fail-on-drift")) {
             if (i + 1 >= args.len) return error.MissingArg;
             const val = args[i + 1];
             if (std.mem.eql(u8, val, "warn")) opts.fail_on_drift = .warn
             else if (std.mem.eql(u8, val, "error")) opts.fail_on_drift = .@"error"
-            else opts.fail_on_drift = .never;
+            else if (std.mem.eql(u8, val, "never")) opts.fail_on_drift = .never
+            else return error.InvalidArgValue;
             i += 1;
         }
     }

@@ -118,10 +118,35 @@ pub fn build(b: *std.Build) void {
     });
     const run_determinism_tests = b.addRunArtifact(determinism_tests);
 
+    const test_calibration_core = b.addTest(.{
+        .root_source_file = b.path("src/tests/calibration_core.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    // Expose calibration modules to test
+    const cal_types = b.createModule(.{ .root_source_file = b.path("src/calibration/types.zig") });
+    const cal_intern = b.createModule(.{ .root_source_file = b.path("src/calibration/key_intern.zig") });
+    const cal_lines = b.createModule(.{ .root_source_file = b.path("src/calibration/line_reader.zig") });
+
+    // focus_import depends on types + lines
+    const cal_focus = b.createModule(.{
+        .root_source_file = b.path("src/calibration/focus_import.zig"),
+    });
+    cal_focus.addImport("types.zig", cal_types);
+    cal_focus.addImport("line_reader.zig", cal_lines);
+
+    test_calibration_core.root_module.addImport("../calibration/types.zig", cal_types);
+    test_calibration_core.root_module.addImport("../calibration/key_intern.zig", cal_intern);
+    test_calibration_core.root_module.addImport("../calibration/line_reader.zig", cal_lines);
+    test_calibration_core.root_module.addImport("../calibration/focus_import.zig", cal_focus);
+
+    const run_calibration_core_tests = b.addRunArtifact(test_calibration_core);
+
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_security_tests.step);
     test_step.dependOn(&run_determinism_tests.step);
+    test_step.dependOn(&run_calibration_core_tests.step);
 
     // Fuzz/Chaos tests
     const fuzz_tests = b.addTest(.{
