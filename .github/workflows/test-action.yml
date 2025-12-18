@@ -1,0 +1,14 @@
+name: Test llm-cost action
+on: [pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Rul1an/llm-cost@v1
+        with:
+          budget: "100.00"
