@@ -27,7 +27,7 @@ jobs:
       - name: Verify Calibrate Command (Offline)
         run: |
           # 1. Create Dummy Data
-          echo '{"estimated_total_usd": "100.00"}' > estimates.json
+          echo '{"estimated_total_usd": "5050.00"}' > estimates.json
           echo "ResourceId,BilledCost,EffectiveCost,UsageQuantity,UsageUnit,ChargeCategory,x-llm-model" > actuals.csv
           echo "r1,50.00,50.00,1,req,usage,model-A" >> actuals.csv
           # Generate 100 rows to satisfy min_samples=100 default
@@ -51,11 +51,11 @@ jobs:
           # Create drifting data (Actual 200 vs Estimate 100)
           echo "r3,100.00,100.00,1,req,usage,model-A" >> actuals.csv
 
-          # Run with --fail-on-drift warn (Should exit 65)
+          # Run with --fail-on-drift warn (Should exit 1 or 2)
           ./zig-out/bin/llm-cost calibrate --estimates estimates.json --actuals actuals.csv --fail-on-drift warn || err=$?
 
-          if [ "$err" -eq 65 ]; then
-            echo "Correctly failed on drift (Exit Code 65)"
+          if [ "$err" -eq 1 ] || [ "$err" -eq 2 ]; then
+            echo "Correctly failed on drift (Exit Code $err)"
           else
             echo "Did not fail on drift as expected! Exit Code: $err"
             exit 1

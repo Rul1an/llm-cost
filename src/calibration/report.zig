@@ -29,6 +29,7 @@ fn table(r: mod.CalibrationResult, w: anytype) !void {
         types.formatMicroUSD(r.estimated_total_micro, &b1),
         types.formatMicroUSD(r.actual_total_micro, &b2),
         types.formatMicroUSD(r.drift_absolute_micro, &b3),
+
         r.drift_bps,
         r.sample_count,
         @tagName(r.status),
@@ -37,14 +38,14 @@ fn table(r: mod.CalibrationResult, w: anytype) !void {
     if (r.recommendations.len != 0) {
         try w.print("\nCost Optimization Opportunities\n", .{});
         for (r.recommendations) |rec| {
-            var buf: [48]u8 = undefined;
+            var buf2: [48]u8 = undefined;
             try w.print(
                 "- {s} -> {s}: {d} bps, save {s}\n  {s}\n",
                 .{
                     rec.current_model,
                     rec.alternative_model,
                     rec.savings_bps,
-                    types.formatMicroUSD(rec.monthly_savings_micro, &buf),
+                    types.formatMicroUSD(rec.monthly_savings_micro, &buf2),
                     rec.rationale,
                 },
             );
@@ -54,10 +55,6 @@ fn table(r: mod.CalibrationResult, w: anytype) !void {
 
 fn json(r: mod.CalibrationResult, w: anytype) !void {
     // Strict deterministic JSON: money as integer micros.
-    // var b1: [48]u8 = undefined; // unused
-    // var b2: [48]u8 = undefined; // unused
-    // var b3: [48]u8 = undefined; // unused
-
     try w.print(
         \\{{"estimated_total_micro":{d},"actual_total_micro":{d},"drift_absolute_micro":{d},"drift_bps":{d},"sample_count":{d},"status":"{s}"
     , .{

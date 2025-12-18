@@ -522,7 +522,6 @@ test "Contract: 'calibrate' insufficient data -> Exit 3" {
     });
 
     try std.testing.expectEqual(@as(u8, 3), exit_code);
-    try std.testing.expectEqual(@as(u8, 3), exit_code);
 }
 
 test "Contract: 'calibrate --json' produces valid schema" {

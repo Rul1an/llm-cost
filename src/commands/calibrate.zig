@@ -94,15 +94,7 @@ pub fn run(
 
     // Business Logic Exit Codes
     if (result.status == .warn) {
-        if (opts.fail_on_drift == .warn or opts.fail_on_drift == .@"error") {
-            // If requested to fail, we exit 1
-            return ExitCode.warn.int();
-        }
-        // If not failing, pass OK (0) or WARN (1)?
-        // PR7.0 spec says 1 is WARN.
-        // Usually, CLI tools return 0 unless fatal.
-        // But spec says "Exit 1: Warning threshold exceeded".
-        // Let's adhere to spec:
+        // PR7.0 spec says 1 is WARN ("Exit 1: Warning threshold exceeded").
         return ExitCode.warn.int();
     }
     if (result.status == .@"error") {
@@ -166,7 +158,7 @@ fn printUsage(w: anytype) !void {
         \\
         \\Options:
         \\  --format <json|table|toml>    Output format (default: table)
-        \\  --fail-on-drift <warn|error>  Exit 65 if drift detected (default: never)
+        \\  --fail-on-drift <warn|error>  Exit 1/2 if drift detected (default: never)
         \\  --min-samples <INT>           Minimum samples required (default: 100)
         \\
     , .{});

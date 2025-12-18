@@ -134,7 +134,6 @@ run_unicode_resource_ids() {
   local out
   out="$("${BIN}" calibrate --format toml --min-samples 1 --estimates "${est}" --actuals "${act}" 2>&1)" || true
   echo "${out}" > "${REPORT_DIR}/p1_unicode.toml"
-  echo "${out}" > "${REPORT_DIR}/p1_unicode.toml"
   # Check minimal crash resistance + consistent drift (889 bps)
   # Note: detailed unicode output suppressed because unknown models have no recommendations.
   assert_contains "$(cat "${REPORT_DIR}/p1_unicode.toml")" "drift_bps = 889"
