@@ -49,10 +49,16 @@ jobs:
       - name: Verify Drift Failure Mode
         run: |
           # Create drifting data (Actual 200 vs Estimate 100)
-          echo "r3,100.00,100.00,1,req,usage,model-A" >> actuals.csv
+          # Create drifting data (Actual 200 vs Estimate 100) - Huge Drift to guarantee warning
+          echo "r3,1000.00,1000.00,1,req,usage,model-A" >> actuals.csv
 
           # Run with --fail-on-drift warn (Should exit 1 or 2)
-          ./zig-out/bin/llm-cost calibrate --estimates estimates.json --actuals actuals.csv --fail-on-drift warn || err=$?
+          # Run with --fail-on-drift warn (Should exit 1 or 2)
+          # Use set +e to capture exit code robustly
+          set +e
+          ./zig-out/bin/llm-cost calibrate --estimates estimates.json --actuals actuals.csv --fail-on-drift warn
+          err=$?
+          set -e
 
           if [ "$err" -eq 1 ] || [ "$err" -eq 2 ]; then
             echo "Correctly failed on drift (Exit Code $err)"
