@@ -127,6 +127,78 @@ pub fn main() !void {
             });
         }
     }
+
+    // 4. Sort Records (Determistically: Hash, then ID)
+    const sort = struct {
+        fn lessThan(_: void, lhs: Record, rhs: Record) bool {
+            if (lhs.hash < rhs.hash) return true;
+            if (lhs.hash > rhs.hash) return false;
+            return std.mem.order(u8, lhs.model_id, rhs.model_id) == .lt;
+        }
+    };
+    std.mem.sort(Record, records.items, {}, sort.lessThan);
+
+    // 5. Build String Table (Deduplicated)
+    var string_table = std.ArrayList(u8).init(allocator);
+    defer string_table.deinit();
+    var string_map = std.StringHashMap(u32).init(allocator);
+    defer string_map.deinit();
+
+    // Pre-calculate File Start Offset for String Table
+    // Header (64) + Records (N * 64)
+    const records_data_size = records.items.len * binary_fmt.RECORD_SIZE;
+    const string_table_base_offset: u32 = @intCast(binary_fmt.HEADER_SIZE + records_data_size);
+
+    // Collect unique strings
+    var unique_strings = std.StringHashMap(void).init(allocator);
+    defer unique_strings.deinit();
+
+    for (records.items) |rec| {
+        try unique_strings.put(rec.model_id, {});
+        try unique_strings.put(rec.provider, {});
+    }
+
+    // Sort strings
+    var sorted_strings = std.ArrayList([]const u8).init(allocator);
+    defer sorted_strings.deinit();
+    var u_it = unique_strings.iterator();
+    while (u_it.next()) |entry| {
+        try sorted_strings.append(entry.key_ptr.*);
+    }
+    std.mem.sort([]const u8, sorted_strings.items, {}, struct {
+        fn lt(_: void, l: []const u8, r: []const u8) bool {
+            return std.mem.order(u8, l, r) == .lt;
+        }
+    }.lt);
+
+    // Now build table and map
+    for (sorted_strings.items) |s| {
+        const offset: u32 = string_table_base_offset + @as(u32, @intCast(string_table.items.len));
+        try string_table.appendSlice(s);
+        try string_table.append(0);
+        try string_map.put(s, offset);
+    }
+
+    // Assign offsets to records
+    for (records.items) |*rec| {
+        rec.model_off = string_map.get(rec.model_id).?;
+        rec.prov_off = string_map.get(rec.provider).?;
+    }
+
+    // 6. Write File (Explicit LE)
+    const out_file = try std.fs.cwd().createFile(output_path, .{});
+    defer out_file.close();
+    var writer = out_file.writer();
+
+    // Header
+    try writer.writeAll(binary_fmt.MAGIC); // 4
+    try writer.writeInt(u32, binary_fmt.VERSION, .little); // 4
+    try writer.writeInt(u64, @intCast(std.time.timestamp()), .little); // 8
+    try writer.writeInt(u32, @intCast(records.items.len), .little); // 4
+    try writer.writeInt(u32, string_table_base_offset, .little); // 4
+    try writer.writeInt(u64, source_checksum, .little); // 8
+    try writer.writeByteNTimes(0, 32); // Padding to 64
+
     // Records
     var zeroes: [64]u8 = undefined;
     @memset(&zeroes, 0);
