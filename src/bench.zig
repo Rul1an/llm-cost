@@ -121,7 +121,7 @@ pub fn runBenchmark(
 ) !BenchmarkResult {
     // Allocate space for latency measurements
     var latencies = try std.ArrayList(u64).initCapacity(allocator, config.iterations);
-    defer latencies.deinit(allocator);
+    defer latencies.deinit();
 
     // Warmup phase - don't measure
     for (0..config.warmup_iterations) |_| {
@@ -147,6 +147,55 @@ pub fn runBenchmark(
     // Sort latencies for percentile calculation
     std.mem.sort(u64, latencies.items, {}, std.sort.asc(u64));
 
+    const mean = total_ns / config.iterations;
+
+    return BenchmarkResult{
+        .name = config.name,
+        .encoding = config.encoding,
+        .input_bytes = input.len,
+        .iterations = config.iterations,
+        .total_ns = total_ns,
+        .min_ns = latencies.items[0],
+        .max_ns = latencies.items[latencies.items.len - 1],
+        .mean_ns = mean,
+        .stddev_ns = calculateStdDev(latencies.items, mean),
+        .p50_ns = percentile(latencies.items, 50),
+        .p95_ns = percentile(latencies.items, 95),
+        .p99_ns = percentile(latencies.items, 99),
+    };
+}
+
+/// Run a generic benchmark with context
+pub fn runGenericBenchmark(
+    allocator: std.mem.Allocator,
+    config: BenchmarkConfig,
+    input: []const u8,
+    context: anytype,
+    func: fn (@TypeOf(context), []const u8) anyerror!void,
+) !BenchmarkResult {
+    // Allocate space for latency measurements
+    var latencies = try std.ArrayList(u64).initCapacity(allocator, config.iterations);
+    defer latencies.deinit();
+
+    // Warmup phase
+    for (0..config.warmup_iterations) |_| {
+        try func(context, input);
+    }
+
+    // Benchmark phase
+    var total_ns: u64 = 0;
+
+    for (0..config.iterations) |_| {
+        var timer = try std.time.Timer.start();
+        try func(context, input);
+        const elapsed = timer.read();
+
+        total_ns += elapsed;
+        try latencies.append(elapsed);
+    }
+
+    // Sort latencies
+    std.mem.sort(u64, latencies.items, {}, std.sort.asc(u64));
     const mean = total_ns / config.iterations;
 
     return BenchmarkResult{

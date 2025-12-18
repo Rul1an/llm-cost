@@ -2,10 +2,21 @@ const std = @import("std");
 const pre_tokenizer = @import("pre_tokenizer.zig");
 const unicode = @import("unicode_tables.zig");
 const SafeUtf8Iterator = @import("utf8.zig").SafeUtf8Iterator;
+const simd_skip = @import("simd_skip.zig");
 
 /// A specialized pre-tokenizer for 'o200k_base' that mimics the regex logic.
 /// See `docs/o200k_pre_tokenizer.md` for branch definitions.
 pub const O200kScanner = struct {
+    pub const ScanMode = enum { auto, scalar, simd };
+    threadlocal var g_mode: ScanMode = .auto;
+
+    pub fn setScanMode(mode: ScanMode) void {
+        g_mode = mode;
+    }
+
+    pub fn getScanMode() ScanMode {
+        return g_mode;
+    }
     /// Main tokenization loop matching regex priority.
     /// Main tokenization loop matching regex priority.
     pub fn tokenize(_: *anyopaque, text: []const u8, handler_ctx: *anyopaque, handler: pre_tokenizer.TokenHandler) !void {
@@ -100,6 +111,16 @@ pub const O200kScanner = struct {
         var upper_end_candidate: usize = start_body_idx;
         var last_upper_i: usize = start_body_idx;
 
+        // SIMD: Skip Upper bulk
+        if (g_mode != .scalar) {
+            if (upper_it.i < slice.len) {
+                const skip = simd_skip.skip_upper_ascii(slice[upper_it.i..]);
+                upper_it.i += skip;
+                upper_end_candidate = upper_it.i;
+                last_upper_i = upper_it.i;
+            }
+        }
+
         while (upper_it.nextCodepoint()) |c| {
             if (isWordUpperBody(c)) {
                 upper_end_candidate = upper_it.i;
@@ -117,6 +138,21 @@ pub const O200kScanner = struct {
             var has_lower = false;
 
             var last_lower_i: usize = current_upper_end;
+
+            // SIMD: Skip Lower bulk
+            if (g_mode != .scalar) {
+                if (lower_it.i < slice.len) {
+                    const skip = simd_skip.skip_lower_ascii(slice[lower_it.i..]);
+                    // If we skipped, we found Lower match!
+                    if (skip > 0) {
+                        has_lower = true;
+                        lower_it.i += skip;
+                        lower_matched_len = lower_it.i;
+                        last_lower_i = lower_it.i;
+                    }
+                }
+            }
+
             while (lower_it.nextCodepoint()) |c_low| {
                 if (isWordLowerBody(c_low)) {
                     has_lower = true;
@@ -161,6 +197,19 @@ pub const O200kScanner = struct {
 
         var body_end_idx = it.i;
         var prev_i = it.i;
+
+        // SIMD: Skip Upper bulk
+        if (g_mode != .scalar) {
+            if (it.i < slice.len) {
+                const skip = simd_skip.skip_upper_ascii(slice[it.i..]);
+                if (skip > 0) {
+                    it.i += skip;
+                    body_end_idx = it.i;
+                    prev_i = it.i;
+                }
+            }
+        }
+
         while (it.nextCodepoint()) |c| {
             if (isWordUpperBody(c)) {
                 body_end_idx = it.i;

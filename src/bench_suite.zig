@@ -82,10 +82,80 @@ pub fn main() !void {
 
     // Run benchmarks based on format
     switch (args.format) {
-        .text => try runTextBenchmarks(allocator, writer, test_data, args),
+        .text => {
+            try runScannerBenchmarks(allocator, writer, test_data);
+            try runTextBenchmarks(allocator, writer, test_data, args);
+        },
         .json => try runJsonBenchmarks(allocator, writer, test_data, args),
         .markdown => try runMarkdownBenchmarks(allocator, writer, test_data, args),
     }
+}
+
+const PreTokenizer = @import("tokenizer/pre_tokenizer.zig").PreTokenizer;
+const PreToken = @import("tokenizer/pre_tokenizer.zig").PreToken;
+
+const ScannerContext = struct {
+    pt: PreTokenizer,
+    total_tokens: usize = 0,
+};
+
+fn scanner_noop_handler(ctx: *anyopaque, _: PreToken) anyerror!void {
+    const self: *ScannerContext = @ptrCast(@alignCast(ctx));
+    self.total_tokens +%= 1;
+    std.mem.doNotOptimizeAway(self.total_tokens);
+}
+
+fn runScannerFn(ctx: *ScannerContext, input: []const u8) !void {
+    try ctx.pt.tokenize(input, ctx, scanner_noop_handler);
+}
+
+fn runScannerBenchmarks(
+    allocator: std.mem.Allocator,
+    writer: anytype,
+    data: TestData,
+) !void {
+    try writer.print("\n=== Scanner Only Benchmarks (Micro) ===\n", .{});
+
+    // We use cl100k_base scanner for now (AVX optimization target)
+    const Scanner = @import("tokenizer/cl100k_scanner.zig").Cl100kScanner;
+    const pt = Scanner.interface();
+    var ctx = ScannerContext{ .pt = pt };
+
+    // 1. Pure ASCII Run
+    {
+        const result = try bench.runGenericBenchmark(
+            allocator,
+            .{
+                .name = "scan_ascii",
+                .encoding = "cl100k",
+                .iterations = 200, // Fast
+                .warmup_iterations = 20,
+            },
+            data.ascii_train,
+            &ctx,
+            runScannerFn,
+        );
+        try result.format(writer);
+    }
+
+    // 2. Mixed UTF-8
+    {
+        const result = try bench.runGenericBenchmark(
+            allocator,
+            .{
+                .name = "scan_mixed",
+                .encoding = "cl100k",
+                .iterations = 200,
+                .warmup_iterations = 20,
+            },
+            data.mixed_train,
+            &ctx,
+            runScannerFn,
+        );
+        try result.format(writer);
+    }
+
+    try writer.print("\n=== End-to-End Benchmarks ===\n", .{});
 }
 
 const TestData = struct {
@@ -94,6 +164,8 @@ const TestData = struct {
     large: []const u8, // ~1 MB
     macro: []const u8, // Real corpus (aggregated)
     pathological: []const u8, // worst-case input
+    ascii_train: []const u8, // 1MB pure ASCII
+    mixed_train: []const u8, // 1MB mixed UTF-8
 };
 
 fn loadTestData(allocator: std.mem.Allocator) !TestData {
@@ -115,12 +187,20 @@ fn loadTestData(allocator: std.mem.Allocator) !TestData {
     const macro = loadCorpus(allocator, "test/golden/corpus_v2.jsonl") catch
         try generateText(allocator, 5 * 1024 * 1024); // Fallback: 5MB synthetic
 
+    // Scanner Bench Data
+    const ascii_train = try allocator.alloc(u8, 1024 * 1024); // 1MB Pure ASCII
+    @memset(ascii_train, 'a');
+
+    const mixed_train = try generateMixedUtf8(allocator, 1024 * 1024); // 1MB Mixed
+
     return TestData{
         .small = small,
         .medium = medium,
         .large = large,
         .macro = macro,
         .pathological = pathological,
+        .ascii_train = ascii_train,
+        .mixed_train = mixed_train,
     };
 }
 
@@ -132,6 +212,29 @@ fn loadFile(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
     const size = @min(stat.size, 10 * 1024 * 1024); // Max 10MB
 
     return try file.readToEndAlloc(allocator, size);
+}
+
+fn generateMixedUtf8(allocator: std.mem.Allocator, size: usize) ![]u8 {
+    var buffer = try allocator.alloc(u8, size);
+
+    // 50% ASCII, 50% Multi-byte
+    const utf8_samples = [_][]const u8{
+        "a", "b", "c", " ", "\n", // ASCII
+        "é", "ß", "€", "👍", "世", // UTF-8
+    };
+
+    var i: usize = 0;
+    var sample_idx: usize = 0;
+
+    while (i < size) {
+        const sample = utf8_samples[sample_idx % utf8_samples.len];
+        sample_idx += 1;
+
+        if (i + sample.len > size) break;
+        @memcpy(buffer[i..][0..sample.len], sample);
+        i += sample.len;
+    }
+    return buffer;
 }
 
 fn generateText(allocator: std.mem.Allocator, size: usize) ![]u8 {

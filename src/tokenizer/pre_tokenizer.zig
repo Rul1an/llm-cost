@@ -5,6 +5,12 @@ pub const PreToken = struct {
     is_special: bool = false,
 };
 
+pub const BpeVersion = enum {
+    legacy, // Not really used in V2 engine, but for context
+    v2, // Current Heap BPE (Text-based)
+    v2_1, // Optimized Index+Heap BPE (Token-based)
+};
+
 /// Function pointer type for consuming pre-tokens.
 /// Returns error to allow early exit or propagation.
 pub const TokenHandler = *const fn (ctx: *anyopaque, token: PreToken) anyerror!void;

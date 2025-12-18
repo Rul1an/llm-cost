@@ -49,7 +49,7 @@ jobs:
 
       - name: BPE Microbenchmark (sanity)
         if: runner.os == 'Linux'
-        run: zig build bench
+        run: zig build bench -Doptimize=ReleaseFast
 
       - name: Generate FinOps Audit (Release Proof)
         if: runner.os == 'Linux'
@@ -102,6 +102,20 @@ jobs:
             binary: llm-cost.exe
             do_sbom: true
             do_sign: true
+          - os: ubuntu-24.04
+            target: x86_64-linux-gnu
+            suffix: linux-x86_64-v3
+            binary: llm-cost
+            do_sbom: true
+            do_sign: true
+            extra_flags: "-Dcpu=x86_64_v3"
+          - os: ubuntu-24.04
+            target: x86_64-windows-gnu
+            suffix: windows-x86_64-v3.exe
+            binary: llm-cost.exe
+            do_sbom: true
+            do_sign: true
+            extra_flags: "-Dcpu=x86_64_v3"
           - os: macos-14
             target: aarch64-macos
             suffix: macos-arm64
@@ -140,7 +154,7 @@ jobs:
           target: ${{ matrix.target }}
           project-type: zig
           # Use build.zig defaults for LTO (Smart Mac/Win detection)
-          cmd: "-Doptimize=ReleaseFast -Dversion=${{ env.APP_VERSION }} -Dbuild_safe=true -Dstrip=true"
+          cmd: "-Doptimize=ReleaseFast -Dversion=${{ env.APP_VERSION }} -Dbuild_safe=true -Dstrip=true ${{ matrix.extra_flags }}"
           use_cache: true
           sbom: false # Using anchore/sbom-action instead
           sign: false # Using manual cosign step

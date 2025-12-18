@@ -1,7 +1,8 @@
 const std = @import("std");
 const registry = @import("registry.zig");
 const pre_tokenizer = @import("pre_tokenizer.zig");
-const engine_mod = @import("../core/engine.zig"); // For BpeVersion enum
+// const engine_mod = @import("../core/engine.zig"); // Removed cycle
+const BpeVersion = pre_tokenizer.BpeVersion;
 const vocab_loader = @import("vocab_loader.zig");
 const bpe_algo = @import("bpe_v2_1.zig");
 
@@ -13,7 +14,7 @@ pub const Result = struct {
 pub const Config = struct {
     spec: registry.EncodingSpec,
     approximate_ok: bool = false,
-    bpe_version: engine_mod.BpeVersion = .v2,
+    bpe_version: BpeVersion = .v2,
 };
 
 /// The OpenAI Tokenizer instance.
@@ -21,7 +22,7 @@ pub const Config = struct {
 pub const OpenAITokenizer = struct {
     spec: registry.EncodingSpec,
     loader: ?vocab_loader.VocabLoader = null,
-    bpe_version: engine_mod.BpeVersion,
+    bpe_version: BpeVersion,
 
     pub fn init(alloc: std.mem.Allocator, cfg: Config) !OpenAITokenizer {
         // Initialize VocabLoader if data is available
@@ -62,6 +63,17 @@ pub const OpenAITokenizer = struct {
         arena: *std.heap.ArenaAllocator,
         total_tokens: usize = 0,
         output: ?*std.ArrayList(u32) = null,
+
+        // Reusable encoding interface
+        pub fn init(alloc: std.mem.Allocator, l: *const vocab_loader.VocabLoader, mt: *const vocab_loader.VocabMergeTable, ws: *bpe_algo.BpeWorkspace, ar: *std.heap.ArenaAllocator) EncodingContext {
+            return .{
+                .alloc = alloc,
+                .loader = l,
+                .merge_table = mt,
+                .bpe_ws = ws,
+                .arena = ar,
+            };
+        }
 
         pub fn handle(ptr: *anyopaque, token: pre_tokenizer.PreToken) !void {
             const self: *EncodingContext = @ptrCast(@alignCast(ptr));
@@ -163,6 +175,28 @@ pub const OpenAITokenizer = struct {
             try pt_interface.tokenize(text, &ctx, EncodingContext.handle);
 
             return result.toOwnedSlice();
+        } else {
+            return error.NoEngine;
+        }
+    }
+
+    /// Optimized encodeInto for fuzzing/benchmarking (avoids allocs)
+    pub fn encodeInto(self: OpenAITokenizer, alloc: std.mem.Allocator, arena: *std.heap.ArenaAllocator, ws: *bpe_algo.BpeWorkspace, text: []const u8, out: *std.ArrayList(u32)) !void {
+        if (self.loader) |*l| {
+            var pt_interface: pre_tokenizer.PreTokenizer = undefined;
+            if (std.mem.eql(u8, self.spec.name, "o200k_base")) {
+                pt_interface = @import("o200k_scanner.zig").O200kScanner.interface();
+            } else if (std.mem.eql(u8, self.spec.name, "cl100k_base")) {
+                pt_interface = @import("cl100k_scanner.zig").Cl100kScanner.interface();
+            } else {
+                pt_interface = pre_tokenizer.LegacyPreTokenizer.interface();
+            }
+
+            const merge_table = vocab_loader.VocabMergeTable{ .vocab = l };
+            var ctx = EncodingContext.init(alloc, l, &merge_table, ws, arena);
+            ctx.output = out;
+
+            try pt_interface.tokenize(text, &ctx, EncodingContext.handle);
         } else {
             return error.NoEngine;
         }

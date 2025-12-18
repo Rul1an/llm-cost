@@ -2,23 +2,11 @@ const std = @import("std");
 const pre_tokenizer = @import("pre_tokenizer.zig");
 const unicode = @import("unicode_tables.zig");
 const SafeUtf8Iterator = @import("utf8.zig").SafeUtf8Iterator;
-const simd_skip = @import("simd_skip.zig");
 
-/// A specialized pre-tokenizer for 'cl100k_base' that mimics the regex logic.
-/// Regex (semantisch equivalent aan tiktoken cl100k_base):
-/// `(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+`
-pub const Cl100kScanner = struct {
-    pub const ScanMode = enum { auto, scalar, simd };
-    threadlocal var g_mode: ScanMode = .auto;
-
-    pub fn setScanMode(mode: ScanMode) void {
-        g_mode = mode;
-    }
-
-    pub fn getScanMode() ScanMode {
-        return g_mode;
-    }
-
+/// A specialized pre-tokenizer for 'cl100k_base' - SCALAR REFERENCE IMPLEMENTATION.
+/// This matches `cl100k_scanner.zig` logic but explicitly excludes SIMD optimizations.
+/// Used for differential fuzzing/verification.
+pub const Cl100kScannerScalar = struct {
     pub fn tokenize(_: *anyopaque, text: []const u8, handler_ctx: *anyopaque, handler: pre_tokenizer.TokenHandler) !void {
         var i: usize = 0;
         while (i < text.len) {
@@ -43,13 +31,7 @@ pub const Cl100kScanner = struct {
                         var len: usize = 1;
                         var valid = true;
 
-                        // SIMD optimization: Skip bulk of ASCII letters
-                        // Gate by g_mode
-                        if (g_mode != .scalar) {
-                            if (len < remainder.len) {
-                                len += simd_skip.skip_plain_ascii(remainder[len..]);
-                            }
-                        }
+                        // NO SIMD HERE - Pure Scalar Loop
 
                         // Scan contiguous letters (Scalar cleanup)
                         while (len < remainder.len) {
@@ -87,13 +69,7 @@ pub const Cl100kScanner = struct {
                         if (len < remainder.len and len < 3 and remainder[len] < 0x80 and ASCII_CLASSES[remainder[len]] == .Digit) len += 1;
                         if (len < remainder.len and len < 3 and remainder[len] < 0x80 and ASCII_CLASSES[remainder[len]] == .Digit) len += 1;
 
-                        // Strict check: if followed by another digit, regex would match different (or split).
-                        // Actually \p{N}{1,3} is greedy.
-                        // If we have 1234. Match 123. 4 is next.
-                        // Our fast logic took 1-3 digits.
-                        // Is it possible that unicode number follows? \p{N} includes unicode.
-                        // If `1` followed by `½`, `1½` is 2 chars.
-                        // So again, if followed by >= 0x80, abort to be safe?
+                        // Strict check as in original
                         if (len < remainder.len and remainder[len] >= 0x80) {
                             // abort
                         } else {
@@ -113,13 +89,6 @@ pub const Cl100kScanner = struct {
                         while (len < remainder.len) {
                             const b = remainder[len];
                             if (b >= 0x80) {
-                                // Hit Unicode. Check if it's whitespace.
-                                // We need full unicode check here.
-                                // If it IS whitespace, our greedy scan was incomplete -> Abort.
-                                // If it is NOT whitespace, we are safe to yield.
-                                // But `unicode.isWhitespace` needs codepoint.
-                                // SafeUtf8Iterator logic needed?
-                                // Optimization: Just abort on any high-bit byte to be safe/simple.
                                 valid = false;
                                 break;
                             }
@@ -138,13 +107,7 @@ pub const Cl100kScanner = struct {
 
                         // If valid, apply Branch 5 (End at newline) priority
                         if (valid) {
-                            // Priority Check: Branch 1 (contractions), Branch 2 (words), and Branch 4 (punctuation /
-                            // other non-whitespace/non-letter/non-number chars) can all follow a single leading space.
-                            // Branch 7 (\s+) has lower priority.
-                            // If we matched exactly 1 char (e.g. ' '), and the NEXT char is NOT a Digit,
-                            // then it might be a contraction, word, punctuation token, or other Branch 4 match
-                            // starting with a space (digits \p{N} do not allow a space prefix).
-                            // We must yield to the scalar/regex fallback in all such non-digit cases to be safe.
+                            // Priority Check logic
                             if (len == 1 and len < remainder.len) {
                                 if (c != '\r' and c != '\n') {
                                     const next = remainder[len];
@@ -435,19 +398,6 @@ pub const Cl100kScanner = struct {
         // So we yield (ws_end - <last_char_len>).
         // Since we know the last char was whitespace, we can backtrack one codepoint.
         // Or simply: find the start of the last character.
-
-        // Simpler way:
-        // We know slice[0..ws_end] is all whitespace.
-        // slice[ws_end] is start of non-whitespace.
-
-        // If ws_end matches the end of the first char (ws_end == cp1 length),
-        // then len-1 would be 0. Return null.
-
-        // We need to backtrack one char from ws_end.
-        // Since we are iterating forward, let's track previous index.
-        // Re-scan or track? Re-scanning last char is cheap?
-        // Actually SafeUtf8Iterator maintains `i`.
-        // Let's iterate and track `prev_i`.
 
         var i: usize = 0;
         var prev_i: usize = 0;

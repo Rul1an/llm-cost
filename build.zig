@@ -30,7 +30,7 @@ pub fn build(b: *std.Build) void {
     // (Logic below checks if we strictly need to modify something, but standardTargetOptions is generally sufficient if we don't force native)
 
     // Main executable
-    var version = std.SemanticVersion{ .major = 1, .minor = 6, .patch = 0 };
+    var version = std.SemanticVersion{ .major = 1, .minor = 7, .patch = 0 };
     if (b.option([]const u8, "version", "Override version string")) |ver_str| {
         version = std.SemanticVersion.parse(ver_str) catch std.debug.panic("Invalid version format: {s}", .{ver_str});
     }
@@ -142,6 +142,32 @@ pub fn build(b: *std.Build) void {
     const run_parity_tests = b.addRunArtifact(parity_tests);
     const parity_step = b.step("test-parity", "Run parity tests against tiktoken");
     parity_step.dependOn(&run_parity_tests.step);
+
+    // Create Tokenizer Module
+    const tokenizer_mod = b.createModule(.{
+        .root_source_file = b.path("src/tokenizer/mod.zig"),
+        .target = resolved_target,
+        .optimize = optimize,
+    });
+
+    // Create Core Module (needed for transitive imports if not package-based)
+    // However, since we don't have a package manager setup for 'core',
+    // we might need to add it to tokenizer_mod imports IF tokenizer/mod.zig used @import("core").
+    // But tokenizer uses relative imports to ../core.
+    // This usually requires the file to be under the same root.
+    // If this fails, we will solve the import issue in the source.
+
+    // Differential Fuzzing (SIMD vs Scalar)
+    const simd_fuzz_tests = b.addTest(.{
+        .root_source_file = b.path("src/tests/simd_compare.zig"),
+        .target = resolved_target,
+        .optimize = optimize,
+    });
+    simd_fuzz_tests.root_module.addImport("tokenizer", tokenizer_mod);
+
+    const run_simd_fuzz = b.addRunArtifact(simd_fuzz_tests);
+    const simd_fuzz_step = b.step("test-simd-fuzz", "Run differential fuzzing (SIMD vs Scalar)");
+    simd_fuzz_step.dependOn(&run_simd_fuzz.step);
 
     // Golden tests (CLI contract)
     // Tokenizer Parity Runner (Executes src/tokenizer_parity_runner.zig)

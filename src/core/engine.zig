@@ -2,6 +2,7 @@ const std = @import("std");
 const tokenizer_mod = @import("../tokenizer/mod.zig");
 const openai_tok = tokenizer_mod.openai;
 const registry = tokenizer_mod.registry;
+const BpeVersion = tokenizer_mod.pre_tokenizer.BpeVersion;
 
 pub const EngineError = error{
     ModelNotFound,
@@ -21,12 +22,6 @@ pub const SpecialMode = union(enum) {
 
     /// Only these special token names are allowed; others cause an error.
     allow_list: []const []const u8,
-};
-
-pub const BpeVersion = enum {
-    legacy, // Not really used in V2 engine, but for context
-    v2, // Current Heap BPE (Text-based)
-    v2_1, // Optimized Index+Heap BPE (Token-based)
 };
 
 pub const TokenizerConfig = struct {
