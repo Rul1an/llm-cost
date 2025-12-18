@@ -7,10 +7,7 @@ const SafeUtf8Iterator = @import("utf8.zig").SafeUtf8Iterator;
 /// Regex (semantisch equivalent aan tiktoken cl100k_base):
 /// `(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]|\s+(?!\S)|\s+`
 pub const Cl100kScanner = struct {
-    pub fn tokenize(_: *anyopaque, alloc: std.mem.Allocator, text: []const u8) ![]pre_tokenizer.PreToken {
-        var tokens = std.ArrayList(pre_tokenizer.PreToken).init(alloc);
-        errdefer tokens.deinit();
-
+    pub fn tokenize(_: *anyopaque, text: []const u8, handler_ctx: *anyopaque, handler: pre_tokenizer.TokenHandler) !void {
         var i: usize = 0;
         while (i < text.len) {
             const remainder = text[i..];
@@ -24,55 +21,155 @@ pub const Cl100kScanner = struct {
             // 6. Whitespace (trailing): \s+(?!\S)
             // 7. Whitespace (generic): \s+
 
+            // --- ASCII Fastpath (Defensive) ---
+            const c = remainder[0];
+            if (c < 0x80) {
+                const cls = ASCII_CLASSES[c];
+                switch (cls) {
+                    // Branch 2: Words (Letters)
+                    .Letter => {
+                        var len: usize = 1;
+                        var valid = true;
+                        // Scan contiguous letters
+                        while (len < remainder.len) {
+                            const b = remainder[len];
+                            if (b >= 0x80) break; // Unicode -> Fallback/Stop
+                            if (ASCII_CLASSES[b] == .Letter) {
+                                len += 1;
+                            } else {
+                                break;
+                            }
+                        }
+
+                        // Check if stopped by Unicode?
+                        if (len < remainder.len and remainder[len] >= 0x80) {
+                            // If we hit Unicode letters, strict regex might merge them `\p{L}+`.
+                            // So we must abort fastpath to allow full regex logic to see "ascii" + "unicode".
+                            // But if we stopped at non-letter ascii (space, number), we are safe to yield.
+                            // Wait, `\p{L}+` matches `ascii` + `unicode`.
+                            // So if `abc` is followed by `é`, `abcé` is one token.
+                            // If we yield `abc`, we split it. Incorrect.
+                            // So if next char is >= 0x80, we MUST abort.
+                            valid = false;
+                        }
+
+                        if (valid) {
+                            try handler(handler_ctx, .{ .text = remainder[0..len] });
+                            i += len;
+                            continue;
+                        }
+                    },
+                    // Branch 3: Numbers (1-3 chars)
+                    .Digit => {
+                        var len: usize = 1;
+                        // Regex: \p{N}{1,3}
+                        if (len < remainder.len and len < 3 and remainder[len] < 0x80 and ASCII_CLASSES[remainder[len]] == .Digit) len += 1;
+                        if (len < remainder.len and len < 3 and remainder[len] < 0x80 and ASCII_CLASSES[remainder[len]] == .Digit) len += 1;
+
+                        // Strict check: if followed by another digit, regex would match different (or split).
+                        // Actually \p{N}{1,3} is greedy.
+                        // If we have 1234. Match 123. 4 is next.
+                        // Our fast logic took 1-3 digits.
+                        // Is it possible that unicode number follows? \p{N} includes unicode.
+                        // If `1` followed by `½`, `1½` is 2 chars.
+                        // So again, if followed by >= 0x80, abort to be safe?
+                        if (len < remainder.len and remainder[len] >= 0x80) {
+                            // abort
+                        } else {
+                            try handler(handler_ctx, .{ .text = remainder[0..len] });
+                            i += len;
+                            continue;
+                        }
+                    },
+                    // Branch 7: Whitespace (Generic)
+                    // Note: Branch 5/6 may overlap. Skipping fastpath for whitespace to ensure correctness.
+                    .Whitespace => {},
+                    else => {},
+                }
+            }
+            // ----------------------
+
             if (tryScanContraction(remainder)) |len| {
-                try tokens.append(.{ .text = remainder[0..len] });
+                try handler(handler_ctx, .{ .text = remainder[0..len] });
                 i += len;
                 continue;
             }
 
             if (tryScanWordLetters(remainder)) |len| {
-                try tokens.append(.{ .text = remainder[0..len] });
+                try handler(handler_ctx, .{ .text = remainder[0..len] });
                 i += len;
                 continue;
             }
 
             if (tryScanNumber(remainder)) |len| {
-                try tokens.append(.{ .text = remainder[0..len] });
+                try handler(handler_ctx, .{ .text = remainder[0..len] });
                 i += len;
                 continue;
             }
 
             if (tryScanPunctuation(remainder)) |len| {
-                try tokens.append(.{ .text = remainder[0..len] });
+                try handler(handler_ctx, .{ .text = remainder[0..len] });
                 i += len;
                 continue;
             }
 
             if (tryScanWhitespaceBranch5(remainder)) |len| {
-                try tokens.append(.{ .text = remainder[0..len] });
+                try handler(handler_ctx, .{ .text = remainder[0..len] });
                 i += len;
                 continue;
             }
 
             if (tryScanWhitespaceBranch6(remainder)) |len| {
-                try tokens.append(.{ .text = remainder[0..len] });
+                try handler(handler_ctx, .{ .text = remainder[0..len] });
                 i += len;
                 continue;
             }
 
             if (tryScanWhitespaceBranch7(remainder)) |len| {
-                try tokens.append(.{ .text = remainder[0..len] });
+                try handler(handler_ctx, .{ .text = remainder[0..len] });
                 i += len;
                 continue;
             }
 
             // Fallback: Consume 1 byte for forward progress
-            try tokens.append(.{ .text = remainder[0..1] });
-            i += 1;
+            const token = pre_tokenizer.PreToken{ .text = remainder[0..1] };
+            try handler(handler_ctx, token);
+            i += token.text.len;
+        }
+    }
+
+    const ByteClass = enum {
+        Other,
+        Letter, // a-z A-Z
+        Digit, // 0-9
+        Whitespace, // \n \r \t space
+        ContractionStart, // '
+    };
+
+    const ASCII_CLASSES = init: {
+        var table: [128]ByteClass = undefined;
+        for (0..128) |i| {
+            table[i] = .Other;
         }
 
-        return tokens.toOwnedSlice();
-    }
+        // Whitespace
+        table[' '] = .Whitespace;
+        table['\t'] = .Whitespace;
+        table['\n'] = .Whitespace;
+        table['\r'] = .Whitespace;
+
+        // Letters
+        for ('a'..'z' + 1) |c| table[c] = .Letter;
+        for ('A'..'Z' + 1) |c| table[c] = .Letter;
+
+        // Digits
+        for ('0'..'9' + 1) |c| table[c] = .Digit;
+
+        // Contraction
+        table['\''] = .ContractionStart;
+
+        break :init table;
+    };
 
     /// Helper: Check if codepoint is valid letter prefix [^\r\n\p{L}\p{N}]
     fn isLetterPrefix(cp: u21) bool {

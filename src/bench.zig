@@ -121,7 +121,7 @@ pub fn runBenchmark(
 ) !BenchmarkResult {
     // Allocate space for latency measurements
     var latencies = try std.ArrayList(u64).initCapacity(allocator, config.iterations);
-    defer latencies.deinit();
+    defer latencies.deinit(allocator);
 
     // Warmup phase - don't measure
     for (0..config.warmup_iterations) |_| {
@@ -253,12 +253,14 @@ pub fn getCurrentRSS() !u64 {
             return pages * 4096; // Assuming 4KB pages
         }
     } else if (builtin.os.tag == .macos or builtin.os.tag == .freebsd) {
-        // POSIX getrusage in Zig 0.14 returns the struct by value.
-        // RUSAGE_SELF is 0.
-        // maxrss is in Kilobytes (on both Linux and macOS usually, though historical confusion exists).
-        // We multiply by 1024 to get Bytes.
+        // POSIX getrusage
+        // On macOS, ru_maxrss is in Bytes.
+        // On Linux, ru_maxrss is in Kilobytes.
+        // Since we handle Linux above via /proc, this block is non-Linux.
+        // FreeBSD also uses Bytes matching macOS behavior usually (checks required if strict).
+        // For macOS:
         const usage = std.posix.getrusage(0);
-        return @as(u64, @intCast(usage.maxrss)) * 1024;
+        return @as(u64, @intCast(usage.maxrss));
     }
 
     return 0;

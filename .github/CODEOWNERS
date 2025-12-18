@@ -1,0 +1,9 @@
+# Enforce review for sensitive areas
+* @Rul1an
+
+# CI/CD Critical Path
+.github/ @Rul1an
+tools/ @Rul1an
+
+# Core Pricing Logic
+src/core/pricing/ @Rul1an

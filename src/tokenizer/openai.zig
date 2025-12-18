@@ -54,6 +54,41 @@ pub const OpenAITokenizer = struct {
         }
     }
 
+    const EncodingContext = struct {
+        alloc: std.mem.Allocator,
+        loader: *const vocab_loader.VocabLoader,
+        merge_table: *const vocab_loader.VocabMergeTable,
+        bpe_ws: *bpe_algo.BpeWorkspace,
+        arena: *std.heap.ArenaAllocator,
+        total_tokens: usize = 0,
+        output: ?*std.ArrayList(u32) = null,
+
+        pub fn handle(ptr: *anyopaque, token: pre_tokenizer.PreToken) !void {
+            const self: *EncodingContext = @ptrCast(@alignCast(ptr));
+            const l = self.loader;
+
+            // Reset arena to free temp allocations from previous chunk
+            _ = self.arena.reset(.retain_capacity);
+            const arena_alloc = self.arena.allocator();
+
+            // a. Convert bytes to initial tokens
+            // This allocation is now very cheap (arena reset)
+            const initial = try arena_alloc.alloc(u32, token.text.len);
+            for (token.text, 0..) |byte, i| {
+                initial[i] = l.getByteToken(byte);
+            }
+
+            // b. Run BPE
+            // bpe_ws.encode reuse internal buffers. Returns slice valid until next call.
+            const bpe_tokens = try self.bpe_ws.encode(initial, self.merge_table);
+
+            self.total_tokens += bpe_tokens.len;
+            if (self.output) |out| {
+                try out.appendSlice(bpe_tokens);
+            }
+        }
+    };
+
     pub fn count(self: OpenAITokenizer, alloc: std.mem.Allocator, text: []const u8) !Result {
         if (self.loader) |*l| {
             // 1. Determine PreTokenizer
@@ -66,41 +101,26 @@ pub const OpenAITokenizer = struct {
                 pt_interface = pre_tokenizer.LegacyPreTokenizer.interface();
             }
 
-            // 2. Pre-tokenize
-            const pre_tokens = try pt_interface.tokenize(alloc, text);
-            defer alloc.free(pre_tokens);
-
-            // 3. Process chunks
-            var total_tokens: usize = 0;
-
-            // Allocate scratch buffer for merges once (max_token_len from header)
-            // Use general allocator (or arena if we want)
-            const scratch = try alloc.alloc(u8, l.max_token_len + 16); // +margin
-            defer alloc.free(scratch);
-
-            const merge_table = vocab_loader.VocabMergeTable{ .vocab = l, .scratch = scratch };
-
-            // Arena for per-chunk BPE allows fast cleanup
+            // 2. Setup Context
+            const merge_table = vocab_loader.VocabMergeTable{ .vocab = l };
+            var bpe_ws = bpe_algo.BpeWorkspace.init(alloc);
+            defer bpe_ws.deinit();
             var arena = std.heap.ArenaAllocator.init(alloc);
             defer arena.deinit();
-            const arena_alloc = arena.allocator();
 
-            for (pre_tokens) |chunk| {
-                // Reset arena per chunk to keep memory usage proportional to chunk size
-                _ = arena.reset(.retain_capacity);
+            var ctx = EncodingContext{
+                .alloc = alloc,
+                .loader = l,
+                .merge_table = &merge_table,
+                .bpe_ws = &bpe_ws,
+                .arena = &arena,
+                .output = null,
+            };
 
-                // a. Convert bytes to initial tokens
-                var initial = try arena_alloc.alloc(u32, chunk.text.len);
-                for (chunk.text, 0..) |byte, i| {
-                    initial[i] = l.getByteToken(byte);
-                }
+            // 3. Stream tokens
+            try pt_interface.tokenize(text, &ctx, EncodingContext.handle);
 
-                // b. Run BPE
-                const bpe_tokens = try bpe_algo.encodeLinear(arena_alloc, initial, &merge_table);
-                total_tokens += bpe_tokens.len;
-            }
-
-            return Result{ .tokens = total_tokens, .approximate = false };
+            return Result{ .tokens = ctx.total_tokens, .approximate = false };
         } else {
             // Fallback
             return Result{ .tokens = simpleApproximateCount(text), .approximate = true };
@@ -110,7 +130,7 @@ pub const OpenAITokenizer = struct {
     /// Encode text to IDs (for testing/verification).
     pub fn encode(self: OpenAITokenizer, alloc: std.mem.Allocator, text: []const u8) ![]u32 {
         if (self.loader) |*l| {
-            // Similar logic to count but collects tokens
+            // 1. Determine PreTokenizer
             var pt_interface: pre_tokenizer.PreTokenizer = undefined;
             if (std.mem.eql(u8, self.spec.name, "o200k_base")) {
                 pt_interface = @import("o200k_scanner.zig").O200kScanner.interface();
@@ -120,36 +140,27 @@ pub const OpenAITokenizer = struct {
                 pt_interface = pre_tokenizer.LegacyPreTokenizer.interface();
             }
 
-            const pre_tokens = try pt_interface.tokenize(alloc, text);
-            defer alloc.free(pre_tokens);
-
+            // 2. Setup Context
             var result = std.ArrayList(u32).init(alloc);
             errdefer result.deinit();
 
-            // Scratch buffer
-            const scratch = try alloc.alloc(u8, l.max_token_len + 16);
-            defer alloc.free(scratch);
-
-            const merge_table = vocab_loader.VocabMergeTable{ .vocab = l, .scratch = scratch };
-
-            // Use separate arena for temp BPE structs
+            const merge_table = vocab_loader.VocabMergeTable{ .vocab = l };
+            var bpe_ws = bpe_algo.BpeWorkspace.init(alloc);
+            defer bpe_ws.deinit();
             var arena = std.heap.ArenaAllocator.init(alloc);
             defer arena.deinit();
-            const arena_alloc = arena.allocator();
 
-            for (pre_tokens) |chunk| {
-                // Reset arena per chunk to keep memory usage proportional to chunk size
-                _ = arena.reset(.retain_capacity);
+            var ctx = EncodingContext{
+                .alloc = alloc,
+                .loader = l,
+                .merge_table = &merge_table,
+                .bpe_ws = &bpe_ws,
+                .arena = &arena,
+                .output = &result,
+            };
 
-                // a. Convert bytes to initial tokens
-                var initial = try arena_alloc.alloc(u32, chunk.text.len);
-                for (chunk.text, 0..) |byte, i| {
-                    initial[i] = l.getByteToken(byte);
-                }
-
-                const bpe_tokens = try bpe_algo.encodeLinear(arena_alloc, initial, &merge_table);
-                try result.appendSlice(bpe_tokens);
-            }
+            // 3. Stream tokens
+            try pt_interface.tokenize(text, &ctx, EncodingContext.handle);
 
             return result.toOwnedSlice();
         } else {

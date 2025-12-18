@@ -2,6 +2,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 pub const Crypto = @import("crypto.zig");
+const binary = @import("binary.zig"); // P2: Binary Format
+const binary_writer = @import("binary_writer.zig"); // P1 Hardening
 
 const CRITICAL_AGE_SECONDS = 90 * 24 * 60 * 60; // 90 days
 const WARN_AGE_SECONDS = 30 * 24 * 60 * 60; // 30 days
@@ -20,11 +22,19 @@ const UpdateState = @import("state.zig").UpdateState;
 
 pub const Registry = struct {
     allocator: std.mem.Allocator,
-    models: std.StringHashMap(PriceDef),
+
+    // P2: Union Backend
+    backend: union(enum) {
+        HashMap: std.StringHashMap(PriceDef),
+        Binary: binary.BinaryView,
+    },
 
     // Metadata about loaded set
-    source: enum { Embedded, Cache } = .Embedded,
+    source: enum { Embedded, Cache, Binary } = .Embedded,
     generated_at: i64 = 0,
+
+    // P2: Track if binary data is mmapped (needs munmap) or allocated (needs free)
+    binary_is_mapped: bool = false,
 
     pub fn init(allocator: std.mem.Allocator, options: anytype) !Registry {
         _ = options;
@@ -39,6 +49,12 @@ pub const Registry = struct {
             // State load fail -> assume 0 (fresh start)
         }
 
+        // 0. Try Binary Cache (Zero Overhead)
+        // Check for 'pricing_db.bin' in cache
+        if (loadBinaryCache(allocator)) |reg| {
+            return reg;
+        } else |_| {}
+
         // 1. Try Cache (Silent Fail)
         if (loadFromCache(allocator, highest_seen)) |cached_reg| {
             return cached_reg;
@@ -49,6 +65,61 @@ pub const Registry = struct {
 
         // 2. Fallback to Embedded (Secure Boot)
         return loadEmbedded(allocator);
+    }
+
+    fn loadBinaryCache(allocator: std.mem.Allocator) !Registry {
+        const cache_path = try paths.getCacheDir(allocator);
+        defer allocator.free(cache_path);
+
+        var dir = std.fs.openDirAbsolute(cache_path, .{}) catch return error.NoCache;
+        defer dir.close();
+
+        // Map file
+        const file = dir.openFile("pricing_db.bin", .{}) catch return error.NoBinary;
+        defer file.close();
+
+        const stat = try file.stat();
+        if (stat.size == 0) return error.Empty;
+
+        var data_slice: []align(4096) u8 = undefined;
+        var is_mapped = false;
+
+        // 1. Try mmap (POSIX only, disable on Windows)
+        if (builtin.os.tag != .windows) {
+            if (std.posix.mmap(null, stat.size, std.posix.PROT.READ, .{ .TYPE = .SHARED }, file.handle, 0)) |mapped| {
+                data_slice = @alignCast(mapped);
+                is_mapped = true;
+            } else |_| {
+                // Fallback to read
+            }
+        }
+
+        // 2. Fallback: Read into aligned buffer
+        if (!is_mapped) {
+            // Check limits for memory safety
+            if (stat.size > 256 * 1024 * 1024) return error.FileTooLarge;
+
+            // Allocate aligned buffer
+            // 4096 matches BinaryView requirement
+            const buffer = try allocator.alignedAlloc(u8, 4096, stat.size);
+            errdefer allocator.free(buffer);
+
+            const bytes_read = try file.readAll(buffer);
+            if (bytes_read != stat.size) return error.Truncated;
+
+            data_slice = buffer;
+        }
+
+        const view = try binary.BinaryView.init(data_slice);
+        const generated_at = @as(i64, @intCast(view.created_timestamp));
+
+        return Registry{
+            .allocator = allocator,
+            .backend = .{ .Binary = view },
+            .source = .Binary,
+            .generated_at = generated_at,
+            .binary_is_mapped = is_mapped,
+        };
     }
 
     fn loadFromCache(allocator: std.mem.Allocator, highest_seen: u64) !Registry {
@@ -160,7 +231,7 @@ pub const Registry = struct {
         // 6. Parse
         var reg = Registry{
             .allocator = allocator,
-            .models = std.StringHashMap(PriceDef).init(allocator),
+            .backend = .{ .HashMap = std.StringHashMap(PriceDef).init(allocator) },
             .source = .Cache,
             .generated_at = generated_at,
         };
@@ -169,7 +240,15 @@ pub const Registry = struct {
         const parsed = try std.json.parseFromSlice(std.json.Value, allocator, json_bytes, .{});
         defer parsed.deinit();
 
-        try parseInto(allocator, parsed.value, &reg.models);
+        // ... (end of loadFromCache internal logic) ...
+        try parseInto(allocator, parsed.value, &reg.backend.HashMap);
+
+        // P1 Hardening: Compile to Binary for next fast load
+        const checksum = std.hash.Wyhash.hash(0, json_bytes);
+        ensureBinaryCache(allocator, &reg, checksum) catch |err| {
+            std.log.warn("Failed to update binary cache: {}", .{err});
+        };
+
         return reg;
     }
 
@@ -202,7 +281,7 @@ pub const Registry = struct {
 
         var reg = Registry{
             .allocator = allocator,
-            .models = std.StringHashMap(PriceDef).init(allocator),
+            .backend = .{ .HashMap = std.StringHashMap(PriceDef).init(allocator) },
             .source = .Embedded,
             .generated_at = generated_at,
         };
@@ -211,8 +290,53 @@ pub const Registry = struct {
         const parsed = try std.json.parseFromSlice(std.json.Value, allocator, db_content, .{});
         defer parsed.deinit();
 
-        try parseInto(allocator, parsed.value, &reg.models);
+        try parseInto(allocator, parsed.value, &reg.backend.HashMap);
+
+        // P1 Hardening: Compile Embedded to Binary too (if cache is empty/stale)
+        // This ensures subsequent runs use binary even if we only have embedded.
+        const checksum = std.hash.Wyhash.hash(0, db_content);
+        ensureBinaryCache(allocator, &reg, checksum) catch |err| {
+            // Ignoring error, embedded is fine
+            std.log.warn("Failed to warm binary cache: {}", .{err});
+        };
+
         return reg;
+    }
+
+    // P1 Hardening: Atomic Cache Write
+    fn ensureBinaryCache(allocator: std.mem.Allocator, reg: *Registry, source_checksum: u64) !void {
+        const cache_path = try paths.getCacheDir(allocator);
+        defer allocator.free(cache_path);
+
+        // Create dir if missing
+        std.fs.makeDirAbsolute(cache_path) catch |err| {
+            if (err != error.PathAlreadyExists) return err;
+        };
+
+        var dir = try std.fs.openDirAbsolute(cache_path, .{});
+        defer dir.close();
+
+        const tmp_name = "pricing_db.bin.tmp";
+        const final_name = "pricing_db.bin";
+
+        // Write to TMP (Full Path needed for binary_writer which uses cwd? No, binary_writer takes string path)
+        // If binary_writer uses cwd().createFile(output_path), we need absolute path.
+        // Or we pass relative path if CWD is set?
+        // binary_writer implementation uses `std.fs.cwd().createFile(output_path)`.
+        // So we need FULL path.
+
+        var tmp_path_buf: [std.fs.max_path_bytes]u8 = undefined;
+        const tmp_full_path = try std.fmt.bufPrint(&tmp_path_buf, "{s}/{s}", .{ cache_path, tmp_name });
+
+        if (reg.backend == .HashMap) {
+            try binary_writer.write(allocator, reg.backend.HashMap, tmp_full_path, reg.generated_at, source_checksum);
+        } else return; // Already binary
+
+        // Rename (Atomic)
+        // We need to use `dir.rename`.
+        // But binary_writer wrote to `tmp_full_path`.
+        // `dir` is open on `cache_path`.
+        try dir.rename(tmp_name, final_name);
     }
 
     // Helper to safely convert float price (USD) to MicroUSD (i128)
@@ -331,20 +455,79 @@ pub const Registry = struct {
     // Verify extracted to crypto.zig (Crypto.verify)
 
     pub fn deinit(self: *Registry) void {
-        var it = self.models.iterator();
-        while (it.next()) |entry| {
-            self.allocator.free(entry.key_ptr.*);
+        switch (self.backend) {
+            .HashMap => |*map| {
+                var it = map.iterator();
+                while (it.next()) |entry| {
+                    self.allocator.free(entry.key_ptr.*);
+                }
+                map.deinit();
+            },
+            .Binary => |*view| {
+                if (self.binary_is_mapped) {
+                    // Mapped memory - POSIX only
+                    if (builtin.os.tag != .windows) {
+                        std.posix.munmap(@alignCast(view.data));
+                    }
+                } else {
+                    // Allocated memory
+                    self.allocator.free(view.data);
+                }
+            },
         }
-        self.models.deinit();
     }
 
     // Compatibility helpers
     pub fn getModel(self: *const Registry, model_id: []const u8) ?PriceDef {
-        return self.models.get(model_id);
+        return self.get(model_id);
     }
 
     pub fn get(self: *const Registry, model_id: []const u8) ?PriceDef {
-        return self.models.get(model_id);
+        switch (self.backend) {
+            .HashMap => |*map| return map.get(model_id),
+            .Binary => |view| return view.lookup(model_id),
+        }
+    }
+
+    // Iterator Abstraction
+    pub const Iterator = struct {
+        reg: *const Registry,
+        state: State,
+
+        pub const State = union(enum) {
+            HashMap: std.StringHashMap(PriceDef).Iterator,
+            Binary: binary.BinaryView.Iterator,
+        };
+
+        pub fn next(self: *Iterator) ?Entry {
+            switch (self.state) {
+                .HashMap => |*it| {
+                    if (it.next()) |entry| {
+                        return Entry{ .key = entry.key_ptr.*, .value = entry.value_ptr.* };
+                    }
+                    return null;
+                },
+                .Binary => |*it| {
+                    if (it.next()) |entry| {
+                        return Entry{ .key = entry.key, .value = entry.value };
+                    }
+                    return null;
+                },
+            }
+        }
+
+        pub const Entry = struct {
+            key: []const u8,
+            value: PriceDef,
+        };
+    };
+
+    pub fn iterator(self: *const Registry) Iterator {
+        const state = switch (self.backend) {
+            .HashMap => |*map| Iterator.State{ .HashMap = map.iterator() },
+            .Binary => |view| Iterator.State{ .Binary = view.iterator() },
+        };
+        return Iterator{ .reg = self, .state = state };
     }
 
     pub fn calculate(def: PriceDef, input_tokens: u64, output_tokens: u64, reasoning_tokens: u64) MicroUsd {

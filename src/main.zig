@@ -159,9 +159,10 @@ pub fn runModels(state: GlobalState, args: []const []const u8) !void {
     var keys = std.ArrayList([]const u8).init(state.allocator);
     defer keys.deinit();
 
-    var it = state.registry.models.iterator();
+    // Iterate over registry
+    var it = state.registry.iterator();
     while (it.next()) |entry| {
-        try keys.append(entry.key_ptr.*);
+        try keys.append(entry.key);
     }
 
     // Sort keys alphabetically
@@ -172,7 +173,7 @@ pub fn runModels(state: GlobalState, args: []const []const u8) !void {
     if (format_json) {
         try state.stdout.print("[\n", .{});
         for (keys.items, 0..) |key, i| {
-            const def = state.registry.models.get(key).?;
+            const def = state.registry.get(key).?;
             // Handling potential alias fields if PriceDef uses input_cost vs input_price
             // The User's PriceDef in mod.zig has input_price_per_mtok
             const in_p = Pricing.PriceDef.toUsd(def.input_price_per_mtok);
@@ -201,7 +202,7 @@ pub fn runModels(state: GlobalState, args: []const []const u8) !void {
         try state.stdout.print("{s:-<20} {s:-<15} {s:-<15} {s:-<15}\n", .{ "", "", "", "" });
 
         for (keys.items) |key| {
-            const def = state.registry.models.get(key).?;
+            const def = state.registry.get(key).?;
             const in_p = Pricing.PriceDef.toUsd(def.input_price_per_mtok);
             const out_p = Pricing.PriceDef.toUsd(def.output_price_per_mtok);
 

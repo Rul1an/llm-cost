@@ -7,10 +7,8 @@ const SafeUtf8Iterator = @import("utf8.zig").SafeUtf8Iterator;
 /// See `docs/o200k_pre_tokenizer.md` for branch definitions.
 pub const O200kScanner = struct {
     /// Main tokenization loop matching regex priority.
-    pub fn tokenize(_: *anyopaque, alloc: std.mem.Allocator, text: []const u8) ![]pre_tokenizer.PreToken {
-        var tokens = std.ArrayList(pre_tokenizer.PreToken).init(alloc);
-        errdefer tokens.deinit();
-
+    /// Main tokenization loop matching regex priority.
+    pub fn tokenize(_: *anyopaque, text: []const u8, handler_ctx: *anyopaque, handler: pre_tokenizer.TokenHandler) !void {
         var i: usize = 0;
         while (i < text.len) {
             // Strict Priority Order:
@@ -21,53 +19,52 @@ pub const O200kScanner = struct {
             // 5. Branch 5, 6, 7: Whitespace
 
             if (tryScanWordBranch1(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i .. i + len] });
+                try handler(handler_ctx, .{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             if (tryScanWordBranch2(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i .. i + len] });
+                try handler(handler_ctx, .{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             if (tryScanNumber(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i .. i + len] });
+                try handler(handler_ctx, .{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             if (tryScanPunctuation(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i .. i + len] });
+                try handler(handler_ctx, .{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             if (tryScanWhitespaceBranch5(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i .. i + len] });
+                try handler(handler_ctx, .{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             if (tryScanWhitespaceBranch6(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i .. i + len] });
+                try handler(handler_ctx, .{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             if (tryScanWhitespaceBranch7(text[i..])) |len| {
-                try tokens.append(.{ .text = text[i .. i + len] });
+                try handler(handler_ctx, .{ .text = text[i .. i + len] });
                 i += len;
                 continue;
             }
 
             // Fallback: Consume 1 byte for forward progress
-            try tokens.append(.{ .text = text[i .. i + 1] });
-            i += 1;
+            const token = pre_tokenizer.PreToken{ .text = text[i .. i + 1] };
+            try handler(handler_ctx, token);
+            i += token.text.len;
         }
-
-        return tokens.toOwnedSlice();
     }
 
     fn isWordUpperBody(cp: u21) bool {

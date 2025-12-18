@@ -17,13 +17,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-24.04, macos-14, windows-2022]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Setup Zig
         uses: mlugg/setup-zig@53fc45b17fe98b52f92ee5ea08ff48a85a3e7eb7 # v1
@@ -39,18 +41,14 @@ jobs:
 
       - name: Fuzzing Sanity Check
         if: runner.os == 'Linux'
-        # Run full iterations (2000 per model) - fast enough for CI
         run: zig build fuzz
 
       - name: Parity Check
         if: runner.os == 'Linux'
-        # Relies on committed testdata/evil_corpus_v2.jsonl
         run: zig build test-parity
 
       - name: BPE Microbenchmark (sanity)
         if: runner.os == 'Linux'
-        # Run to ensure no crashes in bench code, though timing is flaky on CI
-        # Optimization level is handled by build.zig
         run: zig build bench
 
       - name: Generate FinOps Audit (Release Proof)
@@ -80,31 +78,31 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             target: x86_64-linux-gnu
             suffix: linux-x86_64
             binary: llm-cost
             do_sbom: true
             do_sign: true
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             target: x86_64-linux-musl
             suffix: linux-x86_64-musl
             binary: llm-cost
             do_sbom: true
             do_sign: true
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             target: aarch64-linux-gnu
             suffix: linux-arm64
             binary: llm-cost
             do_sbom: true
             do_sign: true
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             target: x86_64-windows-gnu
             suffix: windows-x86_64.exe
             binary: llm-cost.exe
             do_sbom: true
             do_sign: true
-          - os: macos-latest
+          - os: macos-14
             target: aarch64-macos
             suffix: macos-arm64
             binary: llm-cost
@@ -141,10 +139,12 @@ jobs:
           strict_version: true
           target: ${{ matrix.target }}
           project-type: zig
-          cmd: "-Doptimize=ReleaseFast -Dversion=${{ env.APP_VERSION }}"
+          # Use build.zig defaults for LTO (Smart Mac/Win detection)
+          cmd: "-Doptimize=ReleaseFast -Dversion=${{ env.APP_VERSION }} -Dbuild_safe=true -Dstrip=true"
           use_cache: true
           sbom: false # Using anchore/sbom-action instead
           sign: false # Using manual cosign step
+
       - name: Create Dist Directory
         run: mkdir -p dist
 
@@ -158,24 +158,53 @@ jobs:
           output-file: dist/llm-cost-${{ matrix.suffix }}.cdx.json
           upload-artifact: false
 
+      - name: Stage Artifacts
+        shell: bash
+        run: |
+          # Dist directory created earlier
+          # 1. Main Binary (ReleaseFast)
+          cp "zig-out/bin/${{ matrix.binary }}" "dist/llm-cost-${{ matrix.suffix }}"
 
-      - name: Sign Artifact
+          # 2. Safe Binary (ReleaseSafe) - Optional check if platform supports it
+          # Determine safe binary name based on OS (exe extension)
+          if [[ "${{ matrix.binary }}" == *".exe" ]]; then
+             SAFE_BIN="llm-cost-safe.exe"
+             SAFE_DIST="llm-cost-safe-${{ matrix.suffix }}" # suffix already includes .exe for windows?
+             # Check if suffix has .exe. release.yml: suffix: windows-x86_64.exe
+             # So SAFE_DIST="llm-cost-safe-windows-x86_64.exe"
+          else
+             SAFE_BIN="llm-cost-safe"
+             SAFE_DIST="llm-cost-safe-${{ matrix.suffix }}"
+          fi
+
+          if [ -f "zig-out/bin/$SAFE_BIN" ]; then
+             cp "zig-out/bin/$SAFE_BIN" "dist/$SAFE_DIST"
+          else
+             echo "::warning::Safe binary $SAFE_BIN not found"
+          fi
+
+      - name: Sign Artifacts
         if: matrix.do_sign == true
         run: |
-          cosign sign-blob --yes \
-            --output-certificate dist/llm-cost-${{ matrix.suffix }}.crt \
-            --output-signature dist/llm-cost-${{ matrix.suffix }}.sig \
-            zig-out/bin/${{ matrix.binary }}
+          # Loop to sign both binaries
+          for f in dist/llm-cost-${{ matrix.suffix }} dist/llm-cost-safe-${{ matrix.suffix }}; do
+            if [ -f "$f" ]; then
+               cosign sign-blob --yes \
+                 --output-certificate "$f.crt" \
+                 --output-signature "$f.sig" \
+                 "$f"
+            fi
+          done
 
-      - name: Attest Build Provenance
+      - name: Attest Build Provenance (Main)
         uses: actions/attest-build-provenance@897ed5eab6ed058a474202017ada7f40bfa52940 # v1.4.3
         with:
-          subject-path: "zig-out/bin/${{ matrix.binary }}"
+          subject-path: "dist/llm-cost-${{ matrix.suffix }}"
 
-      - name: Stage Artifacts
-        run: |
-          # dist directory created earlier
-          cp "zig-out/bin/${{ matrix.binary }}" "dist/llm-cost-${{ matrix.suffix }}"
+      - name: Attest Build Provenance (Safe)
+        uses: actions/attest-build-provenance@897ed5eab6ed058a474202017ada7f40bfa52940 # v1.4.3
+        with:
+          subject-path: "dist/llm-cost-safe-${{ matrix.suffix }}"
 
       - name: Smoke Test
         if: matrix.target == 'x86_64-linux-gnu' || matrix.target == 'aarch64-macos'
@@ -187,14 +216,12 @@ jobs:
         with:
           name: llm-cost-${{ matrix.suffix }}-signed
           path: |
-            dist/llm-cost-${{ matrix.suffix }}
-            dist/llm-cost-${{ matrix.suffix }}.sig
-            dist/llm-cost-${{ matrix.suffix }}.crt
-            dist/llm-cost-${{ matrix.suffix }}.cdx.json
+            dist/llm-cost-${{ matrix.suffix }}*
+            dist/llm-cost-safe-${{ matrix.suffix }}*
 
   release:
     needs: build-matrix
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/tags/')
     environment: release
     timeout-minutes: 10
@@ -214,22 +241,24 @@ jobs:
           shopt -s nullglob
           # Iterate over downloaded artifact dirs
           for dir in artifacts/*-signed; do
-            # The dir name is "llm-cost-<suffix>-signed"
-            # Inside is "llm-cost-<suffix>" binary + sigs
-            # We want to move everything to release_assets
             cp -- "$dir"/* release_assets/
           done
 
           # Add FinOps Audit
-          # Downloaded to artifacts/finops-audit-proof
           if [ -d "artifacts/finops-audit-proof" ]; then
              cp artifacts/finops-audit-proof/* release_assets/
           fi
 
           cd release_assets
-          # Generate checksums for binaries (exclude .sig, .crt, .cdx.json)
-          # Spec requires shasum format: "<hash>  <filename>"
-          shasum -a 256 llm-cost-* | grep "^[a-f0-9]\{64\}  llm-cost-[^.]*$" > checksums.txt
+          # Generate checksums for ALL binaries (llm-cost-*), excluding metadata
+          # Filter ensures we only hash the binaries (no .sig, .crt, .json)
+          # We use "llm-cost*" to capture both llm-cost-linux... and llm-cost-safe-linux...
+          find . -maxdepth 1 -type f -name "llm-cost*" \
+            ! -name "*.sig" ! -name "*.crt" ! -name "*.cdx.json" \
+            -print0 \
+          | sort -z \
+          | xargs -0 shasum -a 256 \
+          | sed 's| \./|  |' > checksums.txt
 
           # Verify content
           cat checksums.txt
@@ -245,7 +274,7 @@ jobs:
 
   verify-release:
     needs: release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/tags/')
     timeout-minutes: 10
 
@@ -264,7 +293,11 @@ jobs:
           # Verify the linux-x86_64 binary as a sample
           gh release download $TAG -p "llm-cost-linux-x86_64" --repo ${{ github.repository }}
 
+          # Also verify Safe binary
+          gh release download $TAG -p "llm-cost-safe-linux-x86_64" --repo ${{ github.repository }}
+
           echo "Run gh attestation verify..."
           gh attestation verify llm-cost-linux-x86_64 --repo ${{ github.repository }}
+          gh attestation verify llm-cost-safe-linux-x86_64 --repo ${{ github.repository }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

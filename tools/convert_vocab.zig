@@ -1,10 +1,10 @@
 const std = @import("std");
 const Sha256 = std.crypto.hash.sha2.Sha256;
 
-/// Vocabulary Binary Format v2
-/// See docs/vocab-format-v2.md for specification
-const MAGIC = "BPE2".*;
-const VERSION: u32 = 2;
+/// Vocabulary Binary Format v3
+/// See docs/vocab-format-v3.md for specification
+const MAGIC = "BPE3".*; // Updated magic for v3
+const VERSION: u32 = 3;
 const HEADER_SIZE: usize = 64;
 
 /// Convert a .tiktoken file to binary format
@@ -27,10 +27,6 @@ pub fn main() !void {
     if (args.len != 3) {
         const stderr = std.io.getStdErr().writer();
         try stderr.print("Usage: {s} <input.tiktoken> <output.bin>\n", .{args[0]});
-        try stderr.print("\nConverts OpenAI tiktoken vocabulary to binary format.\n", .{});
-        try stderr.print("Download .tiktoken files from:\n", .{});
-        try stderr.print("  https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken\n", .{});
-        try stderr.print("  https://openaipublic.blob.core.windows.net/encodings/o200k_base.tiktoken\n", .{});
         std.process.exit(1);
     }
 
@@ -101,11 +97,45 @@ fn convertVocab(alloc: std.mem.Allocator, input_path: []const u8, output_path: [
         }
     }.lessThan);
 
-    // 5. Verify ranks are contiguous (0, 1, 2, ...)
-    // Note: Some vocabs may have gaps, so we'll handle that
+    // 5. Build Rank Map for pair generation
+    var rank_map = std.StringHashMap(u32).init(alloc);
+    defer rank_map.deinit();
+    try rank_map.ensureTotalCapacity(@intCast(tokens.items.len));
+    for (tokens.items) |t| {
+        rank_map.putAssumeCapacity(t.bytes, t.rank);
+    }
+
+    // 6. Generate Pairs
+    // Iterate all tokens, find valid split points to rebuild valid merges.
+    var pairs = std.ArrayList(PairEntry).init(alloc);
+    defer pairs.deinit();
+
+    for (tokens.items) |t| {
+        if (t.bytes.len < 2) continue;
+
+        // Try all splits
+        for (1..t.bytes.len) |split| {
+            const part_a = t.bytes[0..split];
+            const part_b = t.bytes[split..];
+
+            if (rank_map.get(part_a)) |rank_a| {
+                if (rank_map.get(part_b)) |rank_b| {
+                    try pairs.append(.{
+                        .left = rank_a,
+                        .right = rank_b,
+                        .target = t.rank,
+                    });
+                }
+            }
+        }
+    }
+
+    try stdout.print("  Generated {d} merge pairs\n", .{pairs.items.len});
+
+    // 7. Verify contiguous ranks
     const token_count: u32 = max_rank + 1;
 
-    // 6. Build output buffer
+    // 8. Build output buffer
     var output = std.ArrayList(u8).init(alloc);
     defer output.deinit();
 
@@ -115,7 +145,7 @@ fn convertVocab(alloc: std.mem.Allocator, input_path: []const u8, output_path: [
     // Build token table and blob
     var token_table = try alloc.alloc(TokenEntry, token_count);
     defer alloc.free(token_table);
-    @memset(token_table, .{ .offset = 0, .length = 0 }); // Empty tokens have len 0
+    @memset(token_table, .{ .offset = 0, .length = 0 });
 
     var blob = std.ArrayList(u8).init(alloc);
     defer blob.deinit();
@@ -143,7 +173,14 @@ fn convertVocab(alloc: std.mem.Allocator, input_path: []const u8, output_path: [
     // Write blob
     try output.appendSlice(blob.items);
 
-    // 7. Write header (at position 0)
+    // Write pair table
+    for (pairs.items) |p| {
+        try output.writer().writeInt(u32, p.left, .little);
+        try output.writer().writeInt(u32, p.right, .little);
+        try output.writer().writeInt(u32, p.target, .little);
+    }
+
+    // 9. Write header (at position 0)
     var header_buf: [HEADER_SIZE]u8 = undefined;
     @memset(&header_buf, 0);
 
@@ -165,12 +202,15 @@ fn convertVocab(alloc: std.mem.Allocator, input_path: []const u8, output_path: [
     // Source hash (32 bytes at offset 20)
     @memcpy(header_buf[20..52], &source_hash);
 
-    // Reserved (12 bytes at offset 52-63) - already zeroed
+    // Num Pairs (u32 at offset 52)
+    std.mem.writeInt(u32, header_buf[52..56], @intCast(pairs.items.len), .little);
+
+    // Reserved (8 bytes at offset 56-63) - already zeroed
 
     // Overwrite header in output
     @memcpy(output.items[0..HEADER_SIZE], &header_buf);
 
-    // 8. Write to file
+    // 10. Write to file
     const file = try std.fs.cwd().createFile(output_path, .{});
     defer file.close();
     try file.writeAll(output.items);
@@ -180,7 +220,7 @@ fn convertVocab(alloc: std.mem.Allocator, input_path: []const u8, output_path: [
         @as(f64, @floatFromInt(output.items.len)) / (1024.0 * 1024.0),
     });
 
-    // 9. Print verification info
+    // 11. Print verification info
     try stdout.print("  Source SHA256: ", .{});
     for (source_hash) |b| {
         try stdout.print("{x:0>2}", .{b});
@@ -196,6 +236,12 @@ const Token = struct {
 const TokenEntry = struct {
     offset: u32,
     length: u32,
+};
+
+const PairEntry = struct {
+    left: u32,
+    right: u32,
+    target: u32,
 };
 
 // =============================================================================

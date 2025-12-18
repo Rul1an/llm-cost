@@ -5,28 +5,29 @@ pub const PreToken = struct {
     is_special: bool = false,
 };
 
+/// Function pointer type for consuming pre-tokens.
+/// Returns error to allow early exit or propagation.
+pub const TokenHandler = *const fn (ctx: *anyopaque, token: PreToken) anyerror!void;
+
 /// Interface for splitting text into pre-tokens before BPE merging.
 pub const PreTokenizer = struct {
     ptr: *anyopaque,
     vtable: *const VTable,
 
     pub const VTable = struct {
-        tokenize: *const fn (ctx: *anyopaque, alloc: std.mem.Allocator, text: []const u8) anyerror![]PreToken,
+        /// Tokenize text and invoke handler for each chunk.
+        /// Does not allocate for the chunks themselves (slices of text).
+        tokenize: *const fn (ctx: *anyopaque, text: []const u8, handler_ctx: *anyopaque, handler: TokenHandler) anyerror!void,
     };
 
-    pub fn tokenize(self: PreTokenizer, alloc: std.mem.Allocator, text: []const u8) ![]PreToken {
-        return self.vtable.tokenize(self.ptr, alloc, text);
+    pub fn tokenize(self: PreTokenizer, text: []const u8, handler_ctx: *anyopaque, handler: TokenHandler) !void {
+        return self.vtable.tokenize(self.ptr, text, handler_ctx, handler);
     }
 };
 
 /// Placeholder pre-tokenizer that splits on whitespace (approximate behavior).
-/// This implementation is considered "legacy" because it does not handle more complex tokenization rules.
-/// In future versions, this will be replaced with a more robust pre-tokenizer supporting Unicode and custom rules.
 pub const LegacyPreTokenizer = struct {
-    pub fn tokenize(_: *anyopaque, alloc: std.mem.Allocator, text: []const u8) ![]PreToken {
-        var tokens = std.ArrayList(PreToken).init(alloc);
-        errdefer tokens.deinit();
-
+    pub fn tokenize(_: *anyopaque, text: []const u8, handler_ctx: *anyopaque, handler: TokenHandler) !void {
         var i: usize = 0;
         while (i < text.len) {
             const start = i;
@@ -34,16 +35,15 @@ pub const LegacyPreTokenizer = struct {
             while (i < text.len and text[i] != ' ') : (i += 1) {}
 
             if (i > start) {
-                try tokens.append(.{ .text = text[start..i] });
+                try handler(handler_ctx, .{ .text = text[start..i] });
             }
             // Consume spaces as individual tokens
             while (i < text.len and text[i] == ' ') {
-                try tokens.append(.{ .text = text[i .. i + 1] });
+                const slice = text[i .. i + 1];
+                try handler(handler_ctx, .{ .text = slice, .is_special = false });
                 i += 1;
             }
         }
-
-        return tokens.toOwnedSlice();
     }
 
     const DummyContext = struct {};
