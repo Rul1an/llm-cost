@@ -497,3 +497,27 @@ test "Contract: 'calibrate' respects CLI contract" {
 
     // Stub output check removed.
 }
+
+test "Contract: 'calibrate' insufficient data -> Exit 3" {
+    var env = TestEnv.init(std.testing.allocator);
+    defer env.deinit();
+
+    // Setup files with 1 record
+    try env.write("est.json", "{\"estimated_total_micro_usd\":1,\"items\":[{\"resource_id\":\"a\",\"estimated_micro_usd\":1}]}");
+    try env.write("act.csv", "BilledCost,UsageQuantity,ResourceId\n0.000001,1,a");
+
+    var mock = try MockState.init(std.testing.allocator);
+    defer mock.deinit();
+
+    const calibrate_cmd = @import("commands/calibrate.zig");
+    const args = [_][]const u8{ "--estimates", "est.json", "--actuals", "act.csv", "--min-samples", "100" };
+
+    const exit_code = try withTempCwd(std.testing.allocator, env.tmp.dir, calibrate_cmd.run, .{
+        mock.allocator,
+        &args,
+        mock.stdout_buf.writer().any(),
+        mock.stderr_buf.writer().any(),
+    });
+
+    try std.testing.expectEqual(@as(u8, 3), exit_code);
+}

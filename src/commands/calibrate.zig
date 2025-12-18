@@ -5,6 +5,9 @@ const pricing = @import("../core/pricing/mod.zig");
 
 pub const ExitCode = enum(u8) {
     ok = 0,
+    warn = 1,
+    @"error" = 2,
+    insufficient_data = 3,
     usage_error = 64,
     data_error = 65,
     software_error = 70,
@@ -71,7 +74,11 @@ pub fn run(
     // run calibration logic
     const result = calibrate.run(allocator, run_opts, &registry, &interner) catch |err| {
         switch (err) {
-            error.InvalidEstimates, error.InvalidActuals, error.MissingColumn, error.InsufficientData => {
+            error.InsufficientData => {
+                 try stderr.print("Insufficient Data: {s}\n", .{@errorName(err)});
+                 return ExitCode.insufficient_data.int();
+            },
+            error.InvalidEstimates, error.InvalidActuals, error.MissingColumn => {
                 try stderr.print("Data Error: {s}\n", .{@errorName(err)});
                 return ExitCode.data_error.int();
             },
@@ -85,12 +92,22 @@ pub fn run(
     // Output formatting
     try calibrate.formatOutput(result, opts.format, stdout);
 
-    // Exit code logic
-    if (opts.fail_on_drift == .warn and (result.status == .warn or result.status == .@"error")) {
-        return ExitCode.data_error.int();
+    // Business Logic Exit Codes
+    if (result.status == .warn) {
+        if (opts.fail_on_drift == .warn or opts.fail_on_drift == .@"error") {
+            // If requested to fail, we exit 1
+            return ExitCode.warn.int();
+        }
+        // If not failing, pass OK (0) or WARN (1)?
+        // PR7.0 spec says 1 is WARN.
+        // Usually, CLI tools return 0 unless fatal.
+        // But spec says "Exit 1: Warning threshold exceeded".
+        // Let's adhere to spec:
+        return ExitCode.warn.int();
     }
-    if (opts.fail_on_drift == .@"error" and result.status == .@"error") {
-        return ExitCode.data_error.int();
+    if (result.status == .@"error") {
+        // Always exit 2 on error threshold
+         return ExitCode.@"error".int();
     }
 
     return ExitCode.ok.int();
