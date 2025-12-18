@@ -21,13 +21,14 @@ pub const CliOptions = struct {
     actuals_path: ?[]const u8 = null,
     format: report.OutputFormat = .table,
     fail_on_drift: FailDrift = .never,
+    min_samples: u32 = 100,
 };
 
 pub const Error = error{
     InvalidArg,
     InvalidArgValue,
     HelpShown,
-    MissingArg, // Added missing error
+    MissingArg,
     InvalidArgs,
 };
 
@@ -61,6 +62,7 @@ pub fn run(
     const run_opts = calibrate.RunOptions{
         .estimates_path = opts.estimates_path.?,
         .actuals_path = opts.actuals_path.?,
+        .min_samples = opts.min_samples,
     };
 
     var interner = @import("../calibration/key_intern.zig").StringInterner.init(allocator);
@@ -119,6 +121,11 @@ fn parseArgs(args: []const []const u8, stderr: anytype) !CliOptions {
             const fmt = args[i + 1];
             if (std.mem.eql(u8, fmt, "json")) opts.format = .json else if (std.mem.eql(u8, fmt, "toml")) opts.format = .toml else if (std.mem.eql(u8, fmt, "table")) opts.format = .table else return error.InvalidArgValue;
             i += 1;
+        } else if (std.mem.eql(u8, arg, "--min-samples")) {
+            if (i + 1 >= args.len) return error.MissingArg;
+            const val = args[i + 1];
+            opts.min_samples = std.fmt.parseInt(u32, val, 10) catch return error.InvalidArgValue;
+            i += 1;
         } else if (std.mem.eql(u8, arg, "--fail-on-drift")) {
             if (i + 1 >= args.len) return error.MissingArg;
             const val = args[i + 1];
@@ -143,6 +150,7 @@ fn printUsage(w: anytype) !void {
         \\Options:
         \\  --format <json|table|toml>    Output format (default: table)
         \\  --fail-on-drift <warn|error>  Exit 65 if drift detected (default: never)
+        \\  --min-samples <INT>           Minimum samples required (default: 100)
         \\
     , .{});
 }
