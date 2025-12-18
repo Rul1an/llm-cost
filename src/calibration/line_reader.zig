@@ -49,7 +49,7 @@ pub const LineReader = struct {
         errdefer allocator.destroy(boxed);
         boxed.* = reader;
 
-        return .{
+        const res = LineReader{
             .allocator = allocator,
             // context points to heap now
             .r = boxed.*.any(),
@@ -62,6 +62,7 @@ pub const LineReader = struct {
             .line_buf = try allocator.alloc(u8, 64 * 1024),
             .max_line_bytes = max_line_bytes,
         };
+        return res;
     }
 
     pub fn deinit(self: *LineReader) void {
@@ -109,6 +110,7 @@ pub const LineReader = struct {
             const n = self.r.read(self.chunk) catch {
                 return error.IoError;
             };
+            // std.debug.print("DEBUG: Read {} bytes\n", .{n});
 
             if (n == 0) {
                 // EOF

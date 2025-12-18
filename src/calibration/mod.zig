@@ -62,7 +62,7 @@ pub fn run(allocator: std.mem.Allocator, opts: RunOptions, registry: anytype, in
     var file = std.fs.cwd().openFile(opts.actuals_path, .{}) catch return error.IoError;
     defer file.close();
 
-    var parser = focus.FocusParser.initFile(allocator, file, opts.max_line_bytes) catch |e| switch (e) {
+    var parser = focus.FocusParser.initFromReader(allocator, file.reader(), opts.max_line_bytes) catch |e| switch (e) {
         error.MissingRequiredColumn => return error.MissingColumn,
         error.InvalidCsv => return error.InvalidActuals,
         error.LineTooLong => return error.InvalidActuals,
