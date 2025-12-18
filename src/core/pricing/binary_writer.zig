@@ -9,6 +9,7 @@ pub fn write(allocator: std.mem.Allocator, registry: std.StringHashMap(PriceDef)
         provider: []const u8,
         input_cost: i64,
         output_cost: i64,
+        reasoning_cost: i64,
         context: u32,
         max_output: u32,
         flags: u32,
@@ -44,6 +45,7 @@ pub fn write(allocator: std.mem.Allocator, registry: std.StringHashMap(PriceDef)
             .provider = def.provider.toString(),
             .input_cost = @intCast(def.input_price_per_mtok),
             .output_cost = @intCast(def.output_price_per_mtok),
+            .reasoning_cost = if (def.output_reasoning_price_per_mtok) |r| @intCast(r) else 0,
             .context = @intCast(def.context_window orelse 0),
             .max_output = 0, // Not in PriceDef currently
             .flags = 0, // Not in PriceDef
@@ -130,7 +132,8 @@ pub fn write(allocator: std.mem.Allocator, registry: std.StringHashMap(PriceDef)
         try writer.writeInt(u32, rec.context, .little);
         try writer.writeInt(u32, rec.max_output, .little); // 0
         try writer.writeInt(u32, rec.flags, .little); // 0
-        try writer.writeByteNTimes(0, 20); // Padding
+        try writer.writeInt(i64, rec.reasoning_cost, .little); // Offset 44
+        try writer.writeByteNTimes(0, 12); // Padding (64 - 52 = 12)
     }
 
     // String Table

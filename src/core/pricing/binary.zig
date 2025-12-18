@@ -16,6 +16,7 @@ const OFF_OUTPUT: usize = 24;
 const OFF_CTX: usize = 32;
 const OFF_MAX_OUT: usize = 36;
 const OFF_FLAGS: usize = 40;
+const OFF_REASONING: usize = 44;
 
 pub const ValidationErr = error{
     Truncated,
@@ -156,6 +157,7 @@ pub const BinaryView = struct {
         const input = self.readIntAt(i64, start + OFF_INPUT);
         const output = self.readIntAt(i64, start + OFF_OUTPUT);
         const ctx = self.readIntAt(u32, start + OFF_CTX);
+        const reasoning = self.readIntAt(i64, start + OFF_REASONING);
         // Flags/MaxOut unused for Cost Calc currently but available
 
         const p_str = self.getString(prov_off);
@@ -165,7 +167,7 @@ pub const BinaryView = struct {
             .provider = schema.Provider.fromString(p_str),
             .input_price_per_mtok = @intCast(input),
             .output_price_per_mtok = @intCast(output),
-            .output_reasoning_price_per_mtok = 0,
+            .output_reasoning_price_per_mtok = if (reasoning != 0) @intCast(reasoning) else null,
             .cache_read_price_per_mtok = 0,
             .cache_write_price_per_mtok = 0,
             .context_window = ctx,
