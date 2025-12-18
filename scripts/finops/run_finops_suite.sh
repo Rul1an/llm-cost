@@ -121,7 +121,7 @@ run_validate_only() {
 run_unicode_resource_ids() {
   local est="${DATA}/p1/estimates.unicode.json"
   local act="${DATA}/p1/actuals.unicode.focus.csv"
-  out="$("${BIN}" calibrate --estimates "${est}" --actuals "${act}" 2>&1)"
+  out="$("${BIN}" calibrate --estimates "${est}" --actuals "${act}" --min-samples 1 2>&1)"
   echo "${out}" > "${REPORT_DIR}/p1_unicode.toml"
   # Check minimal crash resistance + Unicode preservation
   assert_contains "$(cat "${REPORT_DIR}/p1_unicode.toml")" "übersetzung-de"
@@ -133,7 +133,7 @@ run_unicode_resource_ids() {
 run_duplicate_actuals_aggregation() {
   local est="${DATA}/p1/estimates.dup_actuals.json"
   local act="${DATA}/p1/actuals.dup_actuals.focus.csv"
-  out="$("${BIN}" calibrate --estimates "${est}" --actuals "${act}" 2>&1)"
+  out="$("${BIN}" calibrate --estimates "${est}" --actuals "${act}" --min-samples 1 2>&1)"
   echo "${out}" > "${REPORT_DIR}/p1_dup_actuals.toml"
   assert_contains "$(cat "${REPORT_DIR}/p1_dup_actuals.toml")" "search-query"
   ok "Duplicate actual rows aggregated: ok"
@@ -143,7 +143,7 @@ run_duplicate_actuals_aggregation() {
 run_missing_extensions_degrade() {
   local est="${DATA}/small/estimates.json"
   local act="${DATA}/p1/actuals.missing_x.focus.csv"
-  out="$("${BIN}" calibrate --estimates "${est}" --actuals "${act}" 2>&1)"
+  out="$("${BIN}" calibrate --estimates "${est}" --actuals "${act}" --min-samples 1 2>&1)"
   echo "${out}" > "${REPORT_DIR}/p1_missing_x.toml"
   ok "Missing x-* columns: ran (degrade)"
 }
@@ -153,7 +153,7 @@ run_malformed_csv_row() {
   local est="${DATA}/small/estimates.json"
   local act="${DATA}/p1/actuals.corrupt_row.focus.csv"
   set +e
-  out="$("${BIN}" calibrate --estimates "${est}" --actuals "${act}" 2>&1)"
+  out="$("${BIN}" calibrate --estimates "${est}" --actuals "${act}" --min-samples 1 2>&1)"
   code=$?
   set -e
   [[ $code -ne 0 ]] || fail "Expected non-zero exit on corrupt CSV row (fail-fast mode)"
@@ -166,7 +166,7 @@ run_high_cardinality_guard() {
   local est="${DATA}/small/estimates.json"
   local act="${DATA}/p1/actuals.high_cardinality.focus.csv"
   set +e
-  out="$("${BIN}" calibrate --max-groups 1000 --estimates "${est}" --actuals "${act}" 2>&1)"
+  out="$("${BIN}" calibrate --max-groups 1000 --estimates "${est}" --actuals "${act}" --min-samples 1 2>&1)"
   code=$?
   set -e
   [[ $code -ne 0 ]] || fail "Expected non-zero exit when max_groups exceeded"
@@ -178,7 +178,7 @@ run_high_cardinality_guard() {
 run_extreme_drift_signal() {
   local est="${DATA}/p1/estimates.extreme_drift.json"
   local act="${DATA}/p1/actuals.extreme_drift.focus.csv"
-  out="$("${BIN}" calibrate --estimates "${est}" --actuals "${act}" 2>&1)"
+  out="$("${BIN}" calibrate --estimates "${est}" --actuals "${act}" --min-samples 1 2>&1)"
   echo "${out}" > "${REPORT_DIR}/p1_extreme_drift.toml"
 
   assert_contains "$(cat "${REPORT_DIR}/p1_extreme_drift.toml")" "multiplier"
