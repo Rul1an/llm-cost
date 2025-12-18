@@ -1,0 +1,53 @@
+name: Performance Smoke Test
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'build.zig'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'build.zig'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  perf-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.14.0
+
+      - name: Cache Zig
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/zig
+            zig-cache
+          key: ${{ runner.os }}-zig-perf-${{ hashFiles('build.zig', 'src/**/*.zig') }}
+          restore-keys: |
+            ${{ runner.os }}-zig-perf-
+
+      - name: Build Benchmark (ReleaseFast)
+        run: zig build bench -Doptimize=ReleaseFast -- --help
+
+      - name: Run Smoke Test (Quick)
+        run: |
+          zig build bench -Doptimize=ReleaseFast -- --quick --format=json > bench_results.json
+          cat bench_results.json
+
+      - name: Verify Output
+        run: |
+          if ! grep -q "throughput_mbps" bench_results.json; then
+            echo "Error: JSON output missing throughput metrics"
+            exit 1
+          fi
+          echo "✅ Benchmark Smoke Test Passed"

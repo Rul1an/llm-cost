@@ -235,7 +235,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/bench_suite.zig"),
             .target = resolved_target,
-            .optimize = .ReleaseFast, // Always optimize for benchmarks
+            .optimize = optimize, // Enforced by bench_suite execution
         }),
     });
 
