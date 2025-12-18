@@ -6,7 +6,7 @@ const builtin = @import("builtin");
 
 // We assume vector width is 32 (AVX2/common) or 16 (Neon),
 // but even if slightly off, we check a range around it.
-const LANES = if (builtin.cpu.arch.isAarch64()) 16 else 32;
+const LANES = if (builtin.cpu.arch == .aarch64) 16 else 32;
 
 test "Deep Verification: SIMD Boundary Traps" {
     const allocator = std.testing.allocator;

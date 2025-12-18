@@ -30,7 +30,10 @@ jobs:
           echo '{"estimated_total_usd": "100.00"}' > estimates.json
           echo "ResourceId,BilledCost,EffectiveCost,UsageQuantity,UsageUnit,ChargeCategory,x-llm-model" > actuals.csv
           echo "r1,50.00,50.00,1,req,usage,model-A" >> actuals.csv
-          echo "r2,50.00,50.00,1,req,usage,model-A" >> actuals.csv
+          # Generate 100 rows to satisfy min_samples=100 default
+          for i in {1..100}; do
+            echo "gen_$i,50.00,50.00,1,req,usage,model-A" >> actuals.csv
+          done
 
           # 2. Run Command (Expect OK)
           ./zig-out/bin/llm-cost calibrate --estimates estimates.json --actuals actuals.csv --format table
