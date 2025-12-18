@@ -150,7 +150,11 @@ pub fn build(b: *std.Build) void {
     });
     // Allow integration test to import mod.zig (which pulls in everything else via relative imports)
     // We create a "calibration" module for cleanliness
-    const cal_mod = b.createModule(.{ .root_source_file = b.path("src/calibration/mod.zig") });
+    const cal_mod = b.createModule(.{
+        .root_source_file = b.path("src/calibration/mod.zig"),
+        .target = resolved_target,
+        .optimize = optimize,
+    });
     test_calibration_integration.root_module.addImport("calibration", cal_mod);
 
     const run_calibration_integration_tests = b.addRunArtifact(test_calibration_integration);
@@ -259,6 +263,47 @@ pub fn build(b: *std.Build) void {
     const guardrail_step = b.step("test-guardrail", "Run guardrail tests (memory/fairness limits)");
     guardrail_step.dependOn(&run_guardrail.step);
 
+    const meta = b.addTest(.{
+        .root_source_file = b.path("src/tests/metamorphic/mod.zig"),
+        .target = resolved_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    // Inject dependencies matching those used in src/tests/metamorphic/mod.zig
+    meta.root_module.addImport("calibration", cal_mod);
+
+    // Create module for binary format to share with tools
+    const pricing_binary_mod = b.createModule(.{
+        .root_source_file = b.path("src/core/pricing/binary.zig"),
+    });
+
+    // Create pricing module to inject
+    const pricing_mod = b.createModule(.{
+        .root_source_file = b.path("src/core/pricing/mod.zig"),
+        .target = resolved_target,
+        .optimize = optimize,
+    });
+    // Pricing needs binary_pricing likely
+    pricing_mod.addImport("binary_pricing", pricing_binary_mod);
+    // Defensively inject manifest
+    pricing_mod.addImport("manifest", manifest_mod);
+
+    meta.root_module.addImport("pricing", pricing_mod);
+    meta.root_module.addImport("manifest", manifest_mod);
+
+    // Inject helpers
+    const helpers_mod = b.createModule(.{
+        .root_source_file = b.path("src/tests/helpers/mod.zig"),
+        .target = resolved_target,
+        .optimize = optimize,
+    });
+    meta.root_module.addImport("helpers", helpers_mod);
+
+    const run_meta = b.addRunArtifact(meta);
+    const meta_step = b.step("test-metamorphic", "Run metamorphic/invariant tests");
+    meta_step.dependOn(&run_meta.step);
+    // Intentionally NOT wired into the default `test` step to keep CI fast.
+
     const tools_step = b.step("tools", "Install auxiliary tools (signer, publisher, converter)");
 
     // Tools: Vocabulary Converter
@@ -289,10 +334,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // Create module for binary format to share with tools
-    const pricing_binary_mod = b.createModule(.{
-        .root_source_file = b.path("src/core/pricing/binary.zig"),
-    });
+    // Link binary pricing module to compile_pricing_exe
     compile_pricing_exe.root_module.addImport("binary_pricing", pricing_binary_mod);
 
     // b.installArtifact(compile_pricing_exe);
