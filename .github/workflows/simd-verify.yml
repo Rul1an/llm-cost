@@ -67,7 +67,7 @@ jobs:
 
   # Lane C: NEON Deep Verify (ARM64)
   neon-deep-verify:
-    if: github.event_name == 'schedule' || github.event_name == 'pull_request'
+    if: github.event_name == 'schedule' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'neon-verify'))
     runs-on: macos-14
     timeout-minutes: 60
     strategy:
