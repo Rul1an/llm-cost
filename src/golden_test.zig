@@ -240,7 +240,7 @@ test "Governance: Policy Violation (Forbidden Model)" {
     defer std.fs.cwd().deleteFile("dummy.txt") catch {};
 
     const check_cmd = @import("check.zig");
-    const exit_code = try check_cmd.run(mock.allocator, &args, mock.registry, mock.stdout_buf.writer().any(), mock.stderr_buf.writer().any());
+    const exit_code = try check_cmd.run(mock.allocator, &args, mock.registry, mock.stdout_buf.writer().any(), mock.stderr_buf.writer().any(), Verbosity.quiet);
 
     // 3. Verificatie
     // Exit Code 3 = Policy Violation
@@ -272,7 +272,7 @@ test "Governance: Budget Exceeded" {
     const args = [_][]const u8{ "--model", "gpt-4o", "huge.txt" };
 
     const check_cmd = @import("check.zig");
-    const exit_code = try check_cmd.run(mock.allocator, &args, mock.registry, mock.stdout_buf.writer().any(), mock.stderr_buf.writer().any());
+    const exit_code = try check_cmd.run(mock.allocator, &args, mock.registry, mock.stdout_buf.writer().any(), mock.stderr_buf.writer().any(), Verbosity.quiet);
 
     // 3. Verificatie
     // Exit Code 2 = Budget Exceeded
@@ -301,7 +301,7 @@ test "Governance: Success Pass" {
     const args = [_][]const u8{ "--model", "gpt-4o", "small.txt" };
 
     const check_cmd = @import("check.zig");
-    const exit_code = try check_cmd.run(mock.allocator, &args, mock.registry, mock.stdout_buf.writer().any(), mock.stderr_buf.writer().any());
+    const exit_code = try check_cmd.run(mock.allocator, &args, mock.registry, mock.stdout_buf.writer().any(), mock.stderr_buf.writer().any(), Verbosity.quiet);
 
     // Exit Code 0 = OK
     try std.testing.expectEqual(@intFromEnum(check_cmd.ExitCode.Ok), exit_code);
@@ -376,7 +376,7 @@ test "v0.10: Check with Manifest V2 (Arrays)" {
     // 3. Run Check (no args -> implies manifest scan)
     const args = [_][]const u8{};
     const check_cmd = @import("check.zig");
-    const exit_code = try check_cmd.run(mock.allocator, &args, mock.registry, mock.stdout_buf.writer().any(), mock.stderr_buf.writer().any());
+    const exit_code = try check_cmd.run(mock.allocator, &args, mock.registry, mock.stdout_buf.writer().any(), mock.stderr_buf.writer().any(), Verbosity.normal);
 
     try std.testing.expectEqual(@intFromEnum(check_cmd.ExitCode.Ok), exit_code);
 
