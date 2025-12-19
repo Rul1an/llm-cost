@@ -493,8 +493,17 @@ test "Contract: 'calibrate' respects CLI contract" {
     // 1. Missing Args -> Parser handles this generally, but if struct defines optionals, usage logic in run() checks it.
     // CalibrateArgs defines estimates/actuals as ?[]const u8.
     const args_missing = args_mod.CalibrateArgs{
-         .estimates = null, .actuals = null,
-         .min_samples=100, .max_resources=10000, .cardinality_policy=0, .fail_on_drift=.never, .help=false, .apply=false, .rollback=false, .dry_run=false, .format=.table,
+        .estimates = null,
+        .actuals = null,
+        .min_samples = 100,
+        .max_resources = 10000,
+        .cardinality_policy = 0,
+        .fail_on_drift = .never,
+        .help = false,
+        .apply = false,
+        .rollback = false,
+        .dry_run = false,
+        .format = .table,
     };
 
     // Pass standard Verbosity.quiet and mocked stdout writer
@@ -502,8 +511,17 @@ test "Contract: 'calibrate' respects CLI contract" {
 
     // 2. Valid Args, Missing Files -> Exit 65 (Data Error) / 74 (IO Error) ?
     const args_files = args_mod.CalibrateArgs{
-         .estimates = "e.json", .actuals = "a.csv",
-         .min_samples=100, .max_resources=10000, .cardinality_policy=0, .fail_on_drift=.never, .help=false, .apply=false, .rollback=false, .dry_run=false, .format=.table,
+        .estimates = "e.json",
+        .actuals = "a.csv",
+        .min_samples = 100,
+        .max_resources = 10000,
+        .cardinality_policy = 0,
+        .fail_on_drift = .never,
+        .help = false,
+        .apply = false,
+        .rollback = false,
+        .dry_run = false,
+        .format = .table,
     };
 
     // This call SHOULD fail with IoError because "a.csv" doesn't exist in mock cwd
@@ -550,7 +568,7 @@ test "Contract: 'calibrate' insufficient data -> Exit 3" {
 }
 
 test "Contract: 'calibrate --json' produces valid schema" {
-     var env = TestEnv.init(std.testing.allocator);
+    var env = TestEnv.init(std.testing.allocator);
     defer env.deinit();
 
     // est.json using stable key
@@ -582,7 +600,7 @@ test "Contract: 'calibrate --json' produces valid schema" {
     });
 
     if (exit_code != 0) {
-        std.debug.print("FAIL: Exit Code {d}. Stderr: {s}\n", .{exit_code, mock.stderr_buf.items});
+        std.debug.print("FAIL: Exit Code {d}. Stderr: {s}\n", .{ exit_code, mock.stderr_buf.items });
     }
 
     // Check exit code - should be 0 with valid data

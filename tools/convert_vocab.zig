@@ -82,7 +82,9 @@ fn convertVocab(alloc: std.mem.Allocator, input_path: []const u8, output_path: [
 
     // 4. Sort by rank
     std.mem.sort(Token, tokens.items, {}, struct {
-        fn lessThan(_: void, a: Token, b: Token) bool { return a.rank < b.rank; }
+        fn lessThan(_: void, a: Token, b: Token) bool {
+            return a.rank < b.rank;
+        }
     }.lessThan);
 
     // 5. Build Rank Map (for pair gen)
@@ -94,7 +96,7 @@ fn convertVocab(alloc: std.mem.Allocator, input_path: []const u8, output_path: [
     }
 
     // 6. Generate Pairs (Linear Scan)
-    var pairs = std.ArrayList(struct{l: u32, r: u32, val: u32}).init(alloc);
+    var pairs = std.ArrayList(struct { l: u32, r: u32, val: u32 }).init(alloc);
     defer pairs.deinit();
 
     for (tokens.items) |t| {
@@ -188,7 +190,7 @@ fn convertVocab(alloc: std.mem.Allocator, input_path: []const u8, output_path: [
 
         const entry_pos = @as(usize, t.rank) * 8;
         std.mem.writeInt(u32, output_payload.items[entry_pos..][0..4], offset, .little);
-        std.mem.writeInt(u32, output_payload.items[entry_pos+4..][0..4], length, .little);
+        std.mem.writeInt(u32, output_payload.items[entry_pos + 4 ..][0..4], length, .little);
 
         try blob.appendSlice(t.bytes);
     }
