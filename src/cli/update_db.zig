@@ -1,14 +1,21 @@
 const std = @import("std");
 const updater = @import("../core/pricing/updater.zig");
+const persistence = @import("../core/pricing/persistence.zig");
+const paths = @import("../core/pricing/paths.zig");
 
 pub const UpdateDbArgs = struct {
     endpoint: ?[]const u8 = null,
     license: ?[]const u8 = null,
     force: bool = false,
     allow_downgrade: bool = false,
+    rollback: bool = false,
+    list_backups: bool = false,
 };
 
 pub fn run(allocator: std.mem.Allocator, raw_args: []const []const u8) !u8 {
+    const stdout = std.io.getStdOut().writer();
+    const stderr = std.io.getStdErr().writer();
+
     var args = UpdateDbArgs{};
 
     var i: usize = 0;
@@ -16,6 +23,10 @@ pub fn run(allocator: std.mem.Allocator, raw_args: []const []const u8) !u8 {
         const arg = raw_args[i];
         if (std.mem.eql(u8, arg, "--force")) {
             args.force = true;
+        } else if (std.mem.eql(u8, arg, "--rollback")) {
+            args.rollback = true;
+        } else if (std.mem.eql(u8, arg, "--list-backups")) {
+            args.list_backups = true;
         } else if (std.mem.eql(u8, arg, "--allow-downgrade")) {
             args.allow_downgrade = true;
         } else if (std.mem.eql(u8, arg, "--endpoint")) {
@@ -27,12 +38,12 @@ pub fn run(allocator: std.mem.Allocator, raw_args: []const []const u8) !u8 {
             if (i + 1 < raw_args.len) {
                 args.license = raw_args[i + 1];
                 i += 1;
+            } else {
+                try stderr.writeAll("Error: --license requires a value.\n");
+                return 64; // Usage Error
             }
         }
     }
-
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
 
     var env_token: ?[]u8 = null;
     defer if (env_token) |t| allocator.free(t);
@@ -43,6 +54,62 @@ pub fn run(allocator: std.mem.Allocator, raw_args: []const []const u8) !u8 {
             env_token = t;
             token = t;
         } else |_| {}
+    }
+
+    // Handle List Backups
+    if (args.list_backups) {
+        const cache_path = try paths.getCacheDir(allocator);
+        defer allocator.free(cache_path);
+
+        var cache_dir = std.fs.openDirAbsolute(cache_path, .{ .iterate = true }) catch |err| {
+            try stderr.print("Error: Failed to open database directory: {s}\n", .{@errorName(err)});
+            return 1;
+        };
+        defer cache_dir.close();
+
+        const backups = persistence.listBackups(allocator, cache_dir) catch |err| {
+            try stderr.print("Error: Failed to list backups: {s}\n", .{@errorName(err)});
+            return 1;
+        };
+        defer {
+            for (backups) |b| allocator.free(b.name);
+            allocator.free(backups);
+        }
+
+        if (backups.len == 0) {
+            try stdout.writeAll("No backups found.\n");
+        } else {
+            try stdout.writeAll("Backups:\n");
+            for (backups) |b| {
+                try stdout.print("  - {s}\n", .{b.name});
+            }
+        }
+        return 0;
+    }
+
+    // Handle Rollback
+    if (args.rollback) {
+        const cache_path = try paths.getCacheDir(allocator);
+        defer allocator.free(cache_path);
+
+        var cache_dir = std.fs.openDirAbsolute(cache_path, .{ .iterate = true }) catch |err| {
+            try stderr.print("Error: Failed to open database directory: {s}\n", .{@errorName(err)});
+            return 1;
+        };
+        defer cache_dir.close();
+
+        // Canonical name assumption: pricing_db.json
+        persistence.rollback(allocator, cache_dir, "pricing_db.json") catch |err| {
+            if (err == error.NoBackupsFound) {
+                try stderr.writeAll("Error: No backups found to rollback to.\n");
+            } else {
+                try stderr.print("Error: Rollback failed: {s}\n", .{@errorName(err)});
+            }
+            return 1;
+        };
+
+        try stdout.writeAll("✓ Successfully rolled back to previous version.\n");
+        return 0;
     }
 
     const result = updater.checkAndUpdate(allocator, .{
