@@ -72,26 +72,9 @@ pub const CalibrationStats = struct {
         }
 
         if (r.@"x-llm-model") |m| {
-            // Intern key first? Or check existence?
-            // Checking existence requires key.
-            // Interning places it in arena.
-
-            // Strategy: Check if we have it. If not, check capacity.
-            // We need a lookup without full intern for efficiency? `interner` doesn't expose `get` easily without access.
-            // But `intern` is fast.
-
-            // Wait, we need to know if it's NEW to the *stats map*, not just the interner.
-            // But to check the map we need the key.
-            // If we intern every time, we fill the Arena. Valid concern for high cardinality denial of service?
-            // "Prevent llm-cost ... from exhausting memory".
-            // If we blindly intern 1M unique strings, we OOM the Arena.
-            // So we should check `by_model` using a transient key if possible, OR rely on `makeUniqueName` logic?
-            // `StringHashMap` uses string slice keys. We can lookup with `m` (slice) directly if we cast?
-            // `StringHashMapUnmanaged` keys are `[]const u8`. `m` is `[]const u8`.
-            // Yes, we can lookup using the raw slice `m` BEFORE interning!
-
-            // BUT: `by_model` keys are *interned pointers*. The hash map compares *string content*?
-            // `StringHashMap` hashes contents. So yes, look up by value is fine.
+            // Lookup by raw slice before interning to avoid filling the arena on
+            // adversarial high-cardinality inputs; StringHashMap hashes contents,
+            // so lookups by value are correct even though keys are interned.
 
             var key_to_use: []const u8 = undefined;
 

@@ -139,6 +139,8 @@ fn parseArgs(args: []const []const u8, stderr: anytype) !CliOptions {
             const val = args[i + 1];
             opts.min_samples = std.fmt.parseInt(u32, val, 10) catch return error.InvalidArgValue;
             i += 1;
+        } else if (std.mem.eql(u8, arg, "--fail-on-drift")) {
+            if (i + 1 >= args.len) return error.MissingArg;
             const val = args[i + 1];
             if (std.mem.eql(u8, val, "warn")) opts.fail_on_drift = .warn else if (std.mem.eql(u8, val, "error")) opts.fail_on_drift = .@"error" else if (std.mem.eql(u8, val, "never")) opts.fail_on_drift = .never else return error.InvalidArgValue;
             i += 1;

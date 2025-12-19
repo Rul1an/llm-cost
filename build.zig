@@ -189,24 +189,8 @@ pub fn build(b: *std.Build) void {
     });
     // Same dependencies as calibration integration
     test_cardinality.root_module.addImport("calibration", cal_mod);
-    // And allow it to access internals via types/intern/lines if needed, but via 'calibration' module should be enough
-    // IF the test imports via @import("../calibration/mod.zig") directly?
-    // The test uses relative imports, but let's wire it correctly.
-    // Actually the test uses:
-    // const calibrate = @import("../calibration/mod.zig");
-    // const stats = @import("../calibration/stats.zig");
-    // const types = @import("../calibration/types.zig");
-    // const key_intern = @import("../calibration/key_intern.zig");
-    // const focus = @import("../calibration/focus_import.zig");
-
-    // We can rely on file paths if they are in same tree.
-    // Alternatively, we can give it "calibration" module:
+    // Wire required calibration modules for cardinality tests.
     test_cardinality.root_module.addImport("calibration", cal_mod);
-    // But the test is written using relative paths.
-    // Let's add the imports needed:
-    test_cardinality.root_module.addImport("../calibration/types.zig", cal_types);
-    test_cardinality.root_module.addImport("../calibration/key_intern.zig", cal_intern);
-    test_cardinality.root_module.addImport("../calibration/focus_import.zig", cal_focus);
 
     const run_cardinality = b.addRunArtifact(test_cardinality);
     test_step.dependOn(&run_cardinality.step);
