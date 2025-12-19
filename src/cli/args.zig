@@ -14,16 +14,16 @@ pub const Command = union(enum) {
     calibrate: CalibrateArgs,
     update_db: UpdateDbArgs,
     ci_action: CiActionArgs,
-    @"export": ExportArgs, // Added export
-    init: InitArgs, // Added init
-    pipe: PipeArgs, // Added pipe
-    report: ReportArgs, // Added report
-    analytics: AnalyticsArgs, // Added analytics
-    upgrade: UpgradeArgs, // Added upgrade
-    verify: VerifyArgs, // Added verify
-    verify_license: VerifyLicenseArgs, // Added verify-license
-    models: ModelsArgs, // Added models
-    count: CountArgs, // Added count
+    @"export": ExportArgs,
+    init: InitArgs,
+    pipe: PipeArgs,
+    report: ReportArgs,
+    analytics: AnalyticsArgs,
+    upgrade: UpgradeArgs,
+    verify: VerifyArgs,
+    verify_license: VerifyLicenseArgs,
+    models: ModelsArgs,
+    count: CountArgs,
 
     version: void,
     help: void,
@@ -107,42 +107,74 @@ pub fn parse(allocator: std.mem.Allocator, args: []const []const u8) ParseError!
         .command = .none,
     };
 
-    var i: usize = 0;
+    var cmd_idx: ?usize = null;
+    var term_idx: ?usize = null;
 
-    // Parse global flags first
-    while (i < args.len) : (i += 1) {
-        const arg = args[i];
+    // Pass 1: Scan for command and terminator
+    for (args, 0..) |arg, i| {
+        if (std.mem.eql(u8, arg, "--")) {
+            term_idx = i;
+            // Next arg is command if we haven't found one
+            if (i + 1 < args.len) {
+                cmd_idx = i + 1;
+            } else {
+                // Trailing terminator with no command: "llm-cost --"
+                // Effectively no command.
+            }
+            break;
+        }
+        if (arg.len > 0 and arg[0] != '-') {
+            cmd_idx = i;
+            break;
+        }
+    }
+
+    // Pass 2: Extract Globals
+    for (args, 0..) |arg, i| {
+        // Stop at global terminator
+        if (term_idx) |t| {
+            if (i == t) break;
+        }
+        // Stop if we encounter terminator explicitly (even if not found in Pass 1)
+        if (std.mem.eql(u8, arg, "--")) break;
+
+        if (cmd_idx) |c| {
+            if (i == c) continue;
+        }
+
+        const is_zone2 = if (cmd_idx) |c| i > c else false;
 
         if (std.mem.eql(u8, arg, "-q") or std.mem.eql(u8, arg, "--quiet")) {
             result.global.verbosity = .quiet;
         } else if (std.mem.eql(u8, arg, "-v") or std.mem.eql(u8, arg, "--verbose")) {
             result.global.verbosity = .verbose;
         } else if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
-            result.global.help = true;
+            if (!is_zone2) result.global.help = true;
         } else if (std.mem.eql(u8, arg, "--version")) {
-            result.global.version = true;
+            if (!is_zone2) result.global.version = true;
         } else if (std.mem.startsWith(u8, arg, "-")) {
-            // If it looks like a flag but we don't recognize it as global, it MIGHT be a command flag
-            // But we are parsing globals BEFORE command.
-            // If we encounter a command (non-flag), we switch to command parsing.
-            // If we encounter a flag here, it must be global OR we are in a weird state.
-            // However, `llm-cost estimate -m gpt-4` -> `estimate` is at index 0 (after program name).
-            // My logic below handles command at first non-flag.
-            return ParseError.UnknownFlag;
-        } else {
-            // First non-flag is the command
-            result.command = try parseCommand(arg, args[i + 1 ..]);
-            break;
+            // Zone 1: Error (typo hazard). Zone 2: Ignore (command parsing).
+            if (!is_zone2) return ParseError.UnknownFlag;
         }
     }
 
-    // Handle --version and --help as commands if no command given
-    if (result.command == .none) {
-        if (result.global.version) {
-            result.command = .version;
-        } else if (result.global.help) {
-            result.command = .help;
+    // Global Help/Version Early Exit
+    if (result.global.version) {
+        return .{ .global = result.global, .command = .version };
+    }
+    if (result.global.help) {
+        return .{ .global = result.global, .command = .help };
+    }
+
+    // Dispatch Command
+    if (cmd_idx) |c| {
+        if (c < args.len) {
+            const cmd_str = args[c];
+            const tail = args[c + 1 ..];
+            result.command = try parseCommand(cmd_str, tail);
         }
+    } else {
+        // No command found.
     }
 
     return result;
@@ -151,7 +183,6 @@ pub fn parse(allocator: std.mem.Allocator, args: []const []const u8) ParseError!
 fn parseCommand(cmd: []const u8, remaining: []const []const u8) ParseError!Command {
     if (std.mem.eql(u8, cmd, "calibrate")) return parseCalibrate(remaining);
 
-    // Legacy/Pass-through commands
     // Legacy/Pass-through commands
     if (std.mem.eql(u8, cmd, "estimate")) return .{ .estimate = .{ .args = remaining } };
     if (std.mem.eql(u8, cmd, "price")) {
@@ -190,9 +221,27 @@ fn parseCommand(cmd: []const u8, remaining: []const []const u8) ParseError!Comma
 fn parseCalibrate(args: []const []const u8) ParseError!Command {
     var result = CalibrateArgs{};
     var i: usize = 0;
+    var stop_flags = false;
 
     while (i < args.len) : (i += 1) {
         const arg = args[i];
+
+        if (stop_flags) {
+            // Positional args are not allowed for calibrate
+            return ParseError.UnknownFlag;
+        }
+
+        if (std.mem.eql(u8, arg, "--")) {
+            stop_flags = true;
+            continue;
+        }
+
+        // Ignore global flags in pass 2 (Zone 2)
+        if (std.mem.eql(u8, arg, "-v") or std.mem.eql(u8, arg, "--verbose") or
+            std.mem.eql(u8, arg, "-q") or std.mem.eql(u8, arg, "--quiet"))
+        {
+            continue;
+        }
 
         if (std.mem.eql(u8, arg, "--estimates")) {
             i += 1;
@@ -254,6 +303,9 @@ fn parseCalibrate(args: []const []const u8) ParseError!Command {
         } else if (std.mem.startsWith(u8, arg, "-")) {
             // Assume it's a calibrate specific flag? Or error?
             // For now error, to be safe.
+            return ParseError.UnknownFlag;
+        } else {
+            // Unexpected positional argument
             return ParseError.UnknownFlag;
         }
     }

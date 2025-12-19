@@ -7,7 +7,7 @@ const pipe = @import("pipe.zig");
 const report = @import("report.zig");
 const analytics = @import("analytics/mod.zig");
 const check = @import("check.zig");
-const init = @import("init.zig");
+const init = @import("commands/init.zig");
 const manifest = @import("core/manifest.zig");
 const resource_id = @import("core/resource_id.zig");
 const export_cmd = @import("export.zig");
@@ -191,7 +191,7 @@ pub fn main() !u8 {
             return 0;
         },
         .init => |cmd| {
-            init.run(allocator, cmd.args, std.io.getStdIn().reader(), global_state.stdout) catch return 1;
+            init.run(allocator, cmd.args, std.fs.cwd(), global_state.stdout, std.io.getStdErr().writer()) catch return 1;
             return 0;
         },
         .pipe => |cmd| {
