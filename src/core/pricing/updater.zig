@@ -2,7 +2,7 @@ const std = @import("std");
 const Manifest = @import("manifest.zig");
 const UpdateState = @import("state.zig").UpdateState;
 const fetcher = @import("fetcher.zig");
-const atomic = @import("atomic.zig");
+const persistence = @import("persistence.zig");
 const paths = @import("paths.zig");
 const Sha256 = std.crypto.hash.sha2.Sha256;
 
@@ -157,10 +157,8 @@ pub fn checkAndUpdate(
     }
 
     // 4. Download DB to temp file with On-the-fly Hashing
-    // Ensure temp dir
-    cache_dir.makePath("temp") catch return UpdateError.AccessDenied;
-
-    const db_temp_name = "temp/pricing_db.part";
+    // Use .part in same dir for atomic rename
+    const db_temp_name = "pricing_db.part";
     const db_file = cache_dir.createFile(db_temp_name, .{ .read = true }) catch return UpdateError.AccessDenied;
     defer db_file.close();
 
@@ -204,7 +202,7 @@ pub fn checkAndUpdate(
     const compression = manifest_container.value.body.db.compression;
     const target_filename = if (std.mem.eql(u8, compression, "zstd")) "pricing_db.json.zst" else "pricing_db.json";
 
-    atomic.install(cache_dir, manifest_res.data, db_temp_name, target_filename) catch return UpdateError.InstallFailed;
+    persistence.install(allocator, cache_dir, db_temp_name, target_filename, .{}) catch return UpdateError.InstallFailed;
 
     // 7. Update State
     state.recordSuccess(manifest_container.value.body.version, now);

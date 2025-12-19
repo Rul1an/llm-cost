@@ -181,6 +181,19 @@ pub fn build(b: *std.Build) void {
     const run_focus_hybrid = b.addRunArtifact(test_focus_hybrid);
     test_step.dependOn(&run_focus_hybrid.step);
 
+    // Persistence Tests (PR7.3)
+    const test_persistence = b.addTest(.{
+        .root_source_file = b.path("src/tests/persistence_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    test_persistence.root_module.addAnonymousImport("persistence", .{
+        .root_source_file = b.path("src/core/pricing/persistence.zig"),
+    });
+
+    const run_persistence = b.addRunArtifact(test_persistence);
+    test_step.dependOn(&run_persistence.step);
+
     // Fuzz/Chaos tests
     const fuzz_tests = b.addTest(.{
         .root_source_file = b.path("src/fuzz_test.zig"),
