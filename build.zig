@@ -367,7 +367,6 @@ pub fn build(b: *std.Build) void {
     meta.root_module.addImport("manifest", manifest_mod);
     meta.root_module.addImport("helpers", helpers_mod);
 
-    // Create module for binary format to share with tools
     const run_meta = b.addRunArtifact(meta);
     const meta_step = b.step("test-metamorphic", "Run metamorphic/invariant tests");
     meta_step.dependOn(&run_meta.step);

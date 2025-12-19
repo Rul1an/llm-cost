@@ -102,7 +102,7 @@ test "regression: Vantage CSV without model degrades gracefully" {
         \\{ "estimated_total_micro": 1000000 }
     ;
 
-    // Missing model in tags
+    // Missing 'model' key in tags
     const actuals =
         \\ChargePeriodStart,ChargeCategory,BilledCost,ResourceId,ServiceName,Tags
         \\2025-01-01,Usage,0.000010,focus-id,LLM Inference,"{""x-token-count-input"":2}"
