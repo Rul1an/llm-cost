@@ -300,7 +300,7 @@ pub fn run(state: context.GlobalState, argv: []const []const u8) !u8 {
     defer state.allocator.free(ev_json);
 
     // Staleness Check (CI Specific)
-    const staleness = state.registry.getStaleness();
+    const staleness = state.registry.?.getStaleness();
     if (staleness != .Fresh) {
         if (cfg.strict_pricing or staleness == .Critical) {
             if (cfg.strict_pricing) {
@@ -340,7 +340,7 @@ pub fn run(state: context.GlobalState, argv: []const []const u8) !u8 {
             const head_p = file_provider.Provider{ .filesystem = .{ .repo_dir = "." } };
 
             // Compute Deltas
-            const deltas = diff_cmd.computeDeltas(state.allocator, base_p, head_p, cfg.manifest_path, state.registry) catch |err| {
+            const deltas = diff_cmd.computeDeltas(state.allocator, base_p, head_p, cfg.manifest_path, state.registry.?) catch |err| {
                 try state.stderr.print("ci-action diff error: {}\n", .{err});
                 return @intFromEnum(ExitCode.api_error);
             };

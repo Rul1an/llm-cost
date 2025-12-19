@@ -3,6 +3,8 @@ const manifest = @import("core/manifest.zig");
 const engine = @import("core/engine.zig");
 const Pricing = @import("core/pricing/mod.zig");
 
+const Verbosity = @import("cli/verbosity.zig").Verbosity;
+
 pub const ExitCode = enum(u8) {
     Ok = 0,
     Error = 1,
@@ -16,6 +18,7 @@ pub fn run(
     registry: *const Pricing.Registry,
     stdout: std.io.AnyWriter,
     stderr: std.io.AnyWriter,
+    verbosity: Verbosity,
 ) !u8 {
     // 1. Load Policy (llm-cost.toml)
     var policy = manifest.Policy{};
@@ -42,6 +45,9 @@ pub fn run(
                 cli_model = args[i + 1];
                 i += 1;
             }
+        } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+            try stdout.print("Usage: llm-cost check [OPTIONS] [FILES...]\n", .{});
+            return @intFromEnum(ExitCode.Ok);
         } else if (!std.mem.startsWith(u8, arg, "-")) {
             try cli_inputs.append(arg);
         }
@@ -175,24 +181,30 @@ pub fn run(
     }
 
     // 5. Evaluate Budget
-    if (prompts_checked == 1) {
-        try stdout.print("✓ {} prompt validated\n", .{prompts_checked});
-    } else {
-        try stdout.print("✓ {} prompts validated\n", .{prompts_checked});
+    if (verbosity != .quiet) {
+        if (prompts_checked == 1) {
+            try stdout.print("✓ {} prompt validated\n", .{prompts_checked});
+        } else {
+            try stdout.print("✓ {} prompts validated\n", .{prompts_checked});
+        }
     }
 
     const total_usd = Pricing.PriceDef.toUsd(total_cost);
 
     if (policy.max_cost_usd) |limit| {
         const percent = (total_usd / limit) * 100.0;
-        try stdout.print("Budget Usage: ${d:.4} / ${d:.4} ({d:.1}%)\n", .{ total_usd, limit, percent });
+        if (verbosity != .quiet) {
+            try stdout.print("Budget Usage: ${d:.4} / ${d:.4} ({d:.1}%)\n", .{ total_usd, limit, percent });
+        }
 
         if (total_usd > limit) {
             try stderr.print("BUDGET EXCEEDED: Cost ${d:.4} exceeds limit ${d:.4}\n", .{ total_usd, limit });
             return @intFromEnum(ExitCode.BudgetExceeded);
         }
     } else {
-        try stdout.print("Total Est. Cost: ${d:.4} (No budget limit set)\n", .{total_usd});
+        if (verbosity != .quiet) {
+            try stdout.print("Total Est. Cost: ${d:.4} (No budget limit set)\n", .{total_usd});
+        }
     }
 
     return @intFromEnum(ExitCode.Ok);

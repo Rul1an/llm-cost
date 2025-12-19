@@ -43,6 +43,9 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
             if (i + 1 >= args.len) return error.MissingArgument;
             // Store manifest path for later scanning logic
             i += 1;
+        } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+            try state.stdout.print("Usage: llm-cost estimate [OPTIONS] [FILES...]\n", .{});
+            return;
         } else if (!std.mem.startsWith(u8, arg, "-")) {
             try input_files.append(arg);
         }
@@ -54,7 +57,7 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
     defer env_map.deinit();
     if (env_map.get("LLM_COST_STRICT")) |_| strict_pricing = true;
 
-    const staleness = state.registry.getStaleness();
+    const staleness = state.registry.?.getStaleness();
     if (staleness != .Fresh) {
         if (strict_pricing or staleness == .Critical) {
             // In Strict mode, ANY staleness (Warning+) is an error.
@@ -76,7 +79,7 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
             if (strict_pricing) {
                 try state.stderr.print("Error: Pricing data is stale (Status: {s}). Strict mode enabled.\n", .{@tagName(staleness)});
                 return error.StalePricing;
-            } else {
+            } else if (state.verbosity != .quiet) {
                 try state.stderr.print("Warning: Pricing data is stale (Status: {s}). Estimates may be inaccurate.\n", .{@tagName(staleness)});
             }
         }
@@ -107,7 +110,7 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
     } else |_| {}
     defer policy.deinit(state.allocator);
 
-    const price_def = state.registry.get(model_name) orelse {
+    const price_def = state.registry.?.get(model_name) orelse {
         try state.stderr.print("Error: Unknown model '{s}'. Run 'llm-cost models' to list available models.\n", .{model_name});
         // std.process.exit is not ideal in library code, but copying main.zig logic:
         return error.UnknownModel;

@@ -12,174 +12,257 @@ const manifest = @import("core/manifest.zig");
 const resource_id = @import("core/resource_id.zig");
 const export_cmd = @import("export.zig");
 const diff_cmd = @import("diff.zig");
-// Components Refactor
 const context = @import("context.zig");
 const estimate_cmd = @import("commands/estimate.zig");
 const ci_action_cmd = @import("ci_action.zig");
 const verify_cmd = @import("verify.zig");
-const calibrate_cmd = @import("calibrate/cmd.zig");
+const calibrate_cmd = @import("commands/calibrate.zig");
 const update_db_cmd = @import("cli/update_db.zig");
 const upgrade_cmd = @import("cli/upgrade.zig");
 const verify_license_cmd = @import("cli/verify_license.zig");
 const version_cmd = @import("commands/version.zig");
+const args_mod = @import("cli/args.zig");
+const Verbosity = @import("cli/verbosity.zig").Verbosity;
 
-pub const version_str = "1.2.2";
-
-// Re-exporting GlobalState for backward compatibility if needed, but components use context.GlobalState
+pub const version_str = "1.9.0";
 pub const GlobalState = context.GlobalState;
-pub const runEstimate = estimate_cmd.run;
 
-pub fn main() !void {
-    // 1. Setup Allocator
+const naked_help =
+    \\llm-cost - Static cost analysis for LLM workloads
+    \\
+    \\Usage: llm-cost <command> [options]
+    \\
+    \\Commands:
+    \\  estimate   Estimate cost for prompt files
+    \\  check      Enforce budget/policy gates
+    \\  diff       Compare costs between git refs
+    \\  calibrate  Compare estimates vs actuals
+    \\  export     Export FOCUS CSV for FinOps tools
+    \\  update-db  Fetch latest pricing database
+    \\  init       Initialize llm-cost in a repo
+    \\  pipe       Stdin/Stdout piping mode
+    \\  report     Generate cost reports
+    \\  upgrade    Self-upgrade llm-cost
+    \\  verify     Verify estimation accuracy
+    \\  models     List available models
+    \\  count      Count tokens in file/stdin
+    \\  ci-action  Run CI action checks
+    \\  verify-license Verify license key
+    \\  analyze-fairness Analyze fairness metrics
+    \\
+    \\Global flags:
+    \\  -q, --quiet     Suppress progress, errors only
+    \\  -v, --verbose   Full debug output
+    \\  -h, --help      Show help
+    \\      --version   Show version
+    \\
+    \\Run 'llm-cost <command> --help' for command details.
+    \\
+;
+
+pub fn main() !u8 {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    // 2. Setup I/O
+    const raw_args = std.process.argsAlloc(allocator) catch {
+        std.io.getStdErr().writer().writeAll("Failed to read arguments\n") catch {};
+        return 1;
+    };
+    defer std.process.argsFree(allocator, raw_args);
+
+    const args = if (raw_args.len > 1) raw_args[1..] else raw_args[0..0];
+
+    if (args.len == 0) {
+        std.io.getStdOut().writer().writeAll(naked_help) catch {};
+        return 0;
+    }
+
+    const parsed = args_mod.parse(allocator, args) catch |err| {
+        const stderr = std.io.getStdErr().writer();
+        switch (err) {
+            args_mod.ParseError.UnknownCommand => stderr.writeAll("Unknown command. Run 'llm-cost --help'\n") catch {},
+            args_mod.ParseError.UnknownFlag => stderr.writeAll("Unknown flag. Run 'llm-cost <command> --help'\n") catch {},
+            args_mod.ParseError.MissingValue => stderr.writeAll("Missing value for flag\n") catch {},
+            args_mod.ParseError.InvalidValue => stderr.writeAll("Invalid value for flag\n") catch {},
+            args_mod.ParseError.ConflictingFlags => stderr.writeAll("Conflicting flags: --apply and --rollback\n") catch {},
+        }
+        return 2;
+    };
+
+    const verbosity = parsed.global.verbosity;
     const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
 
-    // 3. Initialize Pricing Registry
-    // Verified Mode (Minisign)
-    var registry = try Pricing.Registry.init(allocator, .{});
-    defer registry.deinit();
+    // Init minimal state for legacy commands
+    // We only init registry if needed by the command?
+    // main.zig previously inited registry GLOBALLY.
+    // We should probably keep that behavior for legacy commands that expect GlobalState.
+    // Check if command is calibrate (which handles its own registry).
 
-    // 4. Parse Args
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    // Commands that need GlobalState: estimate, models, count, pipe, report, analyze-fairness, update-db, check, init, export, diff, ci-action, verify, upgrade, verify-license.
+    // Calibrate handles its own.
 
-    if (args.len < 2) {
-        try stdout.print(
-            \\llm-cost - Static cost analysis for LLM workloads
-            \\
-            \\Usage: llm-cost <command> [options]
-            \\
-            \\Commands:
-            \\  estimate   Estimate cost for prompt files
-            \\  check      Enforce budget/policy gates
-            \\  diff       Compare costs between git refs
-            \\  export     Export FOCUS CSV for FinOps tools
-            \\  update-db  Fetch latest pricing database
-            \\
-            \\Run 'llm-cost <command> --help' for details.
-            \\Run 'llm-cost --help' for all options.
-            \\
-        , .{});
-        return;
-    }
-
-    var command: []const u8 = args[1];
-
-    // Alias Handling
-    if (std.mem.eql(u8, command, "price")) {
-        try stderr.print("⚠️  'price' is deprecated, use 'estimate' instead\n", .{});
-        command = "estimate"; // Redirect
-    } else if (std.mem.eql(u8, command, "cost")) {
-        try stderr.print("⚠️  'cost' is deprecated, use 'estimate' instead\n", .{});
-        command = "estimate"; // Redirect
-    }
-
-    if (std.mem.eql(u8, command, "help") or std.mem.eql(u8, command, "--help") or std.mem.eql(u8, command, "-h")) {
-        try printUsage(stdout);
-        return;
-    }
-
-    if (std.mem.eql(u8, command, "version") or std.mem.eql(u8, command, "--version")) {
-        // Updated to use new version command with check
-        try version_cmd.run(allocator, version_str, stdout);
-        return;
-    }
-
-    // Initialize Global State
-    const state = GlobalState{
-        .allocator = allocator,
-        .registry = &registry,
-        .stdout = stdout.any(),
-        .stderr = stderr.any(),
+    const needs_registry = switch (parsed.command) {
+        .calibrate, .version, .help, .none => false,
+        else => true,
     };
 
-    if (std.mem.eql(u8, command, "models")) {
-        try runModels(state, args[2..]);
-    } else if (std.mem.eql(u8, command, "tokens") or std.mem.eql(u8, command, "count")) {
-        try runCount(state, args[2..]);
-    } else if (std.mem.eql(u8, command, "estimate")) {
-        try estimate_cmd.run(state, args[2..]);
-    } else if (std.mem.eql(u8, command, "pipe")) {
-        try runPipe(state, args[2..]);
-    } else if (std.mem.eql(u8, command, "report") or std.mem.eql(u8, command, "tokenizer-report")) {
-        try runReport(state, args[2..]);
-    } else if (std.mem.eql(u8, command, "analyze-fairness")) {
-        try runFairnessAnalysis(state, args[2..]);
-    } else if (std.mem.eql(u8, command, "update-db")) {
-        // Pass slice of args (skip "update-db")
-        const exit_code = try update_db_cmd.run(state.allocator, args[2..]);
-        if (exit_code != 0) std.process.exit(@intCast(exit_code));
-    } else if (std.mem.eql(u8, command, "check")) {
-        const exit_code = try check.run(state.allocator, args[2..], state.registry, state.stdout, state.stderr);
-        if (exit_code != 0) std.process.exit(@intCast(exit_code));
-    } else if (std.mem.eql(u8, command, "init")) {
-        try init.run(state.allocator, args[2..], std.io.getStdIn().reader(), state.stdout);
-    } else if (std.mem.eql(u8, command, "export")) {
-        try export_cmd.run(state.allocator, args[2..], state.registry, state.stdout);
-    } else if (std.mem.eql(u8, command, "diff")) {
-        try diff_cmd.run(state.allocator, args[2..], state.registry, state.stdout);
-    } else if (std.mem.eql(u8, command, "ci-action")) {
-        const exit_code = try ci_action_cmd.run(state, args[2..]);
-        if (exit_code != 0) std.process.exit(@intCast(exit_code));
-    } else if (std.mem.eql(u8, command, "verify")) {
-        try verify_cmd.run(state.allocator, args[2..], state.stdout, state.stderr);
-    } else if (std.mem.eql(u8, command, "calibrate")) {
-        const cmd_calibrate = @import("commands/calibrate.zig");
-        const exit_code = try cmd_calibrate.run(state.allocator, args[2..], state.stdout, state.stderr);
-        if (exit_code != 0) std.process.exit(@intCast(exit_code));
-    } else if (std.mem.eql(u8, command, "upgrade")) {
-        const exit_code = try upgrade_cmd.run(state.allocator, args[2..]);
-        if (exit_code != 0) std.process.exit(@intCast(exit_code));
-    } else if (std.mem.eql(u8, command, "verify-license")) {
-        const exit_code = try verify_license_cmd.run(state.allocator, args[2..]);
-        if (exit_code != 0) std.process.exit(@intCast(exit_code));
-    } else {
-        try stderr.print("Error: Unknown command '{s}'\n\n", .{command});
-        try printUsage(stderr);
-        std.process.exit(1);
+    var registry: ?Pricing.Registry = null;
+    if (needs_registry) {
+        registry = Pricing.Registry.init(allocator, .{}) catch |err| {
+            // For legacy compatibility, we might just warn?
+            // But existing main panicked on try? No, it used `try`.
+            // So if init fails, we error out.
+            stderr.print("Failed to initialize pricing registry: {s}\n", .{@errorName(err)}) catch {};
+            return 1;
+        };
+    }
+    defer if (registry) |*r| r.deinit();
+
+    // Prepare GlobalState if needed
+    const global_state = if (registry) |*r| GlobalState{
+        .allocator = allocator,
+        .registry = r,
+        .stdout = stdout.any(),
+        .stderr = stderr.any(),
+        .verbosity = verbosity,
+    } else GlobalState{ // Dummy for commands that don't need it or use it differently
+        .allocator = allocator,
+        .registry = null, // Safe null instead of undefined
+        .stdout = stdout.any(),
+        .stderr = stderr.any(),
+        .verbosity = verbosity,
+    };
+
+    switch (parsed.command) {
+        .calibrate => |cmd_args| {
+            var args_copy = cmd_args;
+            if (parsed.global.help) args_copy.help = true;
+
+            return calibrate_cmd.run(allocator, args_copy, verbosity, stdout) catch |err| {
+                switch (err) {
+                    calibrate_cmd.CalibrateError.UsageError => {
+                        // If checking help, we don't expect usage error if we handled it, but calibrate run handles it.
+                        // But if help was passed, run returns 0.
+                        stderr.writeAll("Error: --estimates and --actuals are required (or usage error)\n") catch {};
+                        return 64;
+                    },
+                    calibrate_cmd.CalibrateError.IoError => {
+                        return 74; // IO Error
+                    },
+                    else => {
+                        stderr.print("Calibration failed: {s}\n", .{@errorName(err)}) catch {};
+                        return 1;
+                    },
+                }
+            };
+        },
+        .version => {
+            stdout.print("llm-cost {s}\n", .{version_str}) catch {};
+            return 0;
+        },
+        .help => {
+            stdout.writeAll(naked_help) catch {};
+            return 0;
+        },
+        .estimate => |cmd| {
+            estimate_cmd.run(global_state, cmd.args) catch return 1;
+            return 0;
+        },
+        .check => |cmd| {
+            const code = check.run(allocator, cmd.args, global_state.registry.?, global_state.stdout, global_state.stderr, global_state.verbosity) catch return 1;
+            return @intCast(code);
+        },
+        .diff => |cmd| {
+            diff_cmd.run(allocator, cmd.args, global_state.registry.?, global_state.stdout) catch return 1;
+            return 0;
+        },
+        .update_db => |cmd| {
+            const code = update_db_cmd.run(allocator, cmd.args) catch return 1;
+            return @intCast(code);
+        },
+        .ci_action => |cmd| {
+            const code = ci_action_cmd.run(global_state, cmd.args) catch return 1;
+            return @intCast(code);
+        },
+        .@"export" => |cmd| {
+            export_cmd.run(allocator, cmd.args, global_state.registry.?, global_state.stdout) catch return 1;
+            return 0;
+        },
+        .init => |cmd| {
+            init.run(allocator, cmd.args, std.io.getStdIn().reader(), global_state.stdout) catch return 1;
+            return 0;
+        },
+        .pipe => |cmd| {
+            pipe.run(allocator, cmd.args, global_state.registry.?, global_state.stdout, global_state.stderr) catch return 1;
+            return 0;
+        },
+        .report => |cmd| {
+            report.run(allocator, cmd.args, global_state.registry.?, global_state.stdout) catch return 1;
+            return 0;
+        },
+        .analytics => |cmd| {
+            // runFairnessAnalysis equivalent
+            // Extract optional logic from old main?
+            // runFairnessAnalysis(state, args)
+            // args was just slice.
+            runFairnessAnalysis(global_state, cmd.args) catch return 1;
+            return 0;
+        },
+        .upgrade => |cmd| {
+            const code = upgrade_cmd.run(allocator, cmd.args) catch return 1;
+            if (code < 0 or code > std.math.maxInt(u8)) return 1;
+            return @intCast(code);
+        },
+        .verify => |cmd| {
+            verify_cmd.run(allocator, cmd.args, global_state.stdout, global_state.stderr) catch return 1;
+            return 0;
+        },
+        .verify_license => |cmd| {
+            const code = verify_license_cmd.run(allocator, cmd.args) catch return 1;
+            if (code < 0 or code > std.math.maxInt(u8)) return 1;
+            return @intCast(code);
+        },
+        .models => |cmd| {
+            runModels(global_state, cmd.args) catch return 1;
+            return 0;
+        },
+        .count => |cmd| {
+            runCount(global_state, cmd.args) catch return 1;
+            return 0;
+        },
+
+        .none => {
+            stdout.writeAll(naked_help) catch {};
+            return 0;
+        },
     }
 }
 
-// --- Commands ---
-
+// Legacy helpers from main.zig retained
 pub fn runModels(state: GlobalState, args: []const []const u8) !void {
     var format_json = false;
-
     for (args) |arg| {
         if (std.mem.eql(u8, arg, "--format=json") or std.mem.eql(u8, arg, "--json")) {
             format_json = true;
         }
     }
-
-    // Collect keys for sorting (Determinism for Golden Tests)
     var keys = std.ArrayList([]const u8).init(state.allocator);
     defer keys.deinit();
-
-    // Iterate over registry
-    var it = state.registry.iterator();
+    var it = state.registry.?.iterator();
     while (it.next()) |entry| {
         try keys.append(entry.key);
     }
-
-    // Sort keys alphabetically
     if (keys.items.len > 1) {
         std.mem.sort([]const u8, keys.items, {}, stringLessThan);
     }
-
     if (format_json) {
         try state.stdout.print("[\n", .{});
         for (keys.items, 0..) |key, i| {
-            const def = state.registry.get(key).?;
-            // Handling potential alias fields if PriceDef uses input_cost vs input_price
-            // The User's PriceDef in mod.zig has input_price_per_mtok
+            const def = state.registry.?.get(key).?;
             const in_p = Pricing.PriceDef.toUsd(def.input_price_per_mtok);
             const out_p = Pricing.PriceDef.toUsd(def.output_price_per_mtok);
-
             try state.stdout.print("  {{\n", .{});
             try state.stdout.print("    \"id\": \"{s}\",\n", .{key});
             try state.stdout.print("    \"cost_in\": {d},\n", .{in_p});
@@ -201,12 +284,10 @@ pub fn runModels(state: GlobalState, args: []const []const u8) !void {
     } else {
         try state.stdout.print("{s:<20} {s:<15} {s:<15} {s:<15}\n", .{ "MODEL", "INPUT ($/1M)", "OUTPUT ($/1M)", "REAS ($/1M)" });
         try state.stdout.print("{s:-<20} {s:-<15} {s:-<15} {s:-<15}\n", .{ "", "", "", "" });
-
         for (keys.items) |key| {
-            const def = state.registry.get(key).?;
+            const def = state.registry.?.get(key).?;
             const in_p = Pricing.PriceDef.toUsd(def.input_price_per_mtok);
             const out_p = Pricing.PriceDef.toUsd(def.output_price_per_mtok);
-
             const reas_str = if (def.output_reasoning_price_per_mtok) |r| blk: {
                 if (r > 0) {
                     break :blk try std.fmt.allocPrint(state.allocator, "${d:.2}", .{Pricing.PriceDef.toUsd(r)});
@@ -214,27 +295,16 @@ pub fn runModels(state: GlobalState, args: []const []const u8) !void {
                     break :blk "-";
                 }
             } else "-";
-            // Note: In runModels we allocPrint, we should free it.
-            // But for simple CLI output, arena or defer is fine.
-            // But we are using GPA in main... so we must free.
             defer if ((def.output_reasoning_price_per_mtok orelse 0) > 0) state.allocator.free(reas_str);
-
             try state.stdout.print("{s:<20} ${d:<14.2} ${d:<14.2} {s:<14}\n", .{ key, in_p, out_p, reas_str });
         }
         try state.stdout.print("\nTotal models: {d}\n", .{keys.items.len});
     }
 }
 
-// runEstimate has been moved to commands/estimate.zig
-
-fn stringLessThan(_: void, a: []const u8, b: []const u8) bool {
-    return std.mem.order(u8, a, b) == .lt;
-}
-
 pub fn runCount(state: GlobalState, args: []const []const u8) !void {
     var model_name: []const u8 = "gpt-4o";
     var file_path: ?[]const u8 = null;
-
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
@@ -246,9 +316,7 @@ pub fn runCount(state: GlobalState, args: []const []const u8) !void {
             file_path = arg;
         }
     }
-
     const tokenizer_config = try engine.resolveConfig(model_name);
-
     const input_text = if (file_path) |path| blk: {
         const file = try std.fs.cwd().openFile(path, .{});
         defer file.close();
@@ -257,24 +325,18 @@ pub fn runCount(state: GlobalState, args: []const []const u8) !void {
         break :blk try std.io.getStdIn().readToEndAlloc(state.allocator, 1024 * 1024 * 100);
     };
     defer state.allocator.free(input_text);
-
     const count = try engine.countTokens(state.allocator, input_text, tokenizer_config);
     try state.stdout.print("{d}\n", .{count});
 }
 
-pub fn runPipe(state: GlobalState, args: []const []const u8) !void {
-    try pipe.run(state.allocator, args, state.registry, state.stdout, state.stderr);
-}
-
-pub fn runReport(state: GlobalState, args: []const []const u8) !void {
-    try report.run(state.allocator, args, state.registry, state.stdout);
+fn stringLessThan(_: void, a: []const u8, b: []const u8) bool {
+    return std.mem.order(u8, a, b) == .lt;
 }
 
 pub fn runFairnessAnalysis(state: GlobalState, args: []const []const u8) !void {
     var corpus_path: ?[]const u8 = null;
     var model: ?[]const u8 = null;
     var format: []const u8 = "text";
-
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
@@ -292,42 +354,9 @@ pub fn runFairnessAnalysis(state: GlobalState, args: []const []const u8) !void {
             i += 1;
         }
     }
-
     if (corpus_path == null or model == null) {
         try state.stderr.print("Error: --corpus and --model are required for fairness analysis.\n", .{});
         return error.MissingArgument;
     }
-
     try analytics.runFairnessAnalysis(state.allocator, corpus_path.?, model.?, format);
 }
-
-fn printUsage(w: anytype) !void {
-    try w.print(
-        \\llm-cost v{s}
-        \\
-        \\Usage:
-        \\  llm-cost tokens    --model [ID] [FILE]    Count tokens in a file or stdin
-        \\  llm-cost price     --model [ID] [FILE]    Estimate cost for a file or stdin
-        \\  llm-cost models    [--json]               List supported models and prices
-        \\  llm-cost check     [FILES...]             Check budget/policy (llm-cost.toml)
-        \\  llm-cost pipe      [OPTIONS]              Batch process JSONL from stdin
-        \\  llm-cost report    [OPTIONS]              Analyze usage logs
-        \\  llm-cost export    [OPTIONS]              Export forecast to FOCUS v1.0 CSV
-        \\  llm-cost diff      [OPTIONS]              Show cost difference against git ref
-        \\  llm-cost ci-action [OPTIONS]              Run CI checks and post comment
-        \\  llm-cost verify    [FILE]                 Verify artifact integrity
-        \\  llm-cost calibrate [OPTIONS]              Calibrate prices against FOCUS data
-        \\  llm-cost update-db                        Update pricing database (supports --rollback)
-        \\  llm-cost upgrade                          Upgrade to Pro (License purchase)
-        \\  llm-cost verify-license [KEY]             Verify Pro license status
-        \\  llm-cost version                          Show version
-        \\
-        \\Examples:
-        \\  cat prompt.txt | llm-cost tokens --model gpt-4o
-        \\  llm-cost price --model gpt-4o-mini big_prompt.txt
-        \\  llm-cost ci-action --budget 1.00 --no-comment
-        \\
-    , .{version_str});
-}
-
-// End of main.zig

@@ -137,6 +137,8 @@ Filter and group by `Tags.team`, `Tags.app`, or `Tags.model` in your FinOps dash
 | `pipe` | Stream JSON usage → cost output |
 | `update-db` | Refresh pricing database |
 
+**Note**: Global flags (`--quiet`, `--verbose`) must precede the subcommand (e.g., `llm-cost --quiet calibrate`).
+
 ## How It Works
 
 - **Offline**: No API keys, no telemetry. Network only for explicit `update-db`.
