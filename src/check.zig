@@ -42,6 +42,9 @@ pub fn run(
                 cli_model = args[i + 1];
                 i += 1;
             }
+        } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+            try stdout.print("Usage: llm-cost check [OPTIONS] [FILES...]\n", .{});
+            return @intFromEnum(ExitCode.Ok);
         } else if (!std.mem.startsWith(u8, arg, "-")) {
             try cli_inputs.append(arg);
         }

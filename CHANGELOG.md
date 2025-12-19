@@ -1,4 +1,31 @@
 
+## [v1.9.0] - 2025-12-19
+### Added
+- **Calibration Loop (Drift Analysis)**: Connect estimates to actual billing data (FOCUS v1.0/v1.2 CSV) to detect "Shadow AI" usage and pricing drift.
+    - `llm-cost calibrate`: New command to calculate drift multipliers and generate `factors.toml`.
+    - Supports `min-samples`, `max-resources` cardinality guardrails, and Wilson Score confidence intervals.
+- **Persistence & Safety**:
+    - `--apply`: Atomically updates `llm-cost.toml` with calibration factors, creating timestamped backups.
+    - `--rollback`: Instantly restores the previous configuration state.
+- **FinOps Standard Support**:
+    - Hybrid parser supports **FOCUS v1.0** core columns and **v1.2** extensions (`InvoiceIssuerName`, etc.).
+    - Strict schema validation returns specific exit codes (`65` for data errors).
+- **CLI Polish**:
+    - **Global Flags**: `--quiet` (`-q`) and `--verbose` (`-v`) control output verbosity across all commands.
+    - **TTY-Aware Progress**: Progress bars and spinners appear only on stderr and strictly when attached to a TTY.
+    - **Strict Output Contract**: `stdout` reserved for machine-readable data (JSON/Markdown), `stderr` for logs/progress.
+- **Regression Suite**: new `src/tests/regression_suite.zig` runs automatically in CI to prevent regression of critical flows (Vantage roundtrip, pipe safety).
+
+### Changed
+- **Exit Codes**: Standardized POSIX-aligned exit codes:
+    - `0`: Success (or Drift < Threshold).
+    - `1`: Warning (Drift > Warn Threshold + Gating).
+    - `2`: Error (Drift > Error Threshold + Gating).
+    - `3`: Insufficient Data.
+    - `65`: Data Error (`EX_DATAERR`).
+    - `70`: Software Error (`EX_SOFTWARE`).
+- **Performance**: Optimized `calibrate` command with streaming CSV parsing and interned resource keys for low memory footprint at scale.
+
 ## [v1.7.0] - 2025-12-18
 ### Added
 - **SIMD Acceleration**: 10-20x throughput improvement for `cl100k_base` and `o200k_base` utilizing AVX2/NEON optimizations (via `@Vector`).

@@ -43,6 +43,9 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
             if (i + 1 >= args.len) return error.MissingArgument;
             // Store manifest path for later scanning logic
             i += 1;
+        } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+            try state.stdout.print("Usage: llm-cost estimate [OPTIONS] [FILES...]\n", .{});
+            return;
         } else if (!std.mem.startsWith(u8, arg, "-")) {
             try input_files.append(arg);
         }
