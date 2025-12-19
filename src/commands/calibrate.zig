@@ -25,12 +25,13 @@ pub fn run(
     allocator: std.mem.Allocator,
     cmd_args: CalibrateArgs,
     verbosity: Verbosity,
+    stdout_writer: anytype,
 ) !u8 {
     const log = Logger.init(verbosity);
-    const stdout = std.io.getStdOut().writer();
+
 
     if (cmd_args.help) {
-        try printUsage(stdout);
+        try printUsage(stdout_writer);
         return 0;
     }
 
@@ -105,7 +106,7 @@ pub fn run(
         .toml => .toml,
     };
 
-    try calibrate.formatOutput(result, fmt, stdout);
+    try calibrate.formatOutput(result, fmt, stdout_writer);
 
     if (cmd_args.apply) {
         log.info("Applying changes to llm-cost.toml...", .{});

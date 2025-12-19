@@ -124,7 +124,7 @@ pub fn main() !u8 {
     };
 
     switch (parsed.command) {
-        .calibrate => |cmd_args| return calibrate_cmd.run(allocator, cmd_args, verbosity) catch |err| {
+        .calibrate => |cmd_args| return calibrate_cmd.run(allocator, cmd_args, verbosity, stdout) catch |err| {
             switch (err) {
                 calibrate_cmd.CalibrateError.UsageError => {
                     stderr.writeAll("Error: --estimates and --actuals are required (or usage error)\n") catch {};
