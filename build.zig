@@ -181,6 +181,22 @@ pub fn build(b: *std.Build) void {
     const run_focus_hybrid = b.addRunArtifact(test_focus_hybrid);
     test_step.dependOn(&run_focus_hybrid.step);
 
+    // Cardinality Tests (PR7.4)
+    const test_cardinality = b.addTest(.{
+        .root_source_file = b.path("src/tests/cardinality_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    // Same dependencies as calibration integration
+    test_cardinality.root_module.addImport("calibration", cal_mod);
+    // Wire required calibration modules for cardinality tests.
+    test_cardinality.root_module.addImport("calibration", cal_mod);
+
+    const run_cardinality = b.addRunArtifact(test_cardinality);
+    test_step.dependOn(&run_cardinality.step);
+    const step_cardinality = b.step("test-cardinality", "Run cardinality tests (PR7.4)");
+    step_cardinality.dependOn(&run_cardinality.step);
+
     // Persistence Tests (PR7.3)
     const test_persistence = b.addTest(.{
         .root_source_file = b.path("src/tests/persistence_test.zig"),

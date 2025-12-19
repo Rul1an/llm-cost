@@ -317,7 +317,7 @@ fn printUsage(w: anytype) !void {
         \\  llm-cost ci-action [OPTIONS]              Run CI checks and post comment
         \\  llm-cost verify    [FILE]                 Verify artifact integrity
         \\  llm-cost calibrate [OPTIONS]              Calibrate prices against FOCUS data
-        \\  llm-cost update-db                        Update pricing database
+        \\  llm-cost update-db                        Update pricing database (supports --rollback)
         \\  llm-cost upgrade                          Upgrade to Pro (License purchase)
         \\  llm-cost verify-license [KEY]             Verify Pro license status
         \\  llm-cost version                          Show version

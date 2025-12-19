@@ -24,6 +24,10 @@ pub const CalibrationResult = struct {
 
     status: Status,
 
+    // Cardinality Stats
+    cardinality_truncated: bool = false,
+    cardinality_unique_seen: u64 = 0,
+
     recommendations: []recs_mod.Recommendation = &[_]recs_mod.Recommendation{},
 
     pub fn deinit(self: CalibrationResult, allocator: std.mem.Allocator) void {
@@ -43,6 +47,7 @@ pub const Error = error{
     OutOfMemory,
     SoftwareError,
     Bad,
+    CardinalityExceeded,
 };
 
 pub const RunOptions = struct {
@@ -54,6 +59,10 @@ pub const RunOptions = struct {
     min_samples: u32 = 100,
 
     max_line_bytes: usize = 64 * 1024,
+
+    // Cardinality Guardrails
+    max_unique_resources: u32 = 10000,
+    cardinality_policy: types.CardinalityPolicy = .degrade,
 };
 
 pub fn run(allocator: std.mem.Allocator, opts: RunOptions, registry: anytype, interner: *key_intern.StringInterner) Error!CalibrationResult {
@@ -71,7 +80,7 @@ pub fn run(allocator: std.mem.Allocator, opts: RunOptions, registry: anytype, in
     };
     defer parser.deinit();
 
-    var s = stats.CalibrationStats.init(allocator, interner);
+    var s = try stats.CalibrationStats.init(allocator, interner, opts.max_unique_resources, opts.cardinality_policy);
     defer s.deinit();
 
     while (true) {
@@ -113,6 +122,8 @@ pub fn run(allocator: std.mem.Allocator, opts: RunOptions, registry: anytype, in
         .sample_count = s.sample_count,
         .days_covered = s.daysCovered(),
         .status = st,
+        .cardinality_truncated = s.cardinality_truncated,
+        .cardinality_unique_seen = s.unique_resources_seen,
         .recommendations = recs,
     };
 }
