@@ -120,7 +120,7 @@ pub fn build(b: *std.Build) void {
 
     const test_calibration_core = b.addTest(.{
         .root_source_file = b.path("src/tests/calibration_core.zig"),
-        .target = target,
+        .target = resolved_target,
         .optimize = optimize,
     });
     // Expose calibration modules to test
@@ -140,12 +140,42 @@ pub fn build(b: *std.Build) void {
     test_calibration_core.root_module.addImport("../calibration/line_reader.zig", cal_lines);
     test_calibration_core.root_module.addImport("../calibration/focus_import.zig", cal_focus);
 
+    // Create module for binary format to share with tools
+    const pricing_binary_mod = b.createModule(.{
+        .root_source_file = b.path("src/core/pricing/binary.zig"),
+    });
+
+    // Create pricing module to inject
+    const pricing_mod = b.createModule(.{
+        .root_source_file = b.path("src/core/pricing/mod.zig"),
+        .target = resolved_target,
+        .optimize = optimize,
+    });
+    // Pricing needs binary_pricing likely
+    pricing_mod.addImport("binary_pricing", pricing_binary_mod);
+    // Defensively inject manifest
+    pricing_mod.addImport("manifest", manifest_mod);
+
+    // Inject helpers
+    const helpers_mod = b.createModule(.{
+        .root_source_file = b.path("src/tests/helpers/mod.zig"),
+        .target = resolved_target,
+        .optimize = optimize,
+    });
+
+    // Policy Parser Module (src/core/manifest.zig) for regression tests
+    const policy_mod = b.createModule(.{
+        .root_source_file = b.path("src/core/manifest.zig"),
+        .target = resolved_target,
+        .optimize = optimize,
+    });
+
     const run_calibration_core_tests = b.addRunArtifact(test_calibration_core);
 
     // New Integration Tests
     const test_calibration_integration = b.addTest(.{
         .root_source_file = b.path("src/tests/calibration_integration.zig"),
-        .target = target,
+        .target = resolved_target,
         .optimize = optimize,
     });
     // Allow integration test to import mod.zig (which pulls in everything else via relative imports)
@@ -169,7 +199,7 @@ pub fn build(b: *std.Build) void {
     // Hybrid Parser Tests (PR7.2)
     const test_focus_hybrid = b.addTest(.{
         .root_source_file = b.path("src/tests/focus_hybrid.zig"),
-        .target = target,
+        .target = resolved_target,
         .optimize = optimize,
     });
     // Inject dependencies same as calibration core
@@ -184,11 +214,10 @@ pub fn build(b: *std.Build) void {
     // Cardinality Tests (PR7.4)
     const test_cardinality = b.addTest(.{
         .root_source_file = b.path("src/tests/cardinality_test.zig"),
-        .target = target,
+        .target = resolved_target,
         .optimize = optimize,
     });
-    // Same dependencies as calibration integration
-    test_cardinality.root_module.addImport("calibration", cal_mod);
+
     // Wire required calibration modules for cardinality tests.
     test_cardinality.root_module.addImport("calibration", cal_mod);
 
@@ -196,6 +225,28 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_cardinality.step);
     const step_cardinality = b.step("test-cardinality", "Run cardinality tests (PR7.4)");
     step_cardinality.dependOn(&run_cardinality.step);
+
+    // Regression Tests (PR7.5)
+    // Runs on main, hermetic, light-weight.
+    const test_regression = b.addTest(.{
+        .root_source_file = b.path("src/tests/regression_suite.zig"),
+        .target = resolved_target,
+        .optimize = optimize,
+        .single_threaded = true,
+    });
+    // Wire dependencies
+    test_regression.root_module.addImport("calibration", cal_mod);
+    test_regression.root_module.addImport("helpers", helpers_mod);
+    test_regression.root_module.addImport("pricing", pricing_mod);
+    test_regression.root_module.addImport("manifest", manifest_mod); // Pricing Manifest
+    test_regression.root_module.addImport("policy_manifest", policy_mod); // Config Policy Parser
+
+    const run_regression = b.addRunArtifact(test_regression);
+    // Add to 'test' step to ensure it runs on PRs/main
+    test_step.dependOn(&run_regression.step);
+
+    const step_regression = b.step("test-regression", "Run regression suite (Vantage/Legacy)");
+    step_regression.dependOn(&run_regression.step);
 
     // Persistence Tests (PR7.3)
     const test_persistence = b.addTest(.{
@@ -314,34 +365,11 @@ pub fn build(b: *std.Build) void {
     });
     // Inject dependencies matching those used in src/tests/metamorphic/mod.zig
     meta.root_module.addImport("calibration", cal_mod);
-
-    // Create module for binary format to share with tools
-    const pricing_binary_mod = b.createModule(.{
-        .root_source_file = b.path("src/core/pricing/binary.zig"),
-    });
-
-    // Create pricing module to inject
-    const pricing_mod = b.createModule(.{
-        .root_source_file = b.path("src/core/pricing/mod.zig"),
-        .target = resolved_target,
-        .optimize = optimize,
-    });
-    // Pricing needs binary_pricing likely
-    pricing_mod.addImport("binary_pricing", pricing_binary_mod);
-    // Defensively inject manifest
-    pricing_mod.addImport("manifest", manifest_mod);
-
     meta.root_module.addImport("pricing", pricing_mod);
     meta.root_module.addImport("manifest", manifest_mod);
-
-    // Inject helpers
-    const helpers_mod = b.createModule(.{
-        .root_source_file = b.path("src/tests/helpers/mod.zig"),
-        .target = resolved_target,
-        .optimize = optimize,
-    });
     meta.root_module.addImport("helpers", helpers_mod);
 
+    // Create module for binary format to share with tools
     const run_meta = b.addRunArtifact(meta);
     const meta_step = b.step("test-metamorphic", "Run metamorphic/invariant tests");
     meta_step.dependOn(&run_meta.step);
