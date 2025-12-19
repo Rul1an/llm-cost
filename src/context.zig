@@ -3,7 +3,7 @@ const Pricing = @import("core/pricing/mod.zig");
 
 pub const GlobalState = struct {
     allocator: std.mem.Allocator,
-    registry: *Pricing.Registry,
+    registry: ?*Pricing.Registry,
     stdout: std.io.AnyWriter,
     stderr: std.io.AnyWriter,
     verbosity: @import("cli/verbosity.zig").Verbosity = .normal,

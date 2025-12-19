@@ -154,11 +154,29 @@ fn executeRollback(log: Logger) !void {
 }
 
 fn applyChanges(log: Logger) !void {
-    std.fs.cwd().copyFile("llm-cost.toml", std.fs.cwd(), "llm-cost.toml.bak", .{}) catch |e| {
+    const cwd = std.fs.cwd();
+    const main_path = "llm-cost.toml";
+    const bak_path = "llm-cost.toml.bak";
+    const new_path = "llm-cost.toml.new";
+
+    // Ensure there is a calibrated configuration ready to apply.
+    cwd.access(new_path, .{}) catch {
+        log.err("No calibrated configuration to apply: {s}", .{new_path});
+        return CalibrateError.UsageError;
+    };
+
+    // Create a backup of the current configuration, if it exists.
+    cwd.copyFile(main_path, cwd, bak_path, .{}) catch |e| {
         if (e != error.FileNotFound) {
             log.warn("Failed to create backup: {s}", .{@errorName(e)});
             return e;
         }
+    };
+
+    // Replace the main configuration with the calibrated one.
+    cwd.rename(new_path, main_path) catch |e| {
+        log.err("Failed to apply calibrated configuration: {s}", .{@errorName(e)});
+        return CalibrateError.IoError;
     };
 }
 
@@ -175,8 +193,7 @@ fn printUsage(w: anytype) !void {
         \\  --apply                         Apply changes to llm-cost.toml
         \\  --rollback                      Rollback to previous configuration
         \\  --dry-run                       Simulate application (default)
-        \\  -v, --verbose                   Enable verbose output
-        \\  -q, --quiet                     Suppress non-error output
+        \\  --dry-run                       Simulate application (default)
         \\
     , .{});
 }

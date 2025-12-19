@@ -57,7 +57,7 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
     defer env_map.deinit();
     if (env_map.get("LLM_COST_STRICT")) |_| strict_pricing = true;
 
-    const staleness = state.registry.getStaleness();
+    const staleness = state.registry.?.getStaleness();
     if (staleness != .Fresh) {
         if (strict_pricing or staleness == .Critical) {
             // In Strict mode, ANY staleness (Warning+) is an error.
@@ -110,7 +110,7 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
     } else |_| {}
     defer policy.deinit(state.allocator);
 
-    const price_def = state.registry.get(model_name) orelse {
+    const price_def = state.registry.?.get(model_name) orelse {
         try state.stderr.print("Error: Unknown model '{s}'. Run 'llm-cost models' to list available models.\n", .{model_name});
         // std.process.exit is not ideal in library code, but copying main.zig logic:
         return error.UnknownModel;

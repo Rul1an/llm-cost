@@ -46,6 +46,9 @@ const naked_help =
     \\  verify     Verify estimation accuracy
     \\  models     List available models
     \\  count      Count tokens in file/stdin
+    \\  ci-action  Run CI action checks
+    \\  verify-license Verify license key
+    \\  analyze-fairness Analyze fairness metrics
     \\
     \\Global flags:
     \\  -q, --quiet     Suppress progress, errors only
@@ -126,7 +129,7 @@ pub fn main() !u8 {
         .verbosity = verbosity,
     } else GlobalState{ // Dummy for commands that don't need it or use it differently
         .allocator = allocator,
-        .registry = undefined, // usage would crash?
+        .registry = null, // Safe null instead of undefined
         .stdout = stdout.any(),
         .stderr = stderr.any(),
         .verbosity = verbosity,
@@ -168,11 +171,11 @@ pub fn main() !u8 {
             return 0;
         },
         .check => |cmd| {
-            const code = check.run(allocator, cmd.args, global_state.registry, global_state.stdout, global_state.stderr, global_state.verbosity) catch return 1;
+            const code = check.run(allocator, cmd.args, global_state.registry.?, global_state.stdout, global_state.stderr, global_state.verbosity) catch return 1;
             return @intCast(code);
         },
         .diff => |cmd| {
-            diff_cmd.run(allocator, cmd.args, global_state.registry, global_state.stdout) catch return 1;
+            diff_cmd.run(allocator, cmd.args, global_state.registry.?, global_state.stdout) catch return 1;
             return 0;
         },
         .update_db => |cmd| {
@@ -184,7 +187,7 @@ pub fn main() !u8 {
             return @intCast(code);
         },
         .@"export" => |cmd| {
-            export_cmd.run(allocator, cmd.args, global_state.registry, global_state.stdout) catch return 1;
+            export_cmd.run(allocator, cmd.args, global_state.registry.?, global_state.stdout) catch return 1;
             return 0;
         },
         .init => |cmd| {
@@ -192,11 +195,11 @@ pub fn main() !u8 {
             return 0;
         },
         .pipe => |cmd| {
-            pipe.run(allocator, cmd.args, global_state.registry, global_state.stdout, global_state.stderr) catch return 1;
+            pipe.run(allocator, cmd.args, global_state.registry.?, global_state.stdout, global_state.stderr) catch return 1;
             return 0;
         },
         .report => |cmd| {
-            report.run(allocator, cmd.args, global_state.registry, global_state.stdout) catch return 1;
+            report.run(allocator, cmd.args, global_state.registry.?, global_state.stdout) catch return 1;
             return 0;
         },
         .analytics => |cmd| {
@@ -247,7 +250,7 @@ pub fn runModels(state: GlobalState, args: []const []const u8) !void {
     }
     var keys = std.ArrayList([]const u8).init(state.allocator);
     defer keys.deinit();
-    var it = state.registry.iterator();
+    var it = state.registry.?.iterator();
     while (it.next()) |entry| {
         try keys.append(entry.key);
     }
@@ -257,7 +260,7 @@ pub fn runModels(state: GlobalState, args: []const []const u8) !void {
     if (format_json) {
         try state.stdout.print("[\n", .{});
         for (keys.items, 0..) |key, i| {
-            const def = state.registry.get(key).?;
+            const def = state.registry.?.get(key).?;
             const in_p = Pricing.PriceDef.toUsd(def.input_price_per_mtok);
             const out_p = Pricing.PriceDef.toUsd(def.output_price_per_mtok);
             try state.stdout.print("  {{\n", .{});
@@ -282,7 +285,7 @@ pub fn runModels(state: GlobalState, args: []const []const u8) !void {
         try state.stdout.print("{s:<20} {s:<15} {s:<15} {s:<15}\n", .{ "MODEL", "INPUT ($/1M)", "OUTPUT ($/1M)", "REAS ($/1M)" });
         try state.stdout.print("{s:-<20} {s:-<15} {s:-<15} {s:-<15}\n", .{ "", "", "", "" });
         for (keys.items) |key| {
-            const def = state.registry.get(key).?;
+            const def = state.registry.?.get(key).?;
             const in_p = Pricing.PriceDef.toUsd(def.input_price_per_mtok);
             const out_p = Pricing.PriceDef.toUsd(def.output_price_per_mtok);
             const reas_str = if (def.output_reasoning_price_per_mtok) |r| blk: {
