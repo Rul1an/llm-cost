@@ -193,7 +193,6 @@ pub fn build(b: *std.Build) void {
 
     const run_persistence = b.addRunArtifact(test_persistence);
     test_step.dependOn(&run_persistence.step);
-
     // Fuzz/Chaos tests
     const fuzz_tests = b.addTest(.{
         .root_source_file = b.path("src/fuzz_test.zig"),
