@@ -217,7 +217,6 @@ pub fn build(b: *std.Build) void {
         .target = resolved_target,
         .optimize = optimize,
     });
-
     // Wire required calibration modules for cardinality tests.
     test_cardinality.root_module.addImport("calibration", cal_mod);
 
@@ -247,7 +246,6 @@ pub fn build(b: *std.Build) void {
 
     const step_regression = b.step("test-regression", "Run regression suite (Vantage/Legacy)");
     step_regression.dependOn(&run_regression.step);
-
     // Persistence Tests (PR7.3)
     const test_persistence = b.addTest(.{
         .root_source_file = b.path("src/tests/persistence_test.zig"),
