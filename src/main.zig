@@ -229,10 +229,7 @@ pub fn main() !u8 {
             runCount(global_state, cmd.args) catch return 1;
             return 0;
         },
-        .run_models => |cmd| {
-            runModels(global_state, cmd.args) catch return 1;
-            return 0;
-        },
+
         .none => {
             stdout.writeAll(naked_help) catch {};
             return 0;
