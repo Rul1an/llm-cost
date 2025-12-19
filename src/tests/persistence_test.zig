@@ -3,7 +3,7 @@ const testing = std.testing;
 const persistence = @import("persistence");
 
 test "Persistence: InstallAt rotates current to timestamped backup" {
-    var tmp = testing.tmpDir(.{});
+    var tmp = testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
 
     // Setup
@@ -32,7 +32,7 @@ test "Persistence: InstallAt rotates current to timestamped backup" {
 }
 
 test "Persistence: Naming collision handling (suffix support)" {
-    var tmp = testing.tmpDir(.{});
+    var tmp = testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
 
     const temp_name = "current.tmp";
@@ -58,7 +58,7 @@ test "Persistence: Naming collision handling (suffix support)" {
     }
 
     try testing.expectEqual(@as(usize, 2), backups.len);
-    // listBackups sorts newest first (lexicographical decending).
+    // listBackups sorts newest first (lexicographical descending).
     // "backup...-01" > "backup..."
     try testing.expectEqualStrings("backup.19700101_003320-01", backups[0].name);
     try testing.expectEqualStrings("backup.19700101_003320", backups[1].name);
@@ -68,7 +68,7 @@ test "Persistence: Naming collision handling (suffix support)" {
 }
 
 test "Persistence: Pruning keeps newest backups (Order Verification)" {
-    var tmp = testing.tmpDir(.{});
+    var tmp = testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
 
     const current_name = "pricing_db.json";
@@ -124,7 +124,7 @@ test "Persistence: Pruning keeps newest backups (Order Verification)" {
 }
 
 test "Persistence: Rollback restores backup and stashes current" {
-    var tmp = testing.tmpDir(.{});
+    var tmp = testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
 
     const current_name = "pricing_db.json";
@@ -168,7 +168,7 @@ test "Persistence: Rollback restores backup and stashes current" {
 }
 
 test "Persistence: Broken file collision handling during rollback" {
-    var tmp = testing.tmpDir(.{});
+    var tmp = testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
 
     const current_name = "pricing_db.json";

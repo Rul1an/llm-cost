@@ -103,16 +103,21 @@ pub fn rollbackAt(
     defer allocator.free(broken_name);
 
     // Move current -> broken (best-effort)
+    var current_stashed = false;
     if (dir.statFile(current_name)) |_| {
-        dir.rename(current_name, broken_name) catch {};
+        if (dir.rename(current_name, broken_name)) |_| {
+            current_stashed = true;
+        } else |_| {}
     } else |_| {}
 
     // Restore backup -> current
     dir.rename(latest, current_name) catch |e| {
         // Attempt to restore broken -> current if we have it
-        dir.rename(broken_name, current_name) catch |err_restore| {
-            std.log.err("CRITICAL: Failed to restore broken backup during rollback failure: {}", .{err_restore});
-        };
+        if (current_stashed) {
+            dir.rename(broken_name, current_name) catch |err_restore| {
+                std.log.err("CRITICAL: Failed to restore broken backup during rollback failure: {}", .{err_restore});
+            };
+        }
         std.log.err("Rollback failed (rename backup->current): {}", .{e});
         return PersistenceError.RollbackFailed;
     };

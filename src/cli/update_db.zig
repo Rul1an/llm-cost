@@ -13,6 +13,9 @@ pub const UpdateDbArgs = struct {
 };
 
 pub fn run(allocator: std.mem.Allocator, raw_args: []const []const u8) !u8 {
+    const stdout = std.io.getStdOut().writer();
+    const stderr = std.io.getStdErr().writer();
+
     var args = UpdateDbArgs{};
 
     var i: usize = 0;
@@ -41,9 +44,6 @@ pub fn run(allocator: std.mem.Allocator, raw_args: []const []const u8) !u8 {
             }
         }
     }
-
-    const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
 
     var env_token: ?[]u8 = null;
     defer if (env_token) |t| allocator.free(t);
