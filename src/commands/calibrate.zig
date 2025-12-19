@@ -29,7 +29,6 @@ pub fn run(
 ) !u8 {
     const log = Logger.init(verbosity);
 
-
     if (cmd_args.help) {
         try printUsage(stdout_writer);
         return 0;
