@@ -24,7 +24,7 @@ pub const Command = union(enum) {
     verify_license: VerifyLicenseArgs, // Added verify-license
     models: ModelsArgs, // Added models
     count: CountArgs, // Added count
-    run_models: ModelsArgs, // Alias
+
     version: void,
     help: void,
     none: void,
@@ -51,8 +51,6 @@ pub const OutputFormat = enum {
 
     pub fn fromString(s: []const u8) ?OutputFormat {
         const map = std.StaticStringMap(OutputFormat).initComptime(.{
-            .{ "table", .table },
-            .{ "json", .json },
             .{ "table", .table },
             .{ "json", .json },
             .{ "toml", .toml },
@@ -154,7 +152,16 @@ fn parseCommand(cmd: []const u8, remaining: []const []const u8) ParseError!Comma
     if (std.mem.eql(u8, cmd, "calibrate")) return parseCalibrate(remaining);
 
     // Legacy/Pass-through commands
-    if (std.mem.eql(u8, cmd, "estimate") or std.mem.eql(u8, cmd, "price") or std.mem.eql(u8, cmd, "cost")) return .{ .estimate = .{ .args = remaining } };
+    // Legacy/Pass-through commands
+    if (std.mem.eql(u8, cmd, "estimate")) return .{ .estimate = .{ .args = remaining } };
+    if (std.mem.eql(u8, cmd, "price")) {
+        std.log.warn("⚠️ 'price' is deprecated, use 'estimate' instead", .{});
+        return .{ .estimate = .{ .args = remaining } };
+    }
+    if (std.mem.eql(u8, cmd, "cost")) {
+        std.log.warn("⚠️ 'cost' is deprecated, use 'estimate' instead", .{});
+        return .{ .estimate = .{ .args = remaining } };
+    }
     if (std.mem.eql(u8, cmd, "check")) return .{ .check = .{ .args = remaining } };
     if (std.mem.eql(u8, cmd, "diff")) return .{ .diff = .{ .args = remaining } };
     if (std.mem.eql(u8, cmd, "update-db")) return .{ .update_db = .{ .args = remaining } };
@@ -162,7 +169,11 @@ fn parseCommand(cmd: []const u8, remaining: []const []const u8) ParseError!Comma
     if (std.mem.eql(u8, cmd, "export")) return .{ .@"export" = .{ .args = remaining } };
     if (std.mem.eql(u8, cmd, "init")) return .{ .init = .{ .args = remaining } };
     if (std.mem.eql(u8, cmd, "pipe")) return .{ .pipe = .{ .args = remaining } };
-    if (std.mem.eql(u8, cmd, "report") or std.mem.eql(u8, cmd, "tokenizer-report")) return .{ .report = .{ .args = remaining } };
+    if (std.mem.eql(u8, cmd, "report")) return .{ .report = .{ .args = remaining } };
+    if (std.mem.eql(u8, cmd, "tokenizer-report")) {
+        std.log.warn("⚠️ 'tokenizer-report' is deprecated, use 'report' instead", .{});
+        return .{ .report = .{ .args = remaining } };
+    }
     if (std.mem.eql(u8, cmd, "analyze-fairness")) return .{ .analytics = .{ .args = remaining } };
     if (std.mem.eql(u8, cmd, "upgrade")) return .{ .upgrade = .{ .args = remaining } };
     if (std.mem.eql(u8, cmd, "verify")) return .{ .verify = .{ .args = remaining } };
@@ -218,12 +229,26 @@ fn parseCalibrate(args: []const []const u8) ParseError!Command {
             i += 1;
             if (i >= args.len) return ParseError.MissingValue;
             const val = args[i];
-            if (std.mem.eql(u8, val, "warn")) result.fail_on_drift = .warn else if (std.mem.eql(u8, val, "error")) result.fail_on_drift = .@"error" else if (std.mem.eql(u8, val, "never")) result.fail_on_drift = .never else return ParseError.InvalidValue;
+            if (std.mem.eql(u8, val, "warn")) {
+                result.fail_on_drift = .warn;
+            } else if (std.mem.eql(u8, val, "error")) {
+                result.fail_on_drift = .@"error";
+            } else if (std.mem.eql(u8, val, "never")) {
+                result.fail_on_drift = .never;
+            } else {
+                return ParseError.InvalidValue;
+            }
         } else if (std.mem.eql(u8, arg, "--cardinality-policy")) {
             i += 1;
             if (i >= args.len) return ParseError.MissingValue;
             const val = args[i];
-            if (std.mem.eql(u8, val, "degrade")) result.cardinality_policy = 0 else if (std.mem.eql(u8, val, "error")) result.cardinality_policy = 1 else return ParseError.InvalidValue;
+            if (std.mem.eql(u8, val, "degrade")) {
+                result.cardinality_policy = 0;
+            } else if (std.mem.eql(u8, val, "error")) {
+                result.cardinality_policy = 1;
+            } else {
+                return ParseError.InvalidValue;
+            }
         } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
             result.help = true;
         } else if (std.mem.startsWith(u8, arg, "-")) {

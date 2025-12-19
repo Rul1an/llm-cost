@@ -79,7 +79,7 @@ pub fn run(state: context.GlobalState, args: []const []const u8) !void {
             if (strict_pricing) {
                 try state.stderr.print("Error: Pricing data is stale (Status: {s}). Strict mode enabled.\n", .{@tagName(staleness)});
                 return error.StalePricing;
-            } else {
+            } else if (state.verbosity != .quiet) {
                 try state.stderr.print("Warning: Pricing data is stale (Status: {s}). Estimates may be inaccurate.\n", .{@tagName(staleness)});
             }
         }

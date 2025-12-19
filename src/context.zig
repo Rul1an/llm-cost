@@ -6,4 +6,5 @@ pub const GlobalState = struct {
     registry: *Pricing.Registry,
     stdout: std.io.AnyWriter,
     stderr: std.io.AnyWriter,
+    verbosity: @import("cli/verbosity.zig").Verbosity = .normal,
 };

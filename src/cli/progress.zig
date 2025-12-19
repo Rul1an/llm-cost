@@ -41,7 +41,7 @@ pub const Progress = struct {
         const pct: u8 = if (self.total == 0)
             100
         else
-            @intCast(@min(100, @divTrunc(current * 100, self.total)));
+            @intCast(@min(100, @divTrunc(@as(u128, current) * 100, self.total)));
 
         // Only redraw on percentage change (reduce flicker)
         if (pct == self.last_pct and pct != 100) return;

@@ -65,6 +65,7 @@ pub fn run(
     // Init Pricing Registry
     var registry = pricing.Registry.init(allocator, .{}) catch |err| {
         log.warn("Failed to load pricing registry: {s}. Recommendations will be limited.", .{@errorName(err)});
+        spinner.finish();
         return 70; // Software Error
     };
     defer registry.deinit();
@@ -133,12 +134,21 @@ fn executeRollback(log: Logger) !void {
         return CalibrateError.IoError;
     };
 
-    std.fs.cwd().rename(main_path, "llm-cost.toml.new") catch {};
+    std.fs.cwd().rename(main_path, "llm-cost.toml.new") catch |e| {
+        // If current config is missing, we can still restore backup, but warn.
+        if (e != error.FileNotFound) {
+            log.err("Failed to move current configuration: {s}", .{@errorName(e)});
+            return CalibrateError.IoError;
+        }
+    };
     std.fs.cwd().rename(bak_path, main_path) catch {
         log.err("Failed to restore backup", .{});
         return CalibrateError.IoError;
     };
-    std.fs.cwd().rename("llm-cost.toml.new", bak_path) catch {};
+    std.fs.cwd().rename("llm-cost.toml.new", bak_path) catch |e| {
+        // Best effort: keep previous config available
+        log.warn("Failed to save previous config as backup: {s}", .{@errorName(e)});
+    };
 
     log.info("✓ Rollback complete", .{});
 }

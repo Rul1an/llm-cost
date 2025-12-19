@@ -39,6 +39,13 @@ const naked_help =
     \\  calibrate  Compare estimates vs actuals
     \\  export     Export FOCUS CSV for FinOps tools
     \\  update-db  Fetch latest pricing database
+    \\  init       Initialize llm-cost in a repo
+    \\  pipe       Stdin/Stdout piping mode
+    \\  report     Generate cost reports
+    \\  upgrade    Self-upgrade llm-cost
+    \\  verify     Verify estimation accuracy
+    \\  models     List available models
+    \\  count      Count tokens in file/stdin
     \\
     \\Global flags:
     \\  -q, --quiet     Suppress progress, errors only
@@ -116,28 +123,37 @@ pub fn main() !u8 {
         .registry = r,
         .stdout = stdout.any(),
         .stderr = stderr.any(),
+        .verbosity = verbosity,
     } else GlobalState{ // Dummy for commands that don't need it or use it differently
         .allocator = allocator,
         .registry = undefined, // usage would crash?
         .stdout = stdout.any(),
         .stderr = stderr.any(),
+        .verbosity = verbosity,
     };
 
     switch (parsed.command) {
-        .calibrate => |cmd_args| return calibrate_cmd.run(allocator, cmd_args, verbosity, stdout) catch |err| {
-            switch (err) {
-                calibrate_cmd.CalibrateError.UsageError => {
-                    stderr.writeAll("Error: --estimates and --actuals are required (or usage error)\n") catch {};
-                    return 64;
-                },
-                calibrate_cmd.CalibrateError.IoError => {
-                    return 74; // IO Error
-                },
-                else => {
-                    stderr.print("Calibration failed: {s}\n", .{@errorName(err)}) catch {};
-                    return 1;
-                },
-            }
+        .calibrate => |cmd_args| {
+            var args_copy = cmd_args;
+            if (parsed.global.help) args_copy.help = true;
+
+            return calibrate_cmd.run(allocator, args_copy, verbosity, stdout) catch |err| {
+                switch (err) {
+                    calibrate_cmd.CalibrateError.UsageError => {
+                        // If checking help, we don't expect usage error if we handled it, but calibrate run handles it.
+                        // But if help was passed, run returns 0.
+                        stderr.writeAll("Error: --estimates and --actuals are required (or usage error)\n") catch {};
+                        return 64;
+                    },
+                    calibrate_cmd.CalibrateError.IoError => {
+                        return 74; // IO Error
+                    },
+                    else => {
+                        stderr.print("Calibration failed: {s}\n", .{@errorName(err)}) catch {};
+                        return 1;
+                    },
+                }
+            };
         },
         .version => {
             stdout.print("llm-cost {s}\n", .{version_str}) catch {};
@@ -152,7 +168,7 @@ pub fn main() !u8 {
             return 0;
         },
         .check => |cmd| {
-            const code = check.run(allocator, cmd.args, global_state.registry, global_state.stdout, global_state.stderr) catch return 1;
+            const code = check.run(allocator, cmd.args, global_state.registry, global_state.stdout, global_state.stderr, global_state.verbosity) catch return 1;
             return @intCast(code);
         },
         .diff => |cmd| {
@@ -193,6 +209,7 @@ pub fn main() !u8 {
         },
         .upgrade => |cmd| {
             const code = upgrade_cmd.run(allocator, cmd.args) catch return 1;
+            if (code < 0 or code > std.math.maxInt(u8)) return 1;
             return @intCast(code);
         },
         .verify => |cmd| {
@@ -201,6 +218,7 @@ pub fn main() !u8 {
         },
         .verify_license => |cmd| {
             const code = verify_license_cmd.run(allocator, cmd.args) catch return 1;
+            if (code < 0 or code > std.math.maxInt(u8)) return 1;
             return @intCast(code);
         },
         .models => |cmd| {
