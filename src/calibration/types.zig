@@ -4,6 +4,8 @@ const std = @import("std");
 pub const MicroUSD = i128;
 pub const BasisPoints = i32; // 1 bp = 0.01%
 
+pub const CardinalityPolicy = enum { degrade, @"error" };
+
 pub const ParseMoneyError = error{
     Empty,
     InvalidChar,
