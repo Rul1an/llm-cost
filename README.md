@@ -153,6 +153,13 @@ Filter and group by `Tags.team`, `Tags.app`, or `Tags.model` in your FinOps dash
 - Minisign-verified pricing database
 - Zero runtime network calls
 
+### Pricing Database
+`src/core/pricing/pricing_db.json` contains standard rates.
+> **Note**: For Anthropic prompt caching, we default to the **5-minute cache write** tier.
+
+- **OpenAI**: Updated to 2025 rates (gpt-4o: $2.50/$10.00).
+- **Anthropic**: Claude 3.5 Sonnet supports prompt caching rates.
+
 ## 🛡️ FinOps Certified (v1.3.0)
 
 `llm-cost` is engineered for **Enterprise FinOps**. It goes beyond simple estimation to provide audit-grade validation.

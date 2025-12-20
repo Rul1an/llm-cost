@@ -27,6 +27,7 @@ pub const GroupStats = struct {
     cost_micro: i128 = 0,
     count: u64 = 0,
     tokens: u64 = 0,
+    tokens_missing: u64 = 0,
 };
 
 pub const Aggregator = struct {
@@ -120,9 +121,18 @@ pub const Aggregator = struct {
         }
 
         // Only fallback to UsageQuantity if NO token fields were present
-        if (!has_tokens) t = record.UsageQuantity;
+        if (!has_tokens) {
+            if (record.UsageQuantity > 0) {
+                t = record.UsageQuantity;
+                has_tokens = true;
+            }
+        }
 
-        s.tokens += t;
+        if (has_tokens) {
+            s.tokens += t;
+        } else {
+            s.tokens_missing += 1;
+        }
         s.count += 1;
     }
 

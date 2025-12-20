@@ -357,6 +357,16 @@ pub fn run(
                     return @intFromEnum(ExitCode.Error);
                 }
             } else {
+                // SARIF Mode:
+                // We still want to exit 1 if there are "error" severity violations.
+                // This allows CI to fail natively without parsing JSON.
+                var errors: u32 = 0;
+                for (violations) |v| {
+                    if (v.severity == .@"error") errors += 1;
+                }
+                if (errors > 0) {
+                    return @intFromEnum(ExitCode.Error);
+                }
                 return @intFromEnum(ExitCode.Ok);
             }
         } else {
