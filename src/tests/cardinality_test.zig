@@ -9,7 +9,6 @@ const key_intern = calibrate.key_intern;
 const focus = calibrate.focus;
 
 // Helper: Synthesize a record
-// Helper: Synthesize a record
 fn makeRecord(model: []const u8, cost: i128, tags: std.StringHashMap([]const u8)) focus.FocusRecord {
     return .{
         .BilledCost = cost,

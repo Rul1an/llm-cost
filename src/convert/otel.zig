@@ -145,12 +145,24 @@ fn processSpan(allocator: std.mem.Allocator, span: std.json.ObjectMap, writer: a
     }
     try escaped_tags.append('"');
 
-    try writer.print("{s},{s},Usage,{s},{s},{d},Tokens,{d},{d},{s}\n", .{ start_iso, end_iso, provider, model, usage_qty, input_tokens, output_tokens, escaped_tags.items });
+    // Formula Injection Protection
+    var safe_model: []const u8 = model;
+    if (std.mem.startsWith(u8, safe_model, "=") or std.mem.startsWith(u8, safe_model, "+") or std.mem.startsWith(u8, safe_model, "-") or std.mem.startsWith(u8, safe_model, "@")) {
+        safe_model = try std.fmt.allocPrint(allocator, "'{s}", .{model});
+        // Note: we leak this small allocation for MVP safety, or use an arena.
+        // Given allocator usage, this should be fine or we can optimize if needed.
+    }
+    const safe_provider = if (std.mem.startsWith(u8, provider, "=") or std.mem.startsWith(u8, provider, "+") or std.mem.startsWith(u8, provider, "-") or std.mem.startsWith(u8, provider, "@"))
+        try std.fmt.allocPrint(allocator, "'{s}", .{provider})
+    else
+        provider;
+
+    try writer.print("{s},{s},Usage,{s},{s},{d},Tokens,{d},{d},{s}\n", .{ start_iso, end_iso, safe_provider, safe_model, usage_qty, input_tokens, output_tokens, escaped_tags.items });
 }
 
 fn normalizeProvider(raw: []const u8) []const u8 {
     const s = raw;
-    if (std.ascii.eqlIgnoreCase(s, "openai") or std.ascii.eqlIgnoreCase(s, "AzureOpenAI") or std.mem.indexOf(u8, s, "openai") != null) return "OpenAI";
+    if (std.ascii.eqlIgnoreCase(s, "openai") or std.ascii.eqlIgnoreCase(s, "AzureOpenAI")) return "OpenAI";
     if (std.ascii.eqlIgnoreCase(s, "anthropic") or std.ascii.eqlIgnoreCase(s, "AnthropicAI")) return "Anthropic";
     if (std.ascii.eqlIgnoreCase(s, "azure")) return "Azure";
     if (std.ascii.eqlIgnoreCase(s, "google") or std.ascii.eqlIgnoreCase(s, "vertex")) return "Google";

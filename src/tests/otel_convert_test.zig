@@ -42,3 +42,42 @@ test "convert otel json -> focus-ish csv (headers + mapping)" {
     // Check escaping (double quotes)
     try testing.expect(std.mem.indexOf(u8, csv, "\"\"trace_id\"\":\"\"abc123\"\"") != null);
 }
+
+test "convert otel: invalid json" {
+    var out = std.ArrayList(u8).init(testing.allocator);
+    defer out.deinit();
+
+    // Not an object
+    try testing.expectError(error.InvalidJson, otel.convertJsonToFocusCsv(testing.allocator, "[]", out.writer()));
+}
+
+test "convert otel: missing required fields handled gracefully" {
+    var out = std.ArrayList(u8).init(testing.allocator);
+    defer out.deinit();
+
+    // Valid JSON structure but missing key fields -> Should produce header but no rows (or skip invalid spans)
+    const json =
+        \\{
+        \\  "resourceSpans": [
+        \\    {
+        \\      "scopeSpans": [
+        \\        {
+        \\          "spans": [
+        \\            {
+        \\              "attributes": []
+        \\            }
+        \\          ]
+        \\        }
+        \\      ]
+        \\    }
+        \\  ]
+        \\}
+    ;
+    try otel.convertJsonToFocusCsv(testing.allocator, json, out.writer());
+    const csv = out.items;
+
+    // Should have header
+    try testing.expect(std.mem.indexOf(u8, csv, "UsageStartTime") != null);
+    // Should NOT have rows
+    try testing.expect(std.mem.indexOf(u8, csv, "\n202") == null);
+}
