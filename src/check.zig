@@ -2,6 +2,9 @@ const std = @import("std");
 const manifest = @import("core/manifest.zig");
 const engine = @import("core/engine.zig");
 const Pricing = @import("core/pricing/mod.zig");
+const agentic = @import("governance/agentic.zig");
+const focus = @import("calibration/focus_import.zig");
+const tag_resolver = @import("calibration/tag_resolver.zig");
 
 const Verbosity = @import("cli/verbosity.zig").Verbosity;
 
@@ -34,6 +37,7 @@ pub fn run(
 
     // 2. Parse CLI Args for Overrides/Inputs
     var cli_model: ?[]const u8 = null;
+    var cli_actuals: ?[]const u8 = null;
     var cli_inputs = std.ArrayList([]const u8).init(allocator);
     defer cli_inputs.deinit();
 
@@ -45,8 +49,16 @@ pub fn run(
                 cli_model = args[i + 1];
                 i += 1;
             }
+        } else if (std.mem.eql(u8, arg, "--actuals")) {
+            if (i + 1 < args.len) {
+                cli_actuals = args[i + 1];
+                i += 1;
+            }
         } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
             try stdout.print("Usage: llm-cost check [OPTIONS] [FILES...]\n", .{});
+            try stdout.print("Options:\n", .{});
+            try stdout.print("  --model, -m <MODEL>   Override model\n", .{});
+            try stdout.print("  --actuals <FILE>      Check agentic rules against FOCUS CSV\n", .{});
             return @intFromEnum(ExitCode.Ok);
         } else if (!std.mem.startsWith(u8, arg, "-")) {
             try cli_inputs.append(arg);
@@ -204,6 +216,164 @@ pub fn run(
     } else {
         if (verbosity != .quiet) {
             try stdout.print("Total Est. Cost: ${d:.4} (No budget limit set)\n", .{total_usd});
+        }
+    }
+
+    // 6. Agentic Governance Checks
+    if (cli_actuals) |actuals_path| {
+        const f = cwd.openFile(actuals_path, .{}) catch |e| {
+            try stderr.print("Error opening actuals: {s} ({s})\n", .{ actuals_path, @errorName(e) });
+            return @intFromEnum(ExitCode.Error);
+        };
+        defer f.close();
+
+        var parser = try focus.FocusParser.initFromReader(allocator, f.reader(), 10 * 1024 * 1024);
+        defer parser.deinit();
+
+        var records = std.ArrayList(focus.FocusRecord).init(allocator);
+        defer {
+            for (records.items) |*r| {
+                allocator.free(r.UsageUnit);
+                allocator.free(r.ChargeCategory);
+                allocator.free(r.ResourceId);
+                if (r.InvoiceIssuerName) |s| allocator.free(s);
+                if (r.@"x-llm-model") |s| allocator.free(s);
+                var it = r.tags.iterator();
+                while (it.next()) |entry| {
+                    allocator.free(entry.key_ptr.*);
+                    allocator.free(entry.value_ptr.*);
+                }
+                r.tags.deinit();
+            }
+            records.deinit();
+        }
+
+        while (try parser.next()) |rec| {
+            var copy = rec;
+            copy.UsageUnit = try allocator.dupe(u8, rec.UsageUnit);
+            copy.ChargeCategory = try allocator.dupe(u8, rec.ChargeCategory);
+            copy.ResourceId = try allocator.dupe(u8, rec.ResourceId);
+            if (rec.InvoiceIssuerName) |s| copy.InvoiceIssuerName = try allocator.dupe(u8, s);
+            if (rec.@"x-llm-model") |s| copy.@"x-llm-model" = try allocator.dupe(u8, s);
+
+            copy.tags = std.StringHashMap([]const u8).init(allocator);
+            var it = rec.tags.iterator();
+            while (it.next()) |entry| {
+                const k = try allocator.dupe(u8, entry.key_ptr.*);
+                const v = try allocator.dupe(u8, entry.value_ptr.*);
+                try copy.tags.put(k, v);
+            }
+            try records.append(copy);
+        }
+
+        var resolver = try tag_resolver.Resolver.init(allocator, policy.tags);
+        defer resolver.deinit();
+
+        const violations = try agentic.checkRules(allocator, policy.agentic, &resolver, registry, records.items, actuals_path);
+        defer {
+            for (violations) |v| {
+                allocator.free(v.message);
+                if (v.run_id) |s| allocator.free(s);
+                if (v.tool) |s| allocator.free(s);
+                if (v.model) |s| allocator.free(s);
+            }
+            allocator.free(violations);
+        }
+
+        if (violations.len > 0) {
+            var errors: u32 = 0;
+            for (violations) |v| {
+                const label = if (v.severity == .@"error") "ERROR" else "WARN";
+                try stderr.print("[{s}] {s}: {s}\n", .{ label, @tagName(v.rule), v.message });
+                if (v.severity == .@"error") errors += 1;
+            }
+
+            if (errors > 0) {
+                return @intFromEnum(ExitCode.Error);
+            }
+        } else {
+            if (verbosity != .quiet) {
+                try stdout.print("✓ Agentic governance passed ({} records)\n", .{records.items.len});
+            }
+        }
+    }
+
+    // 6. Agentic Governance Checks
+    if (cli_actuals) |actuals_path| {
+        const f = cwd.openFile(actuals_path, .{}) catch |e| {
+            try stderr.print("Error opening actuals: {s} ({s})\n", .{ actuals_path, @errorName(e) });
+            return @intFromEnum(ExitCode.Error);
+        };
+        defer f.close();
+
+        var parser = try focus.FocusParser.initFromReader(allocator, f.reader(), 10 * 1024 * 1024);
+        defer parser.deinit();
+
+        var records = std.ArrayList(focus.FocusRecord).init(allocator);
+        defer {
+            for (records.items) |*r| {
+                allocator.free(r.UsageUnit);
+                allocator.free(r.ChargeCategory);
+                allocator.free(r.ResourceId);
+                if (r.InvoiceIssuerName) |s| allocator.free(s);
+                if (r.@"x-llm-model") |s| allocator.free(s);
+                var it = r.tags.iterator();
+                while (it.next()) |entry| {
+                    allocator.free(entry.key_ptr.*);
+                    allocator.free(entry.value_ptr.*);
+                }
+                r.tags.deinit();
+            }
+            records.deinit();
+        }
+
+        while (try parser.next()) |rec| {
+            var copy = rec;
+            copy.UsageUnit = try allocator.dupe(u8, rec.UsageUnit);
+            copy.ChargeCategory = try allocator.dupe(u8, rec.ChargeCategory);
+            copy.ResourceId = try allocator.dupe(u8, rec.ResourceId);
+            if (rec.InvoiceIssuerName) |s| copy.InvoiceIssuerName = try allocator.dupe(u8, s);
+            if (rec.@"x-llm-model") |s| copy.@"x-llm-model" = try allocator.dupe(u8, s);
+
+            copy.tags = std.StringHashMap([]const u8).init(allocator);
+            var it = rec.tags.iterator();
+            while (it.next()) |entry| {
+                const k = try allocator.dupe(u8, entry.key_ptr.*);
+                const v = try allocator.dupe(u8, entry.value_ptr.*);
+                try copy.tags.put(k, v);
+            }
+            try records.append(copy);
+        }
+
+        var resolver = try tag_resolver.Resolver.init(allocator, policy.tags);
+        defer resolver.deinit();
+
+        const violations = try agentic.checkRules(allocator, policy.agentic, &resolver, registry, records.items, actuals_path);
+        defer {
+            for (violations) |v| {
+                allocator.free(v.message);
+                if (v.run_id) |s| allocator.free(s);
+                if (v.tool) |s| allocator.free(s);
+                if (v.model) |s| allocator.free(s);
+            }
+            allocator.free(violations);
+        }
+
+        if (violations.len > 0) {
+            var errors: u32 = 0;
+            for (violations) |v| {
+                const label = if (v.severity == .@"error") "ERROR" else "WARN";
+                try stderr.print("[{s}] {s}: {s}\n", .{ label, @tagName(v.rule), v.message });
+                if (v.severity == .@"error") errors += 1;
+            }
+
+            if (errors > 0) {
+                return @intFromEnum(ExitCode.Error);
+            }
+        } else {
+            if (verbosity != .quiet) {
+                try stdout.print("✓ Agentic governance passed ({} records)\n", .{records.items.len});
+            }
         }
     }
 

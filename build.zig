@@ -29,6 +29,11 @@ pub fn build(b: *std.Build) void {
     const resolved_target = target;
     // (Logic below checks if we strictly need to modify something, but standardTargetOptions is generally sufficient if we don't force native)
 
+    // Create manifest module common to tools and tests (Moved up for availability)
+    const manifest_mod = b.createModule(.{
+        .root_source_file = b.path("src/core/pricing/manifest.zig"),
+    });
+
     // Main executable
     var version = std.SemanticVersion{ .major = 1, .minor = 7, .patch = 0 };
     if (b.option([]const u8, "version", "Override version string")) |ver_str| {
@@ -47,6 +52,8 @@ pub fn build(b: *std.Build) void {
     exe.root_module.strip = opt_strip;
     exe.want_lto = opt_lto;
     exe.linkLibC();
+    // PR8.3: Manifest needed for pricing/mod.zig
+    exe.root_module.addImport("manifest", manifest_mod);
 
     b.installArtifact(exe);
 
@@ -63,13 +70,9 @@ pub fn build(b: *std.Build) void {
         exe_safe.root_module.strip = opt_strip;
         exe_safe.want_lto = opt_lto;
         exe_safe.linkLibC();
+        exe_safe.root_module.addImport("manifest", manifest_mod);
         b.installArtifact(exe_safe);
     }
-
-    // Create manifest module common to tools and tests
-    const manifest_mod = b.createModule(.{
-        .root_source_file = b.path("src/core/pricing/manifest.zig"),
-    });
 
     // Documentation generation disabled for 0.14.0 CI stability
     // const install_docs = b.addInstallDirectory(.{
@@ -341,6 +344,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .single_threaded = true,
     });
+    golden_tests.root_module.addImport("manifest", manifest_mod);
     const run_golden_tests = b.addRunArtifact(golden_tests);
     const golden_step = b.step("test-golden", "Run golden tests (CLI contract)");
     golden_step.dependOn(&run_golden_tests.step);
@@ -425,6 +429,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize, // Enforced by bench_suite execution
         }),
     });
+    bench_exe.root_module.addImport("manifest", manifest_mod);
 
     const bench_step = b.step("bench", "Run performance benchmarks");
     const run_bench = b.addRunArtifact(bench_exe);

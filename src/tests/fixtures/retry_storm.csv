@@ -1,0 +1,5 @@
+UsageStartTime,UsageEndTime,ChargeCategory,Provider,ResourceId,UsageQuantity,UsageUnit,x-token-count-input,x-token-count-output,Tags.trace_id,Tags.tool,BilledCost
+2024-01-01T00:00:00Z,2024-01-01T00:01:00Z,Usage,OpenAI,gpt-3.5-turbo,100,Tokens,50,50,run-retry,web_search,0.01
+2024-01-01T00:01:00Z,2024-01-02:00:00Z,Usage,OpenAI,gpt-3.5-turbo,100,Tokens,50,50,run-retry,web_search,0.01
+2024-01-01T00:02:00Z,2024-01-03:00:00Z,Usage,OpenAI,gpt-3.5-turbo,100,Tokens,50,50,run-retry,web_search,0.01
+2024-01-01T00:03:00Z,2024-01-04:00:00Z,Usage,OpenAI,gpt-3.5-turbo,100,Tokens,50,50,run-retry,web_search,0.01

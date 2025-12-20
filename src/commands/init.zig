@@ -64,4 +64,10 @@ const default_template =
     \\    "gpt-4-32k"
     \\]
     \\
+    \\# [governance.agentic]
+    \\# max_cost_per_run = 5.0
+    \\# max_tool_retries = 3
+    \\# max_tokens_per_step = 100000
+    \\# max_unknown_model_pct = 10.0
+    \\
 ;
