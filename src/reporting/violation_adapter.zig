@@ -61,14 +61,20 @@ fn buildPropertiesValue(
     if (v.model) |x| try obj.put("model", .{ .string = x });
 
     // Helper for floats
-    if (v.actual) |x| try obj.put("actual", .{ .float = x });
-    if (v.limit) |x| try obj.put("limit", .{ .float = x });
+    if (v.actual) |x| {
+        if (std.math.isFinite(x)) try obj.put("actual", .{ .float = x });
+    }
+    if (v.limit) |x| {
+        if (std.math.isFinite(x)) try obj.put("limit", .{ .float = x });
+    }
 
     if (v.actual) |a| {
         if (v.limit) |l| {
             if (l != 0) {
                 const over_pct = (a / l - 1.0) * 100.0;
-                try obj.put("overage_pct", .{ .float = over_pct });
+                if (std.math.isFinite(over_pct)) {
+                    try obj.put("overage_pct", .{ .float = over_pct });
+                }
             }
         }
     }
