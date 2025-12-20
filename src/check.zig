@@ -348,7 +348,7 @@ pub fn run(
                 return @intFromEnum(ExitCode.Ok);
             }
         } else {
-            if (verbosity != .quiet) {
+            if (!output_sarif and verbosity != .quiet) {
                 try stdout.print("✓ Agentic governance passed ({} records)\n", .{records.items.len});
             }
         }
