@@ -39,13 +39,13 @@ pub fn main() !void {
     const canonical_body = list.items;
 
     // 4. Sign
-    var secret_bytes: [64]u8 = undefined;
-    _ = std.fmt.hexToBytes(&secret_bytes, private_key_hex) catch {
-        std.debug.print("Error: Invalid private key hex (must be 64 bytes / 128 hex chars)\n", .{});
+    var seed_bytes: [32]u8 = undefined;
+    _ = std.fmt.hexToBytes(&seed_bytes, private_key_hex) catch {
+        std.debug.print("Error: Invalid private key hex (must be 64 hex chars / 32 bytes seed)\n", .{});
         return;
     };
 
-    const key_pair = try std.crypto.sign.Ed25519.KeyPair.fromSecretKey(try std.crypto.sign.Ed25519.SecretKey.fromBytes(secret_bytes));
+    const key_pair = try std.crypto.sign.Ed25519.KeyPair.generateDeterministic(seed_bytes);
     const signature = try key_pair.sign(canonical_body, null);
 
     // 5. Encode Signature (Base64)

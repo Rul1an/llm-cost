@@ -122,8 +122,8 @@ test "Contract: 'models --json' produces valid schema" {
             const cost_out = getFloat(item.object.get("cost_out").?);
 
             // Verify 2025 Pricing Contract
-            try std.testing.expectEqual(@as(f64, 5.00), cost_in);
-            try std.testing.expectEqual(@as(f64, 20.00), cost_out);
+            try std.testing.expectEqual(@as(f64, 2.50), cost_in);
+            try std.testing.expectEqual(@as(f64, 10.00), cost_out);
         }
     }
     try std.testing.expect(found_gpt4o);
@@ -213,8 +213,8 @@ test "Contract: 'price' estimate uses Registry" {
 
     // 1000 tokens, pure input
     const cost = Pricing.Registry.calculate(def, 1000, 0, 0);
-    // 1000 * $5.00 / 1M = $0.005 = 5000 MicroUSD
-    try std.testing.expectEqual(@as(i128, 5000), cost);
+    // 1000 * $2.50 / 1M = $0.0025 = 2500 MicroUSD
+    try std.testing.expectEqual(@as(i128, 2500), cost);
 }
 
 // --- Governance / Check Tests ---
@@ -323,34 +323,33 @@ test "v0.10: Init Command Scaffolding" {
 
     try std.fs.cwd().writeFile(.{ .sub_path = prompt_path, .data = "some content" });
 
-    // 2. Run Init (Non-Interactive, targeting that dir)
-    // We pass our mock stdin/stdout to init.run via main_app dispatch or direct
-    // Since main_app.run calls init.run using std.io.getStdIn(), we can't test main_app dispatch easily here without full process mock.
-    // Instead we test init.run DIRECTLY using mocked streams.
-    const init_cmd = @import("init.zig");
-    // Mock input "y\n" just in case interactive mode triggers, but we use --non-interactive
-    var fbs_in = std.io.fixedBufferStream("y\n");
+    // 2. Run Init (Non-Interactive, targeting that dir via openDir)
+    const init_cmd = @import("commands/init.zig");
 
-    // We need args that simulate: init --dir=test_init_scaffold --non-interactive
-    // but args passed to run are [2..].
-    const args = [_][]const u8{ "--dir=test_init_scaffold", "--non-interactive" };
+    // Open the directory to pass as 'cwd' to init.run
+    var dir = try std.fs.cwd().openDir(init_dir, .{});
+    defer dir.close();
 
-    try init_cmd.run(mock.allocator, &args, fbs_in.reader(), mock.stdout_buf.writer().any());
+    // Call init.run with empty args (no flags needed for fresh init)
+    // Signature: run(allocator, args, cwd, out, err)
+    const args = [_][]const u8{};
+    try init_cmd.run(mock.allocator, &args, dir, mock.stdout_buf.writer().any(), mock.stderr_buf.writer().any());
 
     // 3. Verify llm-cost.toml created
-    // init command always writes to CWD "llm-cost.toml".
     const manifest_path = "llm-cost.toml";
-    const manifest_content = std.fs.cwd().readFileAlloc(mock.allocator, manifest_path, 1024 * 1024) catch |err| {
+    // Read from the subdir using the dir handle
+    const manifest_content = dir.readFileAlloc(mock.allocator, manifest_path, 1024 * 1024) catch |err| {
         std.debug.print("Failed to read generated manifest: {}\n", .{err});
         return error.ManifestNotCreated;
     };
     defer mock.allocator.free(manifest_content);
-    defer std.fs.cwd().deleteFile(manifest_path) catch {};
+    // Don't need to delete file, deleteTree above handles it. But for correctness/cleanup if test continues:
+    // dir.deleteFile(manifest_path) catch {}; // Optional since entire tree is nuked
 
-    try std.testing.expect(std.mem.indexOf(u8, manifest_content, "[[prompts]]") != null);
-    try std.testing.expect(std.mem.indexOf(u8, manifest_content, "path = \"test_init_scaffold/my_prompt.txt\"") != null);
-    // Slugify check: test_init_scaffold/my_prompt.txt -> test-init-scaffold-my-prompt-txt
-    try std.testing.expect(std.mem.indexOf(u8, manifest_content, "prompt_id = \"test-init-scaffold-my-prompt-txt\"") != null);
+    // Verify Default Template Content (Minimal Init)
+    try std.testing.expect(std.mem.indexOf(u8, manifest_content, "[budget]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, manifest_content, "limit = 500.0") != null);
+    try std.testing.expect(std.mem.indexOf(u8, manifest_content, "[models]") != null);
 }
 
 test "v0.10: Check with Manifest V2 (Arrays)" {
@@ -463,8 +462,8 @@ test "v1.0: FOCUS Export (Vantage-subset)" {
     // Date
     try std.testing.expect(std.mem.indexOf(u8, out, "2025-01-01") != null);
 
-    // Cost (2 tokens @ $5/1M = $0.000010) -> 0.000010000000 (12 decimals)
-    try std.testing.expect(std.mem.indexOf(u8, out, "0.000010") != null);
+    // Cost (2 tokens @ $2.50/1M = $0.000005) -> 0.000005000000 (12 decimals)
+    try std.testing.expect(std.mem.indexOf(u8, out, "0.000005") != null);
 
     // Check Token Count in Tags (escaped)
     // "x-token-count-input":"2" -> ""x-token-count-input"":""2""

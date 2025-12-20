@@ -5,6 +5,7 @@ pub const stats = @import("stats.zig");
 pub const report = @import("report.zig");
 pub const key_intern = @import("key_intern.zig");
 const recs_mod = @import("recommendations.zig");
+pub const breakdown = @import("breakdown.zig");
 
 pub const Status = enum { ok, warn, @"error", insufficient_data };
 
@@ -28,13 +29,20 @@ pub const CalibrationResult = struct {
     cardinality_truncated: bool = false,
     cardinality_unique_seen: u64 = 0,
 
+    // Breakdown Stats
+    breakdown: ?breakdown.BreakdownResult = null,
+
     recommendations: []recs_mod.Recommendation = &[_]recs_mod.Recommendation{},
 
-    pub fn deinit(self: CalibrationResult, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *CalibrationResult, allocator: std.mem.Allocator) void {
         for (self.recommendations) |r| {
             allocator.free(r.rationale);
         }
         allocator.free(self.recommendations);
+
+        if (self.breakdown) |*b| {
+            b.deinit();
+        }
     }
 };
 
@@ -63,6 +71,9 @@ pub const RunOptions = struct {
     // Cardinality Guardrails
     max_unique_resources: u32 = 10000,
     cardinality_policy: types.CardinalityPolicy = .degrade,
+
+    // Agent Breakdown
+    breakdown_aggregator: ?*breakdown.Aggregator = null,
 };
 
 pub fn run(allocator: std.mem.Allocator, opts: RunOptions, registry: anytype, interner: *key_intern.StringInterner) Error!CalibrationResult {
@@ -91,7 +102,13 @@ pub fn run(allocator: std.mem.Allocator, opts: RunOptions, registry: anytype, in
             error.OutOfMemory => return error.OutOfMemory,
         };
         if (rec_opt == null) break;
-        try s.update(rec_opt.?);
+        const rec = rec_opt.?; // Take a copy
+
+        try s.update(rec);
+
+        if (opts.breakdown_aggregator) |agg| {
+            try agg.update(&rec);
+        }
     }
 
     if (s.sample_count < opts.min_samples) return error.InsufficientData;
@@ -125,6 +142,7 @@ pub fn run(allocator: std.mem.Allocator, opts: RunOptions, registry: anytype, in
         .cardinality_truncated = s.cardinality_truncated,
         .cardinality_unique_seen = s.unique_resources_seen,
         .recommendations = recs,
+        .breakdown = if (opts.breakdown_aggregator) |agg| agg.finish() else null,
     };
 }
 

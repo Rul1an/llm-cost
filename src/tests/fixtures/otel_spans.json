@@ -1,0 +1,118 @@
+{
+    "resourceSpans": [
+        {
+            "resource": {
+                "attributes": [
+                    {
+                        "key": "service.name",
+                        "value": {
+                            "stringValue": "agent-app"
+                        }
+                    }
+                ]
+            },
+            "scopeSpans": [
+                {
+                    "scope": {
+                        "name": "genai-instrumentation",
+                        "version": "0.1.0"
+                    },
+                    "spans": [
+                        {
+                            "traceId": "abc123",
+                            "spanId": "0001",
+                            "name": "gen_ai.chat",
+                            "kind": 2,
+                            "startTimeUnixNano": "1734652800000000000",
+                            "endTimeUnixNano": "1734652801500000000",
+                            "attributes": [
+                                {
+                                    "key": "gen_ai.provider.name",
+                                    "value": {
+                                        "stringValue": "openai"
+                                    }
+                                },
+                                {
+                                    "key": "gen_ai.request.model",
+                                    "value": {
+                                        "stringValue": "gpt-4o"
+                                    }
+                                },
+                                {
+                                    "key": "gen_ai.usage.input_tokens",
+                                    "value": {
+                                        "intValue": "1847"
+                                    }
+                                },
+                                {
+                                    "key": "gen_ai.usage.output_tokens",
+                                    "value": {
+                                        "intValue": "1000"
+                                    }
+                                },
+                                {
+                                    "key": "gen_ai.agent.name",
+                                    "value": {
+                                        "stringValue": "researcher"
+                                    }
+                                },
+                                {
+                                    "key": "gen_ai.tool.name",
+                                    "value": {
+                                        "stringValue": "llm"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "traceId": "abc123",
+                            "spanId": "0002",
+                            "name": "tool.web_search",
+                            "kind": 2,
+                            "startTimeUnixNano": "1734652801600000000",
+                            "endTimeUnixNano": "1734652802600000000",
+                            "attributes": [
+                                {
+                                    "key": "gen_ai.agent.name",
+                                    "value": {
+                                        "stringValue": "researcher"
+                                    }
+                                },
+                                {
+                                    "key": "gen_ai.tool.name",
+                                    "value": {
+                                        "stringValue": "web_search"
+                                    }
+                                },
+                                {
+                                    "key": "gen_ai.provider.name",
+                                    "value": {
+                                        "stringValue": "openai"
+                                    }
+                                },
+                                {
+                                    "key": "gen_ai.request.model",
+                                    "value": {
+                                        "stringValue": "gpt-4o-mini"
+                                    }
+                                },
+                                {
+                                    "key": "gen_ai.usage.input_tokens",
+                                    "value": {
+                                        "intValue": "120"
+                                    }
+                                },
+                                {
+                                    "key": "gen_ai.usage.output_tokens",
+                                    "value": {
+                                        "intValue": "30"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

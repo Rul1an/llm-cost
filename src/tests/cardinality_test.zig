@@ -9,7 +9,7 @@ const key_intern = calibrate.key_intern;
 const focus = calibrate.focus;
 
 // Helper: Synthesize a record
-fn makeRecord(model: []const u8, cost: i128) focus.FocusRecord {
+fn makeRecord(model: []const u8, cost: i128, tags: std.StringHashMap([]const u8)) focus.FocusRecord {
     return .{
         .BilledCost = cost,
         .EffectiveCost = cost,
@@ -19,6 +19,7 @@ fn makeRecord(model: []const u8, cost: i128) focus.FocusRecord {
         .ResourceId = "res-1",
         .@"x-llm-model" = model,
         .timestamp = 1704067200, // 2024-01-01
+        .tags = tags,
     };
 }
 
@@ -26,37 +27,43 @@ test "Cardinality: Error Policy" {
     var interner = key_intern.StringInterner.init(testing.allocator);
     defer interner.deinit();
 
+    var empty_tags = std.StringHashMap([]const u8).init(testing.allocator);
+    defer empty_tags.deinit();
+
     // Limit 3, Policy Error
     var s = try stats.CalibrationStats.init(testing.allocator, &interner, 3, .@"error");
     defer s.deinit();
 
-    try s.update(makeRecord("model-a", 10));
-    try s.update(makeRecord("model-b", 10));
-    try s.update(makeRecord("model-c", 10));
+    try s.update(makeRecord("model-a", 10, empty_tags));
+    try s.update(makeRecord("model-b", 10, empty_tags));
+    try s.update(makeRecord("model-c", 10, empty_tags));
 
     // 4th model -> Error
-    try testing.expectError(error.CardinalityExceeded, s.update(makeRecord("model-d", 10)));
+    try testing.expectError(error.CardinalityExceeded, s.update(makeRecord("model-d", 10, empty_tags)));
 
     // Existing model -> OK
-    try s.update(makeRecord("model-a", 10));
+    try s.update(makeRecord("model-a", 10, empty_tags));
 }
 
 test "Cardinality: Degrade Policy" {
     var interner = key_intern.StringInterner.init(testing.allocator);
     defer interner.deinit();
 
+    var empty_tags = std.StringHashMap([]const u8).init(testing.allocator);
+    defer empty_tags.deinit();
+
     // Limit 2, Policy Degrade
     var s = try stats.CalibrationStats.init(testing.allocator, &interner, 2, .degrade);
     defer s.deinit();
 
-    try s.update(makeRecord("model-a", 100));
-    try s.update(makeRecord("model-b", 200));
+    try s.update(makeRecord("model-a", 100, empty_tags));
+    try s.update(makeRecord("model-b", 200, empty_tags));
 
     // 3rd model -> should become __other__
-    try s.update(makeRecord("model-c", 50));
+    try s.update(makeRecord("model-c", 50, empty_tags));
 
     // 4th model -> should become __other__ (aggregation)
-    try s.update(makeRecord("model-d", 10));
+    try s.update(makeRecord("model-d", 10, empty_tags));
 
     // Check stats
     try testing.expectEqual(@as(u64, 2), s.by_model.count()); // model-a + __other__

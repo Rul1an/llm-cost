@@ -92,7 +92,7 @@ test "End-to-end: Calibration Run (Matches Output)" {
     var interner = calibration.key_intern.StringInterner.init(allocator);
     defer interner.deinit();
 
-    const result = try calibration.run(allocator, opts, &reg, &interner);
+    var result = try calibration.run(allocator, opts, &reg, &interner);
     defer result.deinit(allocator);
 
     try std.testing.expectEqual(@as(i128, 100_000_000), result.estimated_total_micro);
@@ -158,7 +158,7 @@ test "End-to-end: Nasty CSV (Quotes, CRLF)" {
     var interner = calibration.key_intern.StringInterner.init(allocator);
     defer interner.deinit();
 
-    const result = try calibration.run(allocator, opts, &reg, &interner);
+    var result = try calibration.run(allocator, opts, &reg, &interner);
     defer result.deinit(allocator);
 
     // 50 + 50 = 100.00 actual vs 100.00 estimated = 0 drift

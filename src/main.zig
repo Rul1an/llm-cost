@@ -7,7 +7,7 @@ const pipe = @import("pipe.zig");
 const report = @import("report.zig");
 const analytics = @import("analytics/mod.zig");
 const check = @import("check.zig");
-const init = @import("init.zig");
+const init = @import("commands/init.zig");
 const manifest = @import("core/manifest.zig");
 const resource_id = @import("core/resource_id.zig");
 const export_cmd = @import("export.zig");
@@ -17,6 +17,7 @@ const estimate_cmd = @import("commands/estimate.zig");
 const ci_action_cmd = @import("ci_action.zig");
 const verify_cmd = @import("verify.zig");
 const calibrate_cmd = @import("commands/calibrate.zig");
+const convert_cmd = @import("commands/convert.zig");
 const update_db_cmd = @import("cli/update_db.zig");
 const upgrade_cmd = @import("cli/upgrade.zig");
 const verify_license_cmd = @import("cli/verify_license.zig");
@@ -158,6 +159,10 @@ pub fn main() !u8 {
                 }
             };
         },
+        .convert => |cmd_args| {
+            // convert needs no registry
+            return convert_cmd.run(allocator, cmd_args, verbosity, stdout) catch 1;
+        },
         .version => {
             stdout.print("llm-cost {s}\n", .{version_str}) catch {};
             return 0;
@@ -191,7 +196,7 @@ pub fn main() !u8 {
             return 0;
         },
         .init => |cmd| {
-            init.run(allocator, cmd.args, std.io.getStdIn().reader(), global_state.stdout) catch return 1;
+            init.run(allocator, cmd.args, std.fs.cwd(), global_state.stdout, std.io.getStdErr().writer()) catch return 1;
             return 0;
         },
         .pipe => |cmd| {
