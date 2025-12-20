@@ -1,4 +1,4 @@
 UsageStartTime,UsageEndTime,ChargeCategory,Provider,ResourceId,UsageQuantity,UsageUnit,x-token-count-input,x-token-count-output,Tags.trace_id,BilledCost
 2024-01-01T00:00:00Z,2024-01-01T00:01:00Z,Usage,OpenAI,gpt-4o,100,Tokens,50,50,run-mix,0.10
-2024-01-01T00:01:00Z,2024-01-02:00:00Z,Usage,OpenAI,gpt-4o,100,Tokens,50,50,run-mix,0.10
-2024-01-01T00:02:00Z,2024-01-03:00:00Z,Usage,Unknown,custom-finetune-7b,100,Tokens,50,50,run-mix,0.00
+2024-01-01T00:01:00Z,2024-01-02T00:00:00Z,Usage,OpenAI,gpt-4o,100,Tokens,50,50,run-mix,0.10
+2024-01-01T00:02:00Z,2024-01-03T00:00:00Z,Usage,Unknown,custom-finetune-7b,100,Tokens,50,50,run-mix,0.00

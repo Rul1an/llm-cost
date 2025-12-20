@@ -128,7 +128,7 @@ pub const Aggregator = struct {
 
     pub fn finish(self: *Aggregator) BreakdownResult {
         // Move stats to result.
-        // Move stats to result.
+
         // Better: BreakdownResult takes ownership of the map content.
 
         // We'll just clone keys/values or reuse the map if we deinit the aggregator without freeing keys.

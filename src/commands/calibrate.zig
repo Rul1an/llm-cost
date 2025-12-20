@@ -248,6 +248,7 @@ fn printUsage(w: anytype) !void {
         \\  --group-by <DIMS>               Breakdown by comma-separated tags (e.g. agent,tool)
         \\  --apply                         Apply changes to llm-cost.toml
         \\  --rollback                      Rollback to previous configuration
+        \\  --dry-run                       Simulate application (default)
         \\
     , .{});
 }

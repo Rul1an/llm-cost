@@ -7,7 +7,7 @@ const tag_resolver = @import("../calibration/tag_resolver.zig");
 const Pricing = @import("../core/pricing/mod.zig");
 
 // Helper to load fixture
-fn loadCvs(allocator: std.mem.Allocator, path: []const u8) !std.ArrayList(focus.FocusRecord) {
+fn loadCsv(allocator: std.mem.Allocator, path: []const u8) !std.ArrayList(focus.FocusRecord) {
     const f = try std.fs.cwd().openFile(path, .{});
     defer f.close();
     var parser = try focus.FocusParser.initFromReader(allocator, f.reader(), 1024 * 1024);
@@ -56,7 +56,7 @@ fn freeRecords(allocator: std.mem.Allocator, records: *std.ArrayList(focus.Focus
 test "AGENT001: RunawayRun" {
     const allocator = testing.allocator;
 
-    var records = try loadCvs(allocator, "src/tests/fixtures/expensive_run.csv");
+    var records = try loadCsv(allocator, "src/tests/fixtures/expensive_run.csv");
     defer freeRecords(allocator, &records);
 
     const policy = manifest.AgenticGovernance{
@@ -101,7 +101,7 @@ test "AGENT001: RunawayRun" {
 
 test "AGENT002: RetryStorm" {
     const allocator = testing.allocator;
-    var records = try loadCvs(allocator, "src/tests/fixtures/retry_storm.csv"); // 4 entries
+    var records = try loadCsv(allocator, "src/tests/fixtures/retry_storm.csv"); // 4 entries
     defer freeRecords(allocator, &records);
 
     const policy = manifest.AgenticGovernance{
@@ -131,7 +131,7 @@ test "AGENT002: RetryStorm" {
 
 test "AGENT004: ShadowAI (Unknown Model)" {
     const allocator = testing.allocator;
-    var records = try loadCvs(allocator, "src/tests/fixtures/unknown_model_mix.csv"); // 3 total, 1 unknown
+    var records = try loadCsv(allocator, "src/tests/fixtures/unknown_model_mix.csv"); // 3 total, 1 unknown
     defer freeRecords(allocator, &records);
 
     // 1 unknown / 3 total = 33.3%

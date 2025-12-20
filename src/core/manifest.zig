@@ -43,7 +43,6 @@ pub const Policy = struct {
     default_model: ?[]const u8 = null, // [defaults].model
 
     // Prompts (v0.10)
-    // Prompts (v0.10)
     prompts: ?[]PromptDef = null,
 
     // Tags (v1.11 PR8.1)

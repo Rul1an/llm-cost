@@ -187,7 +187,6 @@ fn parseCommand(cmd: []const u8, remaining: []const []const u8) ParseError!Comma
     if (std.mem.eql(u8, cmd, "calibrate")) return parseCalibrate(remaining);
     if (std.mem.eql(u8, cmd, "convert")) return parseConvert(remaining);
 
-    // Legacy/Pass-through commands
     if (std.mem.eql(u8, cmd, "estimate")) return .{ .estimate = .{ .args = remaining } };
     if (std.mem.eql(u8, cmd, "price")) {
         std.log.warn("⚠️ 'price' is deprecated, use 'estimate' instead", .{});
