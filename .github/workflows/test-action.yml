@@ -1,0 +1,41 @@
+name: Test Action
+
+on:
+  pull_request:
+  push:
+    branches: [main, "feature/*"]
+
+jobs:
+  action-sarif-e2e:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Use setup-zig to ensure we get a modern Zig version compatible with 0.14.0 logic
+      - uses: mlugg/setup-zig@v1
+        with:
+          version: 0.14.0
+
+      - name: Build llm-cost (from this branch)
+        run: |
+          zig build -Doptimize=ReleaseSafe
+          echo "$(pwd)/zig-out/bin" >> $GITHUB_PATH
+
+      - name: Run action (SARIF) using local binary
+        uses: ./
+        with:
+          skip-install: true
+          command: check
+          format: sarif
+          fail-on-error: false
+          # actuals: path/to/fixture.csv   # optioneel
+
+      - name: Validate SARIF JSON
+        run: |
+          test -f llm-cost.sarif
+          # Ensure jq is installed
+          if ! command -v jq &> /dev/null; then sudo apt-get update && sudo apt-get install -y jq; fi
+          jq -e '.version=="2.1.0" and .runs[0].tool.driver.name=="llm-cost"' llm-cost.sarif
