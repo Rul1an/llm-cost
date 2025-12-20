@@ -322,22 +322,6 @@ pub fn run(
             }
 
             // 2. Generate Report
-            // Note: generateReport currently takes []Violation. We need to update it to take []Result or specific params.
-            // OR, update generateReport to use the adapter internally?
-            // The user plan suggests:
-            // "toSarifResult" in adapter.
-            // "writeSarif" in sarif.zig that takes generic input?
-            // My `sarif.generateReport` logic is tightly coupled to `Violation`.
-            // I should refactor `generateReport` to accept `[]const Result` instead of `[]const Violation`.
-
-            // REFACTORING output logic here to use the SARIF module correctly.
-            // Let's call a new function `sarif.generateReportFromResults` or update existing.
-            // For now, I'll update `sarif.zig` to make `generateReport` generic or add `generateReportFromResults`.
-            // Actually, `sarif.zig` from previous step implements `generateReport` taking `[]Violation`.
-            // I should replace THAT implementation to use the adapter internally if I want to respect the separation.
-            // Or, update `generateReport` to accept `[]Result`.
-
-            // Let's modify `sarif.zig` to accept `[]Result` so Check.zig can drive the conversion.
             const json_report = try sarif.generateReportFromResults(allocator, sarif_results.items);
             defer allocator.free(json_report);
             try stdout.print("{s}\n", .{json_report});
