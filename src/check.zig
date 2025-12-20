@@ -38,6 +38,7 @@ pub fn run(
     // 2. Parse CLI Args for Overrides/Inputs
     var cli_model: ?[]const u8 = null;
     var cli_actuals: ?[]const u8 = null;
+    var cli_format: []const u8 = "text"; // Default
     var cli_inputs = std.ArrayList([]const u8).init(allocator);
     defer cli_inputs.deinit();
 
@@ -54,16 +55,24 @@ pub fn run(
                 cli_actuals = args[i + 1];
                 i += 1;
             }
+        } else if (std.mem.eql(u8, arg, "--format") or std.mem.eql(u8, arg, "-f")) {
+            if (i + 1 < args.len) {
+                cli_format = args[i + 1];
+                i += 1;
+            }
         } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
             try stdout.print("Usage: llm-cost check [OPTIONS] [FILES...]\n", .{});
             try stdout.print("Options:\n", .{});
-            try stdout.print("  --model, -m <MODEL>   Override model\n", .{});
-            try stdout.print("  --actuals <FILE>      Check agentic rules against FOCUS CSV\n", .{});
+            try stdout.print("  --model, -m <MODEL>     Override model\n", .{});
+            try stdout.print("  --actuals <FILE>        Check agentic rules against FOCUS CSV\n", .{});
+            try stdout.print("  --format <text|sarif>   Output format (default: text)\n", .{});
             return @intFromEnum(ExitCode.Ok);
         } else if (!std.mem.startsWith(u8, arg, "-")) {
             try cli_inputs.append(arg);
         }
     }
+
+    const output_sarif = std.mem.eql(u8, cli_format, "sarif");
 
     // 3. Check Policy: Allowed Models (Global Check on CLI overrides)
     if (cli_model) |cm| {
@@ -163,12 +172,14 @@ pub fn run(
         // try stderr.print("Hint: Run 'llm-cost init' to create a manifest for better governance.\n", .{});
     }
 
-    if (work_list.items.len == 0) {
+    // Only skip if explicitly checking prompts (default) and no prompts found.
+    // If checking agentic actuals, we might not need prompts.
+    if (work_list.items.len == 0 and cli_actuals == null) {
         try stderr.print("No prompts to check. Specify files or configure llm-cost.toml.\n", .{});
         return @intFromEnum(ExitCode.Error);
     }
 
-    // Execution Loop
+    // Execution Loop - Prompt Costs
     for (work_list.items) |item| {
         const tokenizer_config = try engine.resolveConfig(item.model);
         const price_def = registry.get(item.model);
@@ -193,10 +204,10 @@ pub fn run(
     }
 
     // 5. Evaluate Budget
-    if (verbosity != .quiet) {
+    if (!output_sarif and verbosity != .quiet) {
         if (prompts_checked == 1) {
             try stdout.print("✓ {} prompt validated\n", .{prompts_checked});
-        } else {
+        } else if (prompts_checked > 0) {
             try stdout.print("✓ {} prompts validated\n", .{prompts_checked});
         }
     }
@@ -205,7 +216,7 @@ pub fn run(
 
     if (policy.max_cost_usd) |limit| {
         const percent = (total_usd / limit) * 100.0;
-        if (verbosity != .quiet) {
+        if (!output_sarif and verbosity != .quiet) {
             try stdout.print("Budget Usage: ${d:.4} / ${d:.4} ({d:.1}%)\n", .{ total_usd, limit, percent });
         }
 
@@ -214,7 +225,7 @@ pub fn run(
             return @intFromEnum(ExitCode.BudgetExceeded);
         }
     } else {
-        if (verbosity != .quiet) {
+        if (!output_sarif and verbosity != .quiet and prompts_checked > 0) {
             try stdout.print("Total Est. Cost: ${d:.4} (No budget limit set)\n", .{total_usd});
         }
     }
@@ -280,19 +291,70 @@ pub fn run(
             allocator.free(violations);
         }
 
-        if (violations.len > 0) {
-            var errors: u32 = 0;
-            for (violations) |v| {
-                const label = if (v.severity == .@"error") "ERROR" else "WARN";
-                try stderr.print("[{s}] {s}: {s}\n", .{ label, @tagName(v.rule), v.message });
-                if (v.severity == .@"error") errors += 1;
+        if (output_sarif) {
+            const sarif = @import("reporting/sarif.zig");
+            const adapter = @import("reporting/violation_adapter.zig");
+
+            // 1. Convert to SARIF Results
+            var sarif_results = try std.ArrayList(sarif.Result).initCapacity(allocator, violations.len);
+            defer {
+                for (sarif_results.items) |*res| {
+                    allocator.free(res.locations);
+                    if (res.properties) |*p| {
+                        // Complex free for std.json.Value?
+                        // Assuming arena or we rely on simple allocator free if feasible
+                        // std.json.Value.deinit() only works if created with parse.
+                        // For constructed values, we need manual free if we deep copied strings.
+                        // In adapter we use ObjectMap which needs deinit.
+                        // BUT, toSarifResult returns a Value that owns the ObjectMap.
+                        // We must call .deinit() on the object map or value.
+                        if (p.* == .object) {
+                            p.object.deinit();
+                        }
+                    }
+                }
+                sarif_results.deinit();
             }
 
-            if (errors > 0) {
-                return @intFromEnum(ExitCode.Error);
+            for (violations) |v| {
+                const res = try adapter.toSarifResult(allocator, v, actuals_path);
+                try sarif_results.append(res);
+            }
+
+            // 2. Generate Report
+            const json_report = try sarif.generateReportFromResults(allocator, sarif_results.items);
+            defer allocator.free(json_report);
+            try stdout.print("{s}\n", .{json_report});
+        }
+
+        if (violations.len > 0) {
+            // In text mode, print human readable
+            if (!output_sarif) {
+                var errors: u32 = 0;
+                for (violations) |v| {
+                    const label = if (v.severity == .@"error") "ERROR" else "WARN";
+                    try stderr.print("[{s}] {s}: {s}\n", .{ label, @tagName(v.rule), v.message });
+                    if (v.severity == .@"error") errors += 1;
+                }
+
+                if (errors > 0) {
+                    return @intFromEnum(ExitCode.Error);
+                }
+            } else {
+                // SARIF Mode:
+                // We still want to exit 1 if there are "error" severity violations.
+                // This allows CI to fail natively without parsing JSON.
+                var errors: u32 = 0;
+                for (violations) |v| {
+                    if (v.severity == .@"error") errors += 1;
+                }
+                if (errors > 0) {
+                    return @intFromEnum(ExitCode.Error);
+                }
+                return @intFromEnum(ExitCode.Ok);
             }
         } else {
-            if (verbosity != .quiet) {
+            if (!output_sarif and verbosity != .quiet) {
                 try stdout.print("✓ Agentic governance passed ({} records)\n", .{records.items.len});
             }
         }

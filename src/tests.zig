@@ -8,6 +8,7 @@ test {
     _ = @import("tests/init_test.zig");
     _ = @import("tests/tag_resolver_test.zig");
     _ = @import("tests/breakdown_test.zig");
+    _ = @import("tests/sarif_test.zig");
     _ = @import("tests/agentic_gates_test.zig");
     _ = @import("tests/otel_convert_test.zig");
 }
