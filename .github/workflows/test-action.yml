@@ -31,7 +31,7 @@ jobs:
           command: check
           format: sarif
           fail-on-error: false
-          # actuals: path/to/fixture.csv   # optioneel
+          args: --actuals src/tests/fixtures/expensive_run.csv
 
       - name: Validate SARIF JSON
         run: |
