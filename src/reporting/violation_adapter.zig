@@ -51,6 +51,7 @@ fn buildPropertiesValue(
     if (!has_props) return null;
 
     var obj = std.json.ObjectMap.init(allocator);
+    errdefer obj.deinit();
     // Note: We transfer ownership of this map to the Value (and subsequently the caller)
     // so we do NOT errdefer/deinit here unless allocation fails before return.
 

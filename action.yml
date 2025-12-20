@@ -23,7 +23,7 @@ inputs:
     default: ""
 
   actuals:
-    description: "Path to actuals file for check/governance (e.g. usage.csv)."
+    description: "Path to actuals file for check/governance (FOCUS-format CSV, e.g. actuals.csv)."
     required: false
     default: ""
 
@@ -110,6 +110,7 @@ runs:
         LLM_COST_VERSION: ${{ inputs.version }}
         LLM_COST_REPO: ${{ inputs.releases-repo }}
         LLM_COST_VERIFY: ${{ inputs.verify }}
+        # Use token for GitHub API to avoid rate limits when resolving 'latest'
         LLM_COST_SHA256: ${{ inputs.sha256 }}
         GITHUB_TOKEN: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
       run: |
@@ -129,6 +130,29 @@ runs:
         FORMAT="${{ inputs.format }}"
         FAIL_ON_ERROR="${{ inputs.fail-on-error }}"
         SARIF_OUT="${{ inputs.sarif-output }}"
+
+        # Validate inputs to prevent injection and errors
+        case "$CMD" in
+          "ci-action"|"check"|"estimate"|"convert") ;;
+          *) echo "Invalid command: '$CMD'. Expected: ci-action, check, estimate, convert." >&2; exit 1 ;;
+        esac
+
+        case "$FORMAT" in
+          "text"|"sarif") ;;
+          *) echo "Invalid format: '$FORMAT'. Expected: text, sarif." >&2; exit 1 ;;
+        esac
+
+        case "$FAIL_ON_ERROR" in
+          "true"|"false") ;;
+          *) echo "Invalid fail-on-error: '$FAIL_ON_ERROR'. Expected: true, false." >&2; exit 1 ;;
+        esac
+
+        if [ -n "$SARIF_OUT" ]; then
+          if [[ "$SARIF_OUT" =~ [^a-zA-Z0-9_./-] ]]; then
+             echo "Invalid sarif-output value: contains unsafe characters -> '$SARIF_OUT'" >&2
+             exit 1
+          fi
+        fi
 
         if [ "$CMD" = "ci-action" ]; then
           args=( "ci-action" "--manifest" "${{ inputs.manifest }}" )

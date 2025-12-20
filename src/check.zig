@@ -175,7 +175,7 @@ pub fn run(
     // Only skip if explicitly checking prompts (default) and no prompts found.
     // If checking agentic actuals, we might not need prompts.
     if (work_list.items.len == 0 and cli_actuals == null) {
-        try stderr.print("No prompts to check. Specify files or configure llm-cost.toml.\n", .{});
+        try stdout.print("No inputs to check. Specify prompt files or use --actuals for governance checks.\n", .{});
         return @intFromEnum(ExitCode.Error);
     }
 
@@ -301,13 +301,7 @@ pub fn run(
                 for (sarif_results.items) |*res| {
                     allocator.free(res.locations);
                     if (res.properties) |*p| {
-                        // Complex free for std.json.Value?
-                        // Assuming arena or we rely on simple allocator free if feasible
-                        // std.json.Value.deinit() only works if created with parse.
-                        // For constructed values, we need manual free if we deep copied strings.
-                        // In adapter we use ObjectMap which needs deinit.
-                        // BUT, toSarifResult returns a Value that owns the ObjectMap.
-                        // We must call .deinit() on the object map or value.
+                        // Free values. Complex types (objects) need manual cleanup.
                         if (p.* == .object) {
                             p.object.deinit();
                         }
@@ -354,7 +348,7 @@ pub fn run(
                 return @intFromEnum(ExitCode.Ok);
             }
         } else {
-            if (!output_sarif and verbosity != .quiet) {
+            if (verbosity != .quiet) {
                 try stdout.print("✓ Agentic governance passed ({} records)\n", .{records.items.len});
             }
         }

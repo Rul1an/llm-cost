@@ -69,7 +69,7 @@ steps:
       command: check
       format: sarif
       # Optional: path to actuals
-      # args: --actuals usage.csv
+      # actuals: usage.csv
       # Fail build on error-level violations
       fail-on-error: true
 
