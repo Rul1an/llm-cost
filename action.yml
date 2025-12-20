@@ -17,6 +17,11 @@ inputs:
     required: false
     default: "text"
 
+  args:
+    description: "Extra arguments to pass to the tool (e.g. --actuals foo.csv)."
+    required: false
+    default: ""
+
   actuals:
     description: "Path to actuals file for check/governance (e.g. usage.csv)."
     required: false
@@ -161,6 +166,12 @@ runs:
 
         # Generic branch: check/estimate/convert/...
         args=( "$CMD" )
+
+        # Add extra args (splitting by space)
+        if [ -n "${{ inputs.args }}" ]; then
+            read -ra extra_args <<< "${{ inputs.args }}"
+            args+=( "${extra_args[@]}" )
+        fi
 
         if [ -n "${{ inputs.actuals }}" ]; then
           args+=( "--actuals" "${{ inputs.actuals }}" )
