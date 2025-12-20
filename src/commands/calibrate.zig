@@ -2,6 +2,9 @@ const std = @import("std");
 const calibrate = @import("../calibration/mod.zig");
 const report = @import("../calibration/report.zig");
 const pricing = @import("../core/pricing/mod.zig");
+const breakdown = @import("../calibration/breakdown.zig");
+const TagResolver = @import("../calibration/tag_resolver.zig").Resolver;
+const manifest = @import("../core/manifest.zig");
 const args_mod = @import("../cli/args.zig");
 const progress_mod = @import("../cli/progress.zig");
 const logger_mod = @import("../cli/logger.zig");
@@ -11,6 +14,24 @@ const CalibrateArgs = args_mod.CalibrateArgs;
 const Progress = progress_mod.Progress;
 const Spinner = progress_mod.Spinner;
 const Logger = logger_mod.Logger;
+
+fn loadPolicyConfig(allocator: std.mem.Allocator, log: Logger) ?manifest.Policy {
+    const f = std.fs.cwd().openFile("llm-cost.toml", .{}) catch return null;
+    defer f.close();
+
+    // Read up to 1MB config
+    const data = f.readToEndAlloc(allocator, 1024 * 1024) catch |e| {
+        log.warn("Failed to read llm-cost.toml: {s}", .{@errorName(e)});
+        return null;
+    };
+    defer allocator.free(data);
+
+    const p = manifest.parse(allocator, data) catch |e| {
+        log.warn("Failed to parse llm-cost.toml: {s}", .{@errorName(e)});
+        return null;
+    };
+    return p;
+}
 
 pub const CalibrateError = error{
     MissingActuals,
@@ -62,7 +83,39 @@ pub fn run(
 
     var spinner = Spinner.init("Calibrating", verbosity);
 
-    // Init Pricing Registry
+    // 1. Load Policy Config (for Tag overrides)
+    const policy = loadPolicyConfig(allocator, log);
+    // Note: policy needs deallocation? manifest.parse uses allocator for internal maps.
+    // Ideally we assume policy lifetime covers the run.
+
+    // 2. Init Tag Resolver
+    var resolver = TagResolver.init(allocator, if (policy) |p| p.tags else null) catch |e| {
+        log.err("Failed to init tag resolver: {s}", .{@errorName(e)});
+        spinner.finish();
+        return 70;
+    };
+    defer resolver.deinit();
+
+    // 3. Init Breakdown Aggregator (if requested)
+    var aggregator: ?breakdown.Aggregator = null;
+    var dims_storage = std.ArrayList([]const u8).init(allocator);
+    defer dims_storage.deinit();
+
+    if (cmd_args.group_by) |gb| {
+        if (gb.len > 0) {
+            var it = std.mem.splitScalar(u8, gb, ',');
+            while (it.next()) |dim| {
+                const trimmed = std.mem.trim(u8, dim, " ");
+                if (trimmed.len > 0) try dims_storage.append(trimmed);
+            }
+            if (dims_storage.items.len > 0) {
+                aggregator = breakdown.Aggregator.init(allocator, resolver, dims_storage.items, @intCast(cmd_args.max_resources));
+            }
+        }
+    }
+    defer if (aggregator) |*a| a.deinit();
+
+    // 4. Init Pricing Registry
     var registry = pricing.Registry.init(allocator, .{}) catch |err| {
         log.warn("Failed to load pricing registry: {s}. Recommendations will be limited.", .{@errorName(err)});
         spinner.finish();
@@ -76,12 +129,13 @@ pub fn run(
         .min_samples = @intCast(cmd_args.min_samples),
         .max_unique_resources = @intCast(cmd_args.max_resources),
         .cardinality_policy = if (cmd_args.cardinality_policy == 1) .@"error" else .degrade,
+        .breakdown_aggregator = if (aggregator) |*a| a else null,
     };
 
     var interner = @import("../calibration/key_intern.zig").StringInterner.init(allocator);
     defer interner.deinit();
 
-    const result = calibrate.run(allocator, run_opts, &registry, &interner) catch |err| {
+    var result = calibrate.run(allocator, run_opts, &registry, &interner) catch |err| {
         spinner.finish();
         switch (err) {
             error.InsufficientData => {
@@ -98,6 +152,7 @@ pub fn run(
             },
         }
     };
+    defer result.deinit(allocator);
     spinner.finish();
 
     const fmt: report.OutputFormat = switch (cmd_args.format) {
@@ -190,10 +245,9 @@ fn printUsage(w: anytype) !void {
         \\  --min-samples <INT>             Minimum samples required (default: 100)
         \\  --max-resources <INT>           Max unique models limit (default: 10000)
         \\  --cardinality-policy <MODE>     degrade|error (default: degrade)
+        \\  --group-by <DIMS>               Breakdown by comma-separated tags (e.g. agent,tool)
         \\  --apply                         Apply changes to llm-cost.toml
         \\  --rollback                      Rollback to previous configuration
-        \\  --dry-run                       Simulate application (default)
-        \\  --dry-run                       Simulate application (default)
         \\
     , .{});
 }

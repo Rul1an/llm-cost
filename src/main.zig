@@ -17,6 +17,7 @@ const estimate_cmd = @import("commands/estimate.zig");
 const ci_action_cmd = @import("ci_action.zig");
 const verify_cmd = @import("verify.zig");
 const calibrate_cmd = @import("commands/calibrate.zig");
+const convert_cmd = @import("commands/convert.zig");
 const update_db_cmd = @import("cli/update_db.zig");
 const upgrade_cmd = @import("cli/upgrade.zig");
 const verify_license_cmd = @import("cli/verify_license.zig");
@@ -157,6 +158,10 @@ pub fn main() !u8 {
                     },
                 }
             };
+        },
+        .convert => |cmd_args| {
+            // convert needs no registry
+            return convert_cmd.run(allocator, cmd_args, verbosity, stdout) catch 1;
         },
         .version => {
             stdout.print("llm-cost {s}\n", .{version_str}) catch {};

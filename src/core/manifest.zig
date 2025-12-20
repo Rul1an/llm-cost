@@ -33,7 +33,12 @@ pub const Policy = struct {
     default_model: ?[]const u8 = null, // [defaults].model
 
     // Prompts (v0.10)
+    // Prompts (v0.10)
     prompts: ?[]PromptDef = null,
+
+    // Tags (v1.11 PR8.1)
+    // Alias map: "agent" -> "Tags.agent", "trace_id" -> "Tags.trace_id"
+    tags: ?std.StringHashMap([]const u8) = null,
 
     pub fn deinit(self: *Policy, allocator: std.mem.Allocator) void {
         if (self.allowed_models) |models| {
@@ -44,6 +49,14 @@ pub const Policy = struct {
         if (self.prompts) |prompts| {
             for (prompts) |*p| p.deinit(allocator);
             allocator.free(prompts);
+        }
+        if (self.tags) |*t| {
+            var it = t.iterator();
+            while (it.next()) |entry| {
+                allocator.free(entry.key_ptr.*);
+                allocator.free(entry.value_ptr.*);
+            }
+            t.deinit();
         }
     }
 };
@@ -63,7 +76,7 @@ pub fn parse(allocator: std.mem.Allocator, content: []const u8) !Policy {
         prompts_list.deinit();
     }
 
-    var current_state: enum { None, Budget, Models, Defaults, Prompt } = .None;
+    var current_state: enum { None, Budget, Models, Defaults, Prompt, Tags } = .None;
 
     // Pointer to the prompt currently being built (if in Prompt state)
     // We append a generic PromptDef when entering [[prompts]], then modify the last item.
@@ -98,6 +111,8 @@ pub fn parse(allocator: std.mem.Allocator, content: []const u8) !Policy {
                 current_state = .Models;
             } else if (std.mem.eql(u8, section_name, "defaults")) {
                 current_state = .Defaults;
+            } else if (std.mem.eql(u8, section_name, "tags")) {
+                current_state = .Tags;
             } else {
                 current_state = .None;
             }
@@ -130,6 +145,18 @@ pub fn parse(allocator: std.mem.Allocator, content: []const u8) !Policy {
                     if (std.mem.eql(u8, key, "model")) {
                         if (policy.default_model) |m| allocator.free(m);
                         policy.default_model = try parseString(allocator, val);
+                    }
+                },
+                .Tags => {
+                    if (policy.tags == null) {
+                        policy.tags = std.StringHashMap([]const u8).init(allocator);
+                    }
+                    const k_dup = try allocator.dupe(u8, key);
+                    const v_dup = try parseString(allocator, val);
+
+                    if (try policy.tags.?.fetchPut(k_dup, v_dup)) |old| {
+                        allocator.free(old.key);
+                        allocator.free(old.value);
                     }
                 },
                 .Prompt => {

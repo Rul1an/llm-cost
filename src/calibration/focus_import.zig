@@ -21,6 +21,20 @@ pub const FocusRecord = struct {
 
     // Optional timestamp (if you add support)
     timestamp: ?i64 = null,
+
+    // Dynamic Tags (PR8.1)
+    tags: std.StringHashMap([]const u8),
+
+    // Helper to get column value by name (used by TagResolver)
+    pub fn getColumn(self: FocusRecord, name: []const u8) ?[]const u8 {
+        if (std.mem.eql(u8, name, "ResourceId")) return self.ResourceId;
+        if (std.mem.eql(u8, name, "UsageUnit")) return self.UsageUnit;
+        if (std.mem.eql(u8, name, "ChargeCategory")) return self.ChargeCategory;
+        if (std.mem.eql(u8, name, "InvoiceIssuerName")) return self.InvoiceIssuerName;
+        if (std.mem.eql(u8, name, "x-llm-model")) return self.@"x-llm-model";
+        // ... (add others if needed, typically we resolve Tags.* or ResourceId)
+        return null;
+    }
 };
 
 fn stripBom(s: []const u8) []const u8 {
@@ -61,8 +75,15 @@ pub const FocusParser = struct {
     scratch: std.ArrayList(u8),
 
     col: ColumnIndices,
+    tag_cols: std.ArrayList(TagCol), // New: Dynamic tags
+
     version: FocusVersion = .unknown,
     line_no: u64 = 0,
+
+    const TagCol = struct {
+        idx: usize,
+        key: []const u8, // "agent" from "Tags.agent"
+    };
 
     const ColumnIndices = struct {
         BilledCost: ?usize = null,
@@ -96,6 +117,7 @@ pub const FocusParser = struct {
             .arena = std.heap.ArenaAllocator.init(allocator),
             .scratch = std.ArrayList(u8).init(allocator),
             .col = .{},
+            .tag_cols = std.ArrayList(TagCol).init(allocator),
         };
         errdefer p.deinit();
 
@@ -105,6 +127,10 @@ pub const FocusParser = struct {
     }
 
     pub fn deinit(self: *FocusParser) void {
+        for (self.tag_cols.items) |tc| {
+            self.allocator.free(tc.key);
+        }
+        self.tag_cols.deinit();
         self.lr.deinit();
         self.arena.deinit();
         self.scratch.deinit();
@@ -126,18 +152,30 @@ pub const FocusParser = struct {
             // Note: raw field might contain BOM if it's the first one.
             // headerEq handles BOM + trimming.
 
-            if (headerEq(field_raw, "BilledCost")) self.col.BilledCost = idx else if (headerEq(field_raw, "EffectiveCost")) self.col.EffectiveCost = idx else if (headerEq(field_raw, "UsageQuantity")) self.col.UsageQuantity = idx else if (headerEq(field_raw, "UsageUnit")) self.col.UsageUnit = idx else if (headerEq(field_raw, "ChargeCategory")) self.col.ChargeCategory = idx else if (headerEq(field_raw, "ResourceId")) self.col.ResourceId = idx else if (headerEq(field_raw, "x-llm-model")) self.col.@"x-llm-model" = idx else if (headerEq(field_raw, "x-llm-input-tokens")) self.col.@"x-llm-input-tokens" = idx else if (headerEq(field_raw, "x-llm-output-tokens")) self.col.@"x-llm-output-tokens" = idx else if (headerEq(field_raw, "x-llm-cache-hit")) self.col.@"x-llm-cache-hit" = idx
+            const clean_name = std.mem.trim(u8, stripBom(field_raw), " \t\r\n");
+
+            if (std.mem.eql(u8, clean_name, "BilledCost")) self.col.BilledCost = idx else if (std.mem.eql(u8, clean_name, "EffectiveCost")) self.col.EffectiveCost = idx else if (std.mem.eql(u8, clean_name, "UsageQuantity")) self.col.UsageQuantity = idx else if (std.mem.eql(u8, clean_name, "UsageUnit")) self.col.UsageUnit = idx else if (std.mem.eql(u8, clean_name, "ChargeCategory")) self.col.ChargeCategory = idx else if (std.mem.eql(u8, clean_name, "ResourceId")) self.col.ResourceId = idx else if (std.mem.eql(u8, clean_name, "x-llm-model")) self.col.@"x-llm-model" = idx else if (std.mem.eql(u8, clean_name, "x-llm-input-tokens")) self.col.@"x-llm-input-tokens" = idx else if (std.mem.eql(u8, clean_name, "x-llm-output-tokens")) self.col.@"x-llm-output-tokens" = idx else if (std.mem.eql(u8, clean_name, "x-llm-cache-hit")) self.col.@"x-llm-cache-hit" = idx
 
                 // v1.2 signals
-            else if (headerEq(field_raw, "InvoiceIssuerName")) {
+            else if (std.mem.eql(u8, clean_name, "InvoiceIssuerName")) {
                 self.col.InvoiceIssuerName = idx;
                 saw_v1_2_signal = true;
-            } else if (headerEq(field_raw, "InvoiceId")) {
+            } else if (std.mem.eql(u8, clean_name, "InvoiceId")) {
                 self.col.InvoiceId = idx;
                 saw_v1_2_signal = true;
-            } else if (headerEq(field_raw, "CapacityReservationId")) {
+            } else if (std.mem.eql(u8, clean_name, "CapacityReservationId")) {
                 self.col.CapacityReservationId = idx;
                 saw_v1_2_signal = true;
+            }
+            // Dynamic Tags parsing
+            else if (std.mem.startsWith(u8, clean_name, "Tags.")) {
+                const key = clean_name["Tags.".len..];
+                if (key.len > 0) {
+                    try self.tag_cols.append(.{
+                        .idx = idx,
+                        .key = try self.allocator.dupe(u8, key),
+                    });
+                }
             }
         }
 
@@ -158,6 +196,8 @@ pub const FocusParser = struct {
         const line = (try self.readLineOrNull()) orelse return null;
         self.line_no += 1;
 
+        const ally = self.arena.allocator();
+
         var rec = FocusRecord{
             .BilledCost = 0,
             .EffectiveCost = 0,
@@ -165,11 +205,11 @@ pub const FocusParser = struct {
             .UsageUnit = "",
             .ChargeCategory = "",
             .ResourceId = "",
+            .tags = std.StringHashMap([]const u8).init(ally),
         };
 
         var it = CsvFieldIter.init(line, &self.scratch);
         var idx: usize = 0;
-        const ally = self.arena.allocator();
 
         while (try it.next()) |field_raw| : (idx += 1) {
             const field = trimField(field_raw);
@@ -196,6 +236,30 @@ pub const FocusParser = struct {
                 if (field.len != 0) rec.@"x-llm-cache-hit" = parseBool(field) catch return error.InvalidBoolean;
             } else if (self.col.InvoiceIssuerName != null and self.col.InvoiceIssuerName.? == idx) {
                 if (field.len != 0) rec.InvoiceIssuerName = try ally.dupe(u8, field);
+            }
+
+            // Dynamic Tags populated in pass-through loop?
+            // Optimization: check against tag_cols list? Linear search might be ok for small number of tags.
+            // A better way is to iterate headers once and build a sparse map?
+            // But here we are iterating fields.
+            // Let's optimize: Check bounds of tags
+
+            // To avoid linear scan of tag_cols for every field:
+            // We can precompute: do we have any tag at this idx?
+            // But for PR8.1 MVP, simple iteration is acceptable if < 100 columns.
+            for (self.tag_cols.items) |tc| {
+                if (tc.idx == idx) {
+                    // Dupe BOTH key and value in arena?
+                    // Key is constant from header, but HashMap needs key lifetime >= map lifetime.
+                    // The keys in tag_cols are on heap (parser lifetime).
+                    // FocusRecord map is arena (line lifetime).
+                    // StringHashMap uses keys by reference. If we assume tag_cols outlives FocusRecord (it does),
+                    // we can use tc.key directly.
+                    // Value needs to be duped into arena.
+                    const val_dupe = try ally.dupe(u8, field);
+                    try rec.tags.put(tc.key, val_dupe);
+                    break;
+                }
             }
         }
 

@@ -12,6 +12,7 @@ pub const Command = union(enum) {
     check: CheckArgs,
     diff: DiffArgs,
     calibrate: CalibrateArgs,
+    convert: ConvertArgs,
     update_db: UpdateDbArgs,
     ci_action: CiActionArgs,
     @"export": ExportArgs,
@@ -41,6 +42,15 @@ pub const CalibrateArgs = struct {
     min_samples: usize = 100,
     fail_on_drift: FailDrift = .never,
     cardinality_policy: isize = 0,
+    group_by: ?[]const u8 = null,
+    help: bool = false,
+};
+
+pub const ConvertArgs = struct {
+    format: []const u8 = "otel", // Only otel for now
+    input: ?[]const u8 = null,
+    output: ?[]const u8 = null,
+    stdout: bool = false,
     help: bool = false,
 };
 
@@ -182,6 +192,7 @@ pub fn parse(allocator: std.mem.Allocator, args: []const []const u8) ParseError!
 
 fn parseCommand(cmd: []const u8, remaining: []const []const u8) ParseError!Command {
     if (std.mem.eql(u8, cmd, "calibrate")) return parseCalibrate(remaining);
+    if (std.mem.eql(u8, cmd, "convert")) return parseConvert(remaining);
 
     // Legacy/Pass-through commands
     if (std.mem.eql(u8, cmd, "estimate")) return .{ .estimate = .{ .args = remaining } };
@@ -298,6 +309,10 @@ fn parseCalibrate(args: []const []const u8) ParseError!Command {
             } else {
                 return ParseError.InvalidValue;
             }
+        } else if (std.mem.eql(u8, arg, "--group-by")) {
+            i += 1;
+            if (i >= args.len) return ParseError.MissingValue;
+            result.group_by = args[i];
         } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
             result.help = true;
         } else if (std.mem.startsWith(u8, arg, "-")) {
@@ -316,4 +331,45 @@ fn parseCalibrate(args: []const []const u8) ParseError!Command {
     }
 
     return .{ .calibrate = result };
+}
+
+fn parseConvert(args: []const []const u8) ParseError!Command {
+    var result = ConvertArgs{};
+    var i: usize = 0;
+
+    // First arg might be subcommand (otel) if user typed "convert otel"
+    // But main dispatch logic splits args?
+    // args here is whatever follows "convert".
+    // If first arg is "otel", consume it.
+    if (args.len > 0 and !std.mem.startsWith(u8, args[0], "-")) {
+        result.format = args[i];
+        i += 1;
+    }
+
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+
+        if (std.mem.eql(u8, arg, "-v") or std.mem.eql(u8, arg, "--verbose") or
+            std.mem.eql(u8, arg, "-q") or std.mem.eql(u8, arg, "--quiet"))
+        {
+            continue;
+        }
+
+        if (std.mem.eql(u8, arg, "--input") or std.mem.eql(u8, arg, "-i")) {
+            i += 1;
+            if (i >= args.len) return ParseError.MissingValue;
+            result.input = args[i];
+        } else if (std.mem.eql(u8, arg, "--output") or std.mem.eql(u8, arg, "-o")) {
+            i += 1;
+            if (i >= args.len) return ParseError.MissingValue;
+            result.output = args[i];
+        } else if (std.mem.eql(u8, arg, "--stdout")) {
+            result.stdout = true;
+        } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+            result.help = true;
+        } else {
+            return ParseError.UnknownFlag;
+        }
+    }
+    return .{ .convert = result };
 }
