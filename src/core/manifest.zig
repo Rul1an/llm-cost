@@ -21,6 +21,13 @@ pub const PromptDef = struct {
     }
 };
 
+pub const AgenticGovernance = struct {
+    max_cost_per_run: ?f64 = null,
+    max_tool_retries: ?u32 = null,
+    max_tokens_per_step: ?u64 = null,
+    max_unknown_model_pct: ?f64 = null,
+};
+
 pub const Policy = struct {
     // Budget Section
     max_cost_usd: ?f64 = null,
@@ -29,10 +36,12 @@ pub const Policy = struct {
     // Policy Section
     allowed_models: ?[][]const u8 = null,
 
+    // Governance Section (v1.12 PR8.3)
+    agentic: AgenticGovernance = .{},
+
     // Defaults Section (v0.10)
     default_model: ?[]const u8 = null, // [defaults].model
 
-    // Prompts (v0.10)
     // Prompts (v0.10)
     prompts: ?[]PromptDef = null,
 
@@ -76,7 +85,7 @@ pub fn parse(allocator: std.mem.Allocator, content: []const u8) !Policy {
         prompts_list.deinit();
     }
 
-    var current_state: enum { None, Budget, Models, Defaults, Prompt, Tags } = .None;
+    var current_state: enum { None, Budget, Models, Defaults, Prompt, Tags, Agentic } = .None;
 
     // Pointer to the prompt currently being built (if in Prompt state)
     // We append a generic PromptDef when entering [[prompts]], then modify the last item.
@@ -113,6 +122,8 @@ pub fn parse(allocator: std.mem.Allocator, content: []const u8) !Policy {
                 current_state = .Defaults;
             } else if (std.mem.eql(u8, section_name, "tags")) {
                 current_state = .Tags;
+            } else if (std.mem.eql(u8, section_name, "governance.agentic")) {
+                current_state = .Agentic;
             } else {
                 current_state = .None;
             }
@@ -157,6 +168,17 @@ pub fn parse(allocator: std.mem.Allocator, content: []const u8) !Policy {
                     if (try policy.tags.?.fetchPut(k_dup, v_dup)) |old| {
                         allocator.free(old.key);
                         allocator.free(old.value);
+                    }
+                },
+                .Agentic => {
+                    if (std.mem.eql(u8, key, "max_cost_per_run")) {
+                        policy.agentic.max_cost_per_run = std.fmt.parseFloat(f64, val) catch null;
+                    } else if (std.mem.eql(u8, key, "max_tool_retries")) {
+                        policy.agentic.max_tool_retries = std.fmt.parseInt(u32, val, 10) catch null;
+                    } else if (std.mem.eql(u8, key, "max_tokens_per_step")) {
+                        policy.agentic.max_tokens_per_step = std.fmt.parseInt(u64, val, 10) catch null;
+                    } else if (std.mem.eql(u8, key, "max_unknown_model_pct")) {
+                        policy.agentic.max_unknown_model_pct = std.fmt.parseFloat(f64, val) catch null;
                     }
                 },
                 .Prompt => {

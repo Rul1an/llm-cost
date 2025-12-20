@@ -11,7 +11,7 @@ const WARN_AGE_SECONDS = 30 * 24 * 60 * 60; // 30 days
 const StaleStatus = enum { Fresh, Warning, Critical };
 
 const schema = @import("schema.zig");
-const Manifest = @import("manifest.zig");
+const Manifest = @import("manifest");
 pub const PriceDef = schema.PriceDef;
 pub const MicroUsd = schema.MicroUsd;
 const paths = @import("paths.zig");

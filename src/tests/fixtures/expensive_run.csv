@@ -1,0 +1,3 @@
+UsageStartTime,UsageEndTime,ChargeCategory,Provider,ResourceId,UsageQuantity,UsageUnit,x-token-count-input,x-token-count-output,Tags.trace_id,BilledCost
+2024-01-01T00:00:00Z,2024-01-01T00:00:10Z,Usage,OpenAI,gpt-4,1000,Tokens,500,500,run-expensive,10.00
+2024-01-01T00:00:10Z,2024-01-01T00:00:20Z,Usage,OpenAI,gpt-4,2000,Tokens,1000,1000,run-expensive,20.00

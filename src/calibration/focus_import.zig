@@ -80,6 +80,11 @@ pub const FocusParser = struct {
     version: FocusVersion = .unknown,
     line_no: u64 = 0,
 
+    const TagCol = struct {
+        idx: usize,
+        key: []const u8, // "agent" from "Tags.agent"
+    };
+
     const ColumnIndices = struct {
         BilledCost: ?usize = null,
         EffectiveCost: ?usize = null,

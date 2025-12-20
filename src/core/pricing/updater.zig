@@ -1,5 +1,5 @@
 const std = @import("std");
-const Manifest = @import("manifest.zig");
+const Manifest = @import("manifest");
 const UpdateState = @import("state.zig").UpdateState;
 const fetcher = @import("fetcher.zig");
 const persistence = @import("persistence.zig");

@@ -50,6 +50,7 @@ const naked_help =
     \\  ci-action  Run CI action checks
     \\  verify-license Verify license key
     \\  analyze-fairness Analyze fairness metrics
+    \\  convert    Convert logs (e.g. OTel) to FOCUS
     \\
     \\Global flags:
     \\  -q, --quiet     Suppress progress, errors only
