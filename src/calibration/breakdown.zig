@@ -109,9 +109,18 @@ pub const Aggregator = struct {
         s.cost_micro += record.BilledCost; // Consistency: use BilledCost (actuals)
 
         var t: u64 = 0;
-        if (record.@"x-llm-input-tokens") |v| t += v;
-        if (record.@"x-llm-output-tokens") |v| t += v;
-        if (t == 0) t = record.UsageQuantity;
+        var has_tokens = false;
+        if (record.@"x-llm-input-tokens") |v| {
+            t += v;
+            has_tokens = true;
+        }
+        if (record.@"x-llm-output-tokens") |v| {
+            t += v;
+            has_tokens = true;
+        }
+
+        // Only fallback to UsageQuantity if NO token fields were present
+        if (!has_tokens) t = record.UsageQuantity;
 
         s.tokens += t;
         s.count += 1;

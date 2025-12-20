@@ -2,8 +2,6 @@ const std = @import("std");
 
 pub const InitError = error{
     FileExists,
-    WriteError,
-    ParseError,
 };
 
 pub fn run(allocator: std.mem.Allocator, args: []const []const u8, cwd: std.fs.Dir, out_writer: anytype, err_writer: anytype) !void {

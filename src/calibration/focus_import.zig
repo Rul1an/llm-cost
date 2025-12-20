@@ -75,7 +75,7 @@ pub const FocusParser = struct {
     scratch: std.ArrayList(u8),
 
     col: ColumnIndices,
-    tag_cols: std.ArrayList(TagCol), // New: Dynamic tags
+    tag_map: std.AutoHashMap(usize, []const u8), // idx -> key (owned by parser)
 
     version: FocusVersion = .unknown,
     line_no: u64 = 0,
@@ -117,7 +117,7 @@ pub const FocusParser = struct {
             .arena = std.heap.ArenaAllocator.init(allocator),
             .scratch = std.ArrayList(u8).init(allocator),
             .col = .{},
-            .tag_cols = std.ArrayList(TagCol).init(allocator),
+            .tag_map = std.AutoHashMap(usize, []const u8).init(allocator),
         };
         errdefer p.deinit();
 
@@ -127,10 +127,11 @@ pub const FocusParser = struct {
     }
 
     pub fn deinit(self: *FocusParser) void {
-        for (self.tag_cols.items) |tc| {
-            self.allocator.free(tc.key);
+        var it = self.tag_map.iterator();
+        while (it.next()) |entry| {
+            self.allocator.free(entry.value_ptr.*);
         }
-        self.tag_cols.deinit();
+        self.tag_map.deinit();
         self.lr.deinit();
         self.arena.deinit();
         self.scratch.deinit();
@@ -171,10 +172,7 @@ pub const FocusParser = struct {
             else if (std.mem.startsWith(u8, clean_name, "Tags.")) {
                 const key = clean_name["Tags.".len..];
                 if (key.len > 0) {
-                    try self.tag_cols.append(.{
-                        .idx = idx,
-                        .key = try self.allocator.dupe(u8, key),
-                    });
+                    try self.tag_map.put(idx, try self.allocator.dupe(u8, key));
                 }
             }
         }
@@ -247,19 +245,11 @@ pub const FocusParser = struct {
             // To avoid linear scan of tag_cols for every field:
             // We can precompute: do we have any tag at this idx?
             // But for PR8.1 MVP, simple iteration is acceptable if < 100 columns.
-            for (self.tag_cols.items) |tc| {
-                if (tc.idx == idx) {
-                    // Dupe BOTH key and value in arena?
-                    // Key is constant from header, but HashMap needs key lifetime >= map lifetime.
-                    // The keys in tag_cols are on heap (parser lifetime).
-                    // FocusRecord map is arena (line lifetime).
-                    // StringHashMap uses keys by reference. If we assume tag_cols outlives FocusRecord (it does),
-                    // we can use tc.key directly.
-                    // Value needs to be duped into arena.
-                    const val_dupe = try ally.dupe(u8, field);
-                    try rec.tags.put(tc.key, val_dupe);
-                    break;
-                }
+            // Optimization: Use sparse lookup array/map if we precompute.
+            // But since we are iterating fields by index, we can just check if `tag_map` has this index.
+            if (self.tag_map.get(idx)) |key| {
+                const val_dupe = try ally.dupe(u8, field);
+                try rec.tags.put(key, val_dupe);
             }
         }
 
