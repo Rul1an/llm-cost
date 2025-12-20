@@ -122,8 +122,8 @@ test "Contract: 'models --json' produces valid schema" {
             const cost_out = getFloat(item.object.get("cost_out").?);
 
             // Verify 2025 Pricing Contract
-            try std.testing.expectEqual(@as(f64, 5.00), cost_in);
-            try std.testing.expectEqual(@as(f64, 20.00), cost_out);
+            try std.testing.expectEqual(@as(f64, 2.50), cost_in);
+            try std.testing.expectEqual(@as(f64, 10.00), cost_out);
         }
     }
     try std.testing.expect(found_gpt4o);
@@ -213,8 +213,8 @@ test "Contract: 'price' estimate uses Registry" {
 
     // 1000 tokens, pure input
     const cost = Pricing.Registry.calculate(def, 1000, 0, 0);
-    // 1000 * $5.00 / 1M = $0.005 = 5000 MicroUSD
-    try std.testing.expectEqual(@as(i128, 5000), cost);
+    // 1000 * $2.50 / 1M = $0.0025 = 2500 MicroUSD
+    try std.testing.expectEqual(@as(i128, 2500), cost);
 }
 
 // --- Governance / Check Tests ---
@@ -462,8 +462,8 @@ test "v1.0: FOCUS Export (Vantage-subset)" {
     // Date
     try std.testing.expect(std.mem.indexOf(u8, out, "2025-01-01") != null);
 
-    // Cost (2 tokens @ $5/1M = $0.000010) -> 0.000010000000 (12 decimals)
-    try std.testing.expect(std.mem.indexOf(u8, out, "0.000010") != null);
+    // Cost (2 tokens @ $2.50/1M = $0.000005) -> 0.000005000000 (12 decimals)
+    try std.testing.expect(std.mem.indexOf(u8, out, "0.000005") != null);
 
     // Check Token Count in Tags (escaped)
     // "x-token-count-input":"2" -> ""x-token-count-input"":""2""
