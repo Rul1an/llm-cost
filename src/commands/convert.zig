@@ -22,13 +22,6 @@ pub fn run(
     verbosity: Verbosity,
     stdout_writer: anytype,
 ) !u8 {
-    // _ = stdout_writer; // Used below
-
-    // For convert command, if --stdout is set, logs should go to stderr.
-    // The main logger likely goes to stderr by default (need to check logger implementation).
-    // If logger writes to stdout, we need to be careful.
-    // Checking `logger.zig` would be good, but assuming standard practice for now.
-
     const log = Logger.init(verbosity);
 
     if (cmd_args.help) {

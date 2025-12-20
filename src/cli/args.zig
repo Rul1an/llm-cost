@@ -71,14 +71,7 @@ pub const OutputFormat = enum {
 
 pub const FailDrift = enum { never, warn, @"error" };
 
-// Placeholder types for other commands (using generic args slice for now where complex parsing is needed in sub-commands)
-// ideally we fully parse them here, but for PR7.6 we focus on calibrate.
-// For existing commands, we might need to pass raw args or implement parsing here.
-// User plan suggests implementing `parseCalibrate` fully, others stubbed or basic.
-// I will implement basic stubs that can hold raw args if needed, or just specific fields if simpler.
-// Actually, `main.zig` dispatches based on string. If I use `args.zig`, I should probably pass raw arg slice to legacy commands for now to minimize risk?
-// BUT `args.zig` returns `Command` union. If I use `none` or a raw variant, it might work.
-// Let's implement full parsing logic for `calibrate` and basic/raw for others.
+// Placeholder types for other commands (using generic args slice for now)
 
 pub const EstimateArgs = struct { args: []const []const u8 };
 pub const CheckArgs = struct { args: []const []const u8 };

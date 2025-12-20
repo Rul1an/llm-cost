@@ -155,7 +155,7 @@ fn normalizeProvider(raw: []const u8) []const u8 {
     if (std.ascii.eqlIgnoreCase(s, "azure")) return "Azure";
     if (std.ascii.eqlIgnoreCase(s, "google") or std.ascii.eqlIgnoreCase(s, "vertex")) return "Google";
     if (std.mem.eql(u8, s, "Unknown")) return "Unknown";
-    return s; // Fallback to raw if logic doesn't catch it, or force "Unknown"? Keeping raw is safer for visibility.
+    return s;
 }
 
 fn parseNano(val: ?JsonValue) i64 {

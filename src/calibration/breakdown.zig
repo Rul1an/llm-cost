@@ -10,17 +10,7 @@ pub const BreakdownResult = struct {
     by_key: std.StringHashMap(GroupStats),
 
     // Also support convenience views?
-    // ADR-008 says:
-    // breakdown: {
-    //   by_agent: { ... },
-    //   by_tool: { ... },
-    //   by_key: { ... } (composite)
-    // }
-    //
     // For MVP, we calculate `by_key` based on the requested group-by columns.
-    // If user asks for `--group-by agent,tool`, we produce one map where keys are "agent=X,tool=Y" (or just "X,Y"? ADR says "agent=researcher|tool=web_search").
-    // Let's stick to a robust canonical key format.
-    // Or if asked for single dimension, key is just the value.
 
     allocator: std.mem.Allocator,
 
@@ -81,7 +71,7 @@ pub const Aggregator = struct {
         for (self.dimensions, 0..) |dim, i| {
             if (i > 0) try key_buf.append('|');
 
-            const val = self.resolver.resolve(record, dim) orelse "unknown"; // "unknown" or empty string? ADR D3 says defaults matter. unknown is safer.
+            const val = self.resolver.resolve(record, dim) orelse "unknown";
 
             if (multi_dim) {
                 try key_buf.writer().print("{s}={s}", .{ dim, val });
@@ -129,9 +119,7 @@ pub const Aggregator = struct {
 
     pub fn finish(self: *Aggregator) BreakdownResult {
         // Move stats to result.
-        // We rely on move semantics. StringHashMap doesn't have a clear move?
-        // Actually, we can just return a struct wrapping the map, and invalidating self.
-        // Or duplicate logic.
+        // Move stats to result.
         // Better: BreakdownResult takes ownership of the map content.
 
         // We'll just clone keys/values or reuse the map if we deinit the aggregator without freeing keys.
