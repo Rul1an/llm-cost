@@ -7,6 +7,41 @@ branding:
   color: "green"
 
 inputs:
+  command:
+    description: "Command to run: 'ci-action' (default), 'check', 'estimate', 'convert'."
+    required: false
+    default: "ci-action"
+
+  format:
+    description: "Output format: 'text' (default) or 'sarif'."
+    required: false
+    default: "text"
+
+  args:
+    description: "Extra arguments to pass to the tool (e.g. --actuals foo.csv)."
+    required: false
+    default: ""
+
+  actuals:
+    description: "Path to actuals file for check/governance (FOCUS-format CSV, e.g. actuals.csv)."
+    required: false
+    default: ""
+
+  sarif-output:
+    description: "Output path for SARIF file (only if format=sarif)."
+    required: false
+    default: "llm-cost.sarif"
+
+  fail-on-error:
+    description: "If false, do not fail the job on non-zero exit codes (annotation-only)."
+    required: false
+    default: "true"
+
+  skip-install:
+    description: "If true, skip install.sh and use llm-cost already on PATH (for PR testing)."
+    required: false
+    default: "false"
+
   version:
     description: "Release tag to install (e.g. v1.1.0). Use 'latest' to resolve via GitHub API."
     required: false
@@ -53,27 +88,37 @@ inputs:
     default: "true"
 
   sha256:
-    description: "Optional expected sha256 for the downloaded binary (strong pin). If set, used for verification."
+    description: "Optional expected sha256 for the downloaded binary (strong pin)."
     required: false
     default: ""
+
+outputs:
+  exit-code:
+    description: "Exit code returned by llm-cost."
+    value: ${{ steps.run.outputs.exit-code }}
+  sarif-file:
+    description: "Path to SARIF file produced (if format=sarif)."
+    value: ${{ steps.run.outputs.sarif-file }}
 
 runs:
   using: "composite"
   steps:
     - name: Install llm-cost
+      if: ${{ inputs.skip-install != 'true' }}
       shell: bash
       env:
         LLM_COST_VERSION: ${{ inputs.version }}
         LLM_COST_REPO: ${{ inputs.releases-repo }}
         LLM_COST_VERIFY: ${{ inputs.verify }}
+        # Use token for GitHub API to avoid rate limits when resolving 'latest'
         LLM_COST_SHA256: ${{ inputs.sha256 }}
-        # Use token for GitHub API to avoid rate limits when resolving "latest"
         GITHUB_TOKEN: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
       run: |
         set -euo pipefail
         bash "${GITHUB_ACTION_PATH}/.github/actions/llm-cost/install.sh"
 
-    - name: Run llm-cost ci-action
+    - name: Run llm-cost
+      id: run
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token != '' && inputs.github-token || github.token }}
@@ -81,25 +126,105 @@ runs:
       run: |
         set -euo pipefail
 
-        args=( "ci-action" "--manifest" "${{ inputs.manifest }}" )
+        CMD="${{ inputs.command }}"
+        FORMAT="${{ inputs.format }}"
+        FAIL_ON_ERROR="${{ inputs.fail-on-error }}"
+        SARIF_OUT="${{ inputs.sarif-output }}"
 
-        if [ -n "${{ inputs.budget }}" ]; then
-          args+=( "--budget" "${{ inputs.budget }}" )
+        # Validate inputs to prevent injection and errors
+        case "$CMD" in
+          "ci-action"|"check"|"estimate"|"convert") ;;
+          *) echo "Invalid command: '$CMD'. Expected: ci-action, check, estimate, convert." >&2; exit 1 ;;
+        esac
+
+        case "$FORMAT" in
+          "text"|"sarif") ;;
+          *) echo "Invalid format: '$FORMAT'. Expected: text, sarif." >&2; exit 1 ;;
+        esac
+
+        case "$FAIL_ON_ERROR" in
+          "true"|"false") ;;
+          *) echo "Invalid fail-on-error: '$FAIL_ON_ERROR'. Expected: true, false." >&2; exit 1 ;;
+        esac
+
+        if [ -n "$SARIF_OUT" ]; then
+          if [[ "$SARIF_OUT" =~ [^a-zA-Z0-9_./-] ]]; then
+             echo "Invalid sarif-output value: contains unsafe characters -> '$SARIF_OUT'" >&2
+             exit 1
+          fi
         fi
 
-        if [ "${{ inputs.fail-on-increase }}" = "true" ]; then
-          args+=( "--fail-on-increase" )
+        if [ "$CMD" = "ci-action" ]; then
+          args=( "ci-action" "--manifest" "${{ inputs.manifest }}" )
+
+          if [ -n "${{ inputs.budget }}" ]; then
+            args+=( "--budget" "${{ inputs.budget }}" )
+          fi
+
+          if [ "${{ inputs.fail-on-increase }}" = "true" ]; then
+            args+=( "--fail-on-increase" )
+          fi
+
+          if [ "${{ inputs.comment-threshold }}" != "0" ]; then
+            args+=( "--comment-threshold" "${{ inputs.comment-threshold }}" )
+          fi
+
+          if [ "${{ inputs.post-comment }}" = "false" ]; then
+            args+=( "--no-comment" )
+          elif [ "${{ inputs.post-comment }}" = "true" ]; then
+            args+=( "--post-comment" )
+          fi
+
+          set +e
+          llm-cost "${args[@]}"
+          EXIT_CODE=$?
+          set -e
+
+          echo "exit-code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+          if [ "$FAIL_ON_ERROR" = "true" ] && [ "$EXIT_CODE" -ne 0 ]; then
+            exit "$EXIT_CODE"
+          fi
+          exit 0
         fi
 
-        if [ "${{ inputs.comment-threshold }}" != "0" ]; then
-          args+=( "--comment-threshold" "${{ inputs.comment-threshold }}" )
+        # Generic branch: check/estimate/convert/...
+        args=( "$CMD" )
+
+        # Add extra args (splitting by space)
+        if [ -n "${{ inputs.args }}" ]; then
+            read -ra extra_args <<< "${{ inputs.args }}"
+            args+=( "${extra_args[@]}" )
         fi
 
-        # post-comment: pass through (ci-action does fork-safe behavior in "auto")
-        if [ "${{ inputs.post-comment }}" = "false" ]; then
-          args+=( "--no-comment" )
-        elif [ "${{ inputs.post-comment }}" = "true" ]; then
-          args+=( "--post-comment" )
+        if [ -n "${{ inputs.actuals }}" ]; then
+          args+=( "--actuals" "${{ inputs.actuals }}" )
         fi
 
+        if [ "$FORMAT" = "sarif" ]; then
+          args+=( "--format" "sarif" )
+
+          set +e
+          llm-cost "${args[@]}" > "$SARIF_OUT"
+          EXIT_CODE=$?
+          set -e
+
+          echo "exit-code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+          echo "sarif-file=$SARIF_OUT" >> "$GITHUB_OUTPUT"
+
+          if [ "$FAIL_ON_ERROR" = "true" ] && [ "$EXIT_CODE" -ne 0 ]; then
+            exit "$EXIT_CODE"
+          fi
+          exit 0
+        fi
+
+        set +e
         llm-cost "${args[@]}"
+        EXIT_CODE=$?
+        set -e
+
+        echo "exit-code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+        if [ "$FAIL_ON_ERROR" = "true" ] && [ "$EXIT_CODE" -ne 0 ]; then
+          exit "$EXIT_CODE"
+        fi

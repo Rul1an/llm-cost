@@ -50,35 +50,51 @@ Windows is not currently supported via the install script.
 
 ## CI/CD Integration
 
-Add budget gates to your PR workflow:
-```yaml
-name: LLM Cost Check
-on: [pull_request]
+`llm-cost` provides a native GitHub Action for seamless integration.
 
+### 1. CI-Native (SARIF Reporting)
+Fails the build on policy violations and uploads results to GitHub Advanced Security.
+
+```yaml
 permissions:
   contents: read
-  pull-requests: write
+  security-events: write
 
-jobs:
-  cost:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+steps:
+  - uses: actions/checkout@v4
 
-      - uses: Rul1an/llm-cost@v1
-        with:
-          budget: "10.00"
-          fail-on-increase: "true"
+  - name: llm-cost check (SARIF)
+    uses: Rul1an/llm-cost@v1
+    with:
+      command: check
+      format: sarif
+      # Optional: path to actuals
+      # actuals: usage.csv
+      # Fail build on error-level violations
+      fail-on-error: true
+
+  - name: Upload SARIF
+    if: always()
+    uses: github/codeql-action/upload-sarif@v3
+    with:
+      sarif_file: llm-cost.sarif
+      category: llm-cost
 ```
 
-The action posts a sticky comment with cost breakdown and delta vs base branch.
+### 2. Pull Request Commenter (Legacy)
+Performs budget checks and posts a sticky comment on the PR.
 
-For high-security pipelines, pin to SHA:
 ```yaml
-- uses: Rul1an/llm-cost@74c902dcf4926ee1ff68d6dce70120db6dc3f26c
+- uses: Rul1an/llm-cost@v1
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  with:
+    # Optional: absolute budget enforcement
+    budget: "10.00"
+    # Optional: fail if cost increases
+    fail-on-increase: true
 ```
+
 
 ## Project Setup
 ```bash
@@ -137,7 +153,7 @@ Filter and group by `Tags.team`, `Tags.app`, or `Tags.model` in your FinOps dash
 | `pipe` | Stream JSON usage → cost output |
 | `update-db` | Refresh pricing database |
 
-**Note**: Global flags (`--quiet`, `--verbose`) must precede the subcommand (e.g., `llm-cost --quiet calibrate`).
+**Note**: Global flags (`--quiet`, `--verbose`) can be placed anywhere in the command.
 
 ## How It Works
 
@@ -157,7 +173,7 @@ Filter and group by `Tags.team`, `Tags.app`, or `Tags.model` in your FinOps dash
 `src/core/pricing/pricing_db.json` contains standard rates.
 > **Note**: For Anthropic prompt caching, we default to the **5-minute cache write** tier.
 
-- **OpenAI**: Updated to 2025 rates (gpt-4o: $2.50/$10.00).
+- **OpenAI**: Updated to latest rates (see `src/core/pricing/pricing_db.json`).
 - **Anthropic**: Claude 3.5 Sonnet supports prompt caching rates.
 
 ## 🛡️ FinOps Certified (v1.3.0)
